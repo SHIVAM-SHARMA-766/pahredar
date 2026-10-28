@@ -172,3 +172,61 @@ func TestDeriveNVDAffectedAndExploitRef(t *testing.T) {
 		t.Fatal("ExploitRef not set from CNA exploit tag")
 	}
 }
+
+func TestCanonicalVendor(t *testing.T) {
+	cases := map[string]string{
+		"Oracle Corporation":                 "oracle",
+		"oracle":                             "oracle",
+		"Qualcomm, Inc.":                     "qualcomm",
+		"Red Hat":                            "red hat",
+		"redhat":                             "red hat",
+		"Apache Software Foundation":         "apache",
+		"The Apache Software Foundation":     "apache",
+		"Shenzhen Tenda Technology Co.,Ltd.": "shenzhen tenda technology",
+		"Google LLC":                         "google",
+		"Cisco Systems, Inc.":                "cisco",
+		"palo_alto_networks":                 "palo alto networks",
+		"n/a":                                "",
+		"  Inc ":                             "inc",
+	}
+	for in, want := range cases {
+		if got := CanonicalVendor(in); got != want {
+			t.Errorf("CanonicalVendor(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := CanonicalProduct("windows_server_2016"); got != "windows server 2016" {
+		t.Errorf("CanonicalProduct = %q", got)
+	}
+}
+
+func TestAffectedLabels(t *testing.T) {
+	d := Derive(mustParse(t, "testdata/CVE-2014-125136.json"), nil)
+	a := d.Affected[0]
+	if a.Vendor != "c97net" || a.VendorLabel != "C97net" || a.ProductLabel != "qEngine CMS" {
+		t.Fatalf("affected = %+v", a)
+	}
+}
+
+func TestCNAAdvisory(t *testing.T) {
+	rec, err := Parse([]byte(`{"cveMetadata": {"cveId": "CVE-2024-1234", "state": "PUBLISHED"},
+		"containers": {"cna": {
+			"solutions": [{"lang": "en", "value": "Upgrade to 2.0."}, {"lang": "de", "value": "Aktualisieren."}],
+			"workarounds": [{"lang": "en", "value": "Disable the plugin."}],
+			"credits": [{"lang": "en", "value": "Jane Doe", "type": "finder"}],
+			"impacts": [{"capecId": "CAPEC-66", "descriptions": [{"lang": "en", "value": "CAPEC-66 SQL Injection"}]}],
+			"timeline": [{"time": "2024-01-02T00:00:00Z", "lang": "en", "value": "Vendor notified"}]
+		}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := CNAAdvisory(rec)
+	if len(a.Solutions) != 1 || a.Solutions[0] != "Upgrade to 2.0." || len(a.Workarounds) != 1 {
+		t.Fatalf("solutions/workarounds = %+v", a)
+	}
+	if len(a.Credits) != 1 || a.Credits[0].Type != "finder" || len(a.Capec) != 1 || a.Capec[0].ID != "CAPEC-66" {
+		t.Fatalf("credits/capec = %+v", a)
+	}
+	if len(a.Timeline) != 1 || a.Timeline[0].Date != "2024-01-02" {
+		t.Fatalf("timeline = %+v", a.Timeline)
+	}
+}

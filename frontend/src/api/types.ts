@@ -73,7 +73,7 @@ export interface Epss extends EpssPoint {
 }
 
 export interface Exploit {
-  source: 'exploitdb' | 'metasploit' | 'nuclei'
+  source: 'exploitdb' | 'metasploit' | 'nuclei' | 'github'
   source_ref: string
   title: string | null
   url: string | null
@@ -113,8 +113,11 @@ export interface CpeMatch {
 
 export interface Affected {
   source: Provider
+  // Canonical keys (URLs, filters) and published spellings (display).
   vendor: string
   product: string
+  vendor_label: string
+  product_label: string
   cpes: string[]
   versions: CnaVersion[] | CpeMatch[]
 }
@@ -129,6 +132,7 @@ export interface CveDetail {
   title: string | null
   description: string | null
   cwe_ids: string[]
+  cwes: { id: string; name: string | null }[]
   severity: Severity
   severity_source: string | null
   cvss: { v4: Metric | null; v3: Metric | null; v2: Metric | null }
@@ -137,12 +141,31 @@ export interface CveDetail {
   nvd_status: string | null
   nvd_last_modified: string | null
   has_exploit: boolean
+  assessment: Assessment
+  advisory: Advisory
   kev: Kev | null
   epss: Epss | null
   exploits: Exploit[]
   timeline: TimelineEvent[]
   references: Reference[]
   affected: Affected[]
+}
+
+export interface Assessment {
+  exploitation: 'active' | 'poc' | 'none'
+  // P1 patch now … P4 monitor; empty for rejected CVEs.
+  priority: 'P1' | 'P2' | 'P3' | 'P4' | ''
+  reasons: string[]
+}
+
+export interface Advisory {
+  solutions: string[]
+  workarounds: string[]
+  exploit_statements: string[]
+  configurations: string[]
+  credits: { name: string; type?: string }[]
+  capec: { id: string; description: string }[]
+  timeline: { date: string; value: string }[]
 }
 
 export interface SeverityCounts {
@@ -157,12 +180,15 @@ export interface SeverityCounts {
 
 export interface VendorSummary extends SeverityCounts {
   vendor: string
+  label: string
   products: number
 }
 
 export interface ProductSummary extends SeverityCounts {
   vendor: string
+  vendor_label: string
   product: string
+  label: string
 }
 
 export interface YearCount {

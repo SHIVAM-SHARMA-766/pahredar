@@ -13,6 +13,8 @@ const SOURCES: [string, string][] = [
   ['exploitdb', 'Exploit-DB'],
   ['metasploit', 'Metasploit modules'],
   ['nuclei', 'Nuclei templates'],
+  ['github', 'GitHub PoCs (PoC-in-GitHub)'],
+  ['cwe', 'MITRE CWE names'],
   ['stats', 'Vendor/product stats'],
 ]
 

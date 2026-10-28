@@ -9,6 +9,7 @@ import (
 
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/cverecord"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/cwe"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/epss"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/exploits"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/kev"
@@ -18,6 +19,7 @@ const (
 	SourceKEV   = "kev"
 	SourceEPSS  = "epss"
 	SourceStats = "stats"
+	SourceCWE   = "cwe"
 )
 
 // StatsInputs are the sources whose changes make the vendor/product stats
@@ -146,5 +148,24 @@ func (e *Enrichment) RefreshStats(ctx context.Context) error {
 			return err
 		}
 		return e.store.SetSyncCursor(ctx, SourceStats, time.Now().UTC().Format(time.RFC3339))
+	})
+}
+
+// SyncCWE refreshes CWE names from MITRE.
+func (e *Enrichment) SyncCWE(ctx context.Context) error {
+	return e.runner.Run(ctx, SourceCWE, e.snapshotPlan(SourceCWE), func(ctx context.Context, run *Run) error {
+		ws, err := cwe.Fetch(ctx, e.http)
+		if err != nil {
+			return err
+		}
+		rows := make([]db.CWERow, len(ws))
+		for i, w := range ws {
+			rows[i] = db.CWERow{ID: w.ID, Name: w.Name}
+		}
+		run.Inserted, run.Updated, run.Deleted, err = e.store.ReplaceCWE(ctx, rows)
+		if err != nil {
+			return err
+		}
+		return e.store.SetSyncCursor(ctx, SourceCWE, time.Now().UTC().Format(time.RFC3339))
 	})
 }

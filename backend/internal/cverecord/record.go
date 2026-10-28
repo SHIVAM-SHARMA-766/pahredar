@@ -52,6 +52,26 @@ type Container struct {
 	Affected   []Affected    `json:"affected"`
 	Metrics    []MetricEntry `json:"metrics"`
 	References []Reference   `json:"references"`
+
+	// Free-text advisory sections a CNA may publish.
+	Solutions      []LangValue `json:"solutions"`
+	Workarounds    []LangValue `json:"workarounds"`
+	Exploits       []LangValue `json:"exploits"`
+	Configurations []LangValue `json:"configurations"`
+	Credits        []struct {
+		Lang  string `json:"lang"`
+		Value string `json:"value"`
+		Type  string `json:"type"`
+	} `json:"credits"`
+	Impacts []struct {
+		CapecID      string      `json:"capecId"`
+		Descriptions []LangValue `json:"descriptions"`
+	} `json:"impacts"`
+	Timeline []struct {
+		Time  Timestamp `json:"time"`
+		Lang  string    `json:"lang"`
+		Value string    `json:"value"`
+	} `json:"timeline"`
 }
 
 type LangValue struct {

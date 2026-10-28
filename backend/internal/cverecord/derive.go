@@ -174,11 +174,15 @@ func CISASSVC(rec *Record) *SSVC {
 
 // AffectedRow is one normalized affected product.
 type AffectedRow struct {
-	Source   string
-	Vendor   string
-	Product  string
-	CPEs     []string
-	Versions json.RawMessage
+	Source string
+	// Vendor and Product are canonical keys (see CanonicalVendor); the
+	// labels keep the published spelling for display.
+	Vendor       string
+	Product      string
+	VendorLabel  string
+	ProductLabel string
+	CPEs         []string
+	Versions     json.RawMessage
 }
 
 // Derived holds every column Pahredar computes from the raw records.
@@ -275,15 +279,22 @@ func Derive(rec *Record, nvd *NVD) Derived {
 	var nameList []string
 	addAffected := func(source string, list []Affected) {
 		for _, a := range list {
-			vendor, product := normalizeName(a.Vendor), normalizeName(a.Product)
+			vendorLabel, productLabel := displayName(a.Vendor), displayName(a.Product)
+			vendor, product := CanonicalVendor(a.Vendor), CanonicalProduct(a.Product)
 			if product == "" {
 				continue
+			}
+			if vendor == "" {
+				vendorLabel = ""
 			}
 			versions := a.Versions
 			if len(versions) == 0 || string(versions) == "null" {
 				versions = json.RawMessage("[]")
 			}
-			d.Affected = append(d.Affected, AffectedRow{Source: source, Vendor: vendor, Product: product, CPEs: a.CPEs, Versions: versions})
+			d.Affected = append(d.Affected, AffectedRow{
+				Source: source, Vendor: vendor, Product: product, VendorLabel: vendorLabel, ProductLabel: productLabel,
+				CPEs: a.CPEs, Versions: versions,
+			})
 			for _, n := range []string{vendor, product} {
 				if n != "" && !names[n] {
 					names[n] = true
@@ -346,11 +357,88 @@ func nvdAffected(nvd *NVD) []Affected {
 	return out
 }
 
-// normalizeName lower-cases a vendor or product and maps placeholders to "".
-func normalizeName(s string) string {
-	s = strings.ToLower(clean(s))
+// Vendor and product names arrive in many spellings for the same thing:
+// CNA free text ("Oracle Corporation", "Qualcomm, Inc."), NVD CPE fields
+// ("oracle", "windows_server_2016"). Canonical keys group them: lower-case,
+// underscores as spaces, single spaces, trailing legal-entity suffixes
+// removed, and a short alias list for well-known duplicates. Placeholders
+// ("n/a", "unknown") become "".
+
+// legalSuffixes are stripped from the end of vendor names, repeatedly, so
+// "Foo Systems Co., Ltd." loses both. Only unambiguous forms are listed;
+// two-letter ones without a dot (" ag", " sa", " ab") are not, to avoid
+// truncating real names.
+var legalSuffixes = []string{
+	" incorporated", " inc.", " inc", " corporation", " corp.", " corp",
+	" co., ltd.", " co., ltd", " co. ltd.", " co. ltd", " co.,ltd.", " co.,ltd", " co.",
+	" limited", " ltd.", " ltd", " l.l.c.", " llc", " gmbh", " s.a.", " plc", " b.v.", " s.r.l.",
+}
+
+// vendorAliases maps a suffix-stripped name to the key other sources use.
+var vendorAliases = map[string]string{
+	"redhat":                           "red hat",
+	"the apache software foundation":   "apache",
+	"apache software foundation":       "apache",
+	"cisco systems":                    "cisco",
+	"f5 networks":                      "f5",
+	"jenkins project":                  "jenkins",
+	"the linux foundation":             "linux foundation",
+	"hewlett packard enterprise":       "hpe",
+	"hewlett packard enterprise (hpe)": "hpe",
+	"hewlett-packard":                  "hp",
+	"fedoraproject":                    "fedora project",
+	"wordpress.org":                    "wordpress",
+}
+
+func isPlaceholder(s string) bool {
 	switch s {
-	case "n/a", "na", "-", "unknown", "unspecified":
+	case "", "n/a", "na", "-", "*", "unknown", "unspecified", "none":
+		return true
+	}
+	return false
+}
+
+func baseName(s string) string {
+	s = strings.ToLower(clean(s))
+	s = strings.ReplaceAll(s, "_", " ")
+	s = strings.Join(strings.Fields(s), " ")
+	return strings.Trim(s, " ,")
+}
+
+// CanonicalVendor returns the grouping key for a vendor name.
+func CanonicalVendor(s string) string {
+	s = baseName(s)
+	if isPlaceholder(s) {
+		return ""
+	}
+	for changed := true; changed; {
+		changed = false
+		for _, suf := range legalSuffixes {
+			if strings.HasSuffix(s, suf) && len(s) > len(suf) {
+				s = strings.Trim(strings.TrimSuffix(s, suf), " ,")
+				changed = true
+			}
+		}
+	}
+	if alias, ok := vendorAliases[s]; ok {
+		s = alias
+	}
+	return s
+}
+
+// CanonicalProduct returns the grouping key for a product name.
+func CanonicalProduct(s string) string {
+	s = baseName(s)
+	if isPlaceholder(s) {
+		return ""
+	}
+	return s
+}
+
+// displayName is a name as published, with CPE underscores turned to spaces.
+func displayName(s string) string {
+	s = strings.Join(strings.Fields(strings.ReplaceAll(clean(s), "_", " ")), " ")
+	if isPlaceholder(strings.ToLower(s)) {
 		return ""
 	}
 	return s
@@ -395,4 +483,88 @@ func mergeReferences(rec *Record, nvd *NVD) []Reference {
 		out = []Reference{}
 	}
 	return out
+}
+
+// Advisory is the CNA's free-text advisory content, for the detail page.
+type Advisory struct {
+	Solutions         []string        `json:"solutions"`
+	Workarounds       []string        `json:"workarounds"`
+	ExploitStatements []string        `json:"exploit_statements"`
+	Configurations    []string        `json:"configurations"`
+	Credits           []Credit        `json:"credits"`
+	Capec             []Capec         `json:"capec"`
+	Timeline          []AdvisoryEvent `json:"timeline"`
+}
+
+type Credit struct {
+	Name string `json:"name"`
+	Type string `json:"type,omitempty"`
+}
+
+type Capec struct {
+	ID          string `json:"id"`
+	Description string `json:"description"`
+}
+
+type AdvisoryEvent struct {
+	Date  string `json:"date"`
+	Value string `json:"value"`
+}
+
+// CNAAdvisory extracts the CNA's advisory sections. Each list keeps English
+// entries (falling back to any language) and is never nil.
+func CNAAdvisory(rec *Record) Advisory {
+	a := Advisory{
+		Solutions: []string{}, Workarounds: []string{}, ExploitStatements: []string{}, Configurations: []string{},
+		Credits: []Credit{}, Capec: []Capec{}, Timeline: []AdvisoryEvent{},
+	}
+	if rec == nil {
+		return a
+	}
+	cna := rec.Containers.CNA
+	texts := func(values []LangValue) []string {
+		out := []string{}
+		seen := map[string]bool{}
+		for _, v := range values {
+			if !strings.HasPrefix(strings.ToLower(v.Lang), "en") && hasEnglish(values) {
+				continue
+			}
+			if t := clean(v.Value); t != "" && !seen[t] {
+				seen[t] = true
+				out = append(out, t)
+			}
+		}
+		return out
+	}
+	a.Solutions = texts(cna.Solutions)
+	a.Workarounds = texts(cna.Workarounds)
+	a.ExploitStatements = texts(cna.Exploits)
+	a.Configurations = texts(cna.Configurations)
+	for _, c := range cna.Credits {
+		if name := clean(c.Value); name != "" {
+			a.Credits = append(a.Credits, Credit{Name: name, Type: c.Type})
+		}
+	}
+	for _, im := range cna.Impacts {
+		id := strings.ToUpper(strings.TrimSpace(im.CapecID))
+		if id == "" {
+			continue
+		}
+		a.Capec = append(a.Capec, Capec{ID: id, Description: english(im.Descriptions)})
+	}
+	for _, t := range cna.Timeline {
+		if v := clean(t.Value); v != "" && !t.Time.IsZero() {
+			a.Timeline = append(a.Timeline, AdvisoryEvent{Date: t.Time.Format("2006-01-02"), Value: v})
+		}
+	}
+	return a
+}
+
+func hasEnglish(values []LangValue) bool {
+	for _, v := range values {
+		if strings.HasPrefix(strings.ToLower(v.Lang), "en") {
+			return true
+		}
+	}
+	return false
 }

@@ -29,8 +29,8 @@ React Router 8 needs Node ≥ 22.22 and the dev machine has Node 20, so the app 
 |---|---|
 | `/` | Dashboard: headline counts, 90-day volume chart, severity mix, EPSS movers, and three CVE lists (`pages/DashboardPage.tsx`) |
 | `/cves` | CVE explorer: `?query=` in the query language, plus `sort`, `order`, `page`, `page_size`. The sidebar's "Known exploited" (`query=is:kev`, sorted by KEV date) and "Likely exploited" (`query=epss:>10 -is:kev`, sorted by EPSS) are links with a query; the page title and highlighted nav item follow them |
-| `/cves/:id` | CVE detail: CVSS breakdown per version and provider, affected products, exploits, references, KEV, EPSS chart, SSVC, timeline |
-| `/vendors` | Vendor search, ranked by CVE count |
+| `/cves/:id` | CVE detail: assessment banner, key facts, remediation, CVSS breakdown, affected products, exploits and GitHub PoCs, CNA advisory details, grouped references, related CVEs, CWE names, KEV, EPSS chart, SSVC, timeline |
+| `/vendors` | Vendors and products tabs (`?tab=products`) with search (`?q=`), ranked by CVE count. Names show the display label; links use the canonical key |
 | `/vendors/:vendor` | Vendor stats, CVEs per year, top 200 products |
 | `/vendors/:vendor/products/:product` | Product stats, CVEs per year, and the CVE list fixed to that product |
 | `/sync` | Per-source status with "Run now", and recent runs (polls every 5 s) |
@@ -39,6 +39,7 @@ React Router 8 needs Node ≥ 22.22 and the dev machine has Node 20, so the app 
 
 - **Explorer state lives in the URL**: `query` (the query language) and the view parameters `sort`, `order`, `page`, `page_size`. `parseQuery` turns the query into API filter parameters in the browser; `CveResults` adds the view parameters. Build links with `explorerLink(query, sort?)`. A new query or sort resets `page`.
 - The query applies on Enter or when an example chip is clicked, not on every keystroke. Unknown fields and bad values are listed under the bar and ignored, never sent.
+- Pagination: the rows-per-page control sits above the table and the numbered pager (`Pager` in `CveListPage.tsx`: first, last, and two pages either side of the current one) below it.
 - Adding a query field: extend `FIELDS` (it drives the help panel) and the `switch` in `parseQuery`; add the API parameter in `backend/internal/api/cves.go` if it needs one.
 - EPSS is shown as a percentage, truncated rather than rounded (0.99999 → 99.99%).
 - Vendor and product names are URL-encoded in paths (`vendorPath`, `productPath` in `format.ts`); they can contain spaces and slashes.

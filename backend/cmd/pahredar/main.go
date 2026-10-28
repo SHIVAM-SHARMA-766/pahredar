@@ -32,8 +32,10 @@ commands:
   serve                           apply migrations, run the HTTP API and the sync scheduler
   migrate                         apply pending migrations and exit
   sync <source> [--bootstrap]     run one sync in the foreground and exit
-                                  sources: cvelist, nvd, kev, epss, exploitdb, metasploit, nuclei, stats
+                                  sources: cvelist, nvd, kev, epss, exploitdb, metasploit, nuclei, github, cwe, stats
                                   --bootstrap (cvelist, nvd) re-imports everything
+  rederive                        rewrite every CVE's derived fields from stored raw records, then refresh stats
+                                  (run after changing derivation logic; downloads nothing)
   healthcheck                     exit 0 if the local API reports healthy (for container health checks)
 `
 
@@ -58,6 +60,8 @@ func main() {
 		err = withConfig(ctx, func(ctx context.Context, cfg config.Config) error {
 			return syncOnce(ctx, cfg, os.Args[2:])
 		})
+	case "rederive":
+		err = withConfig(ctx, rederive)
 	case "healthcheck":
 		err = healthcheck()
 	default:
@@ -106,11 +110,14 @@ func syncTasks(cfg config.Config, store *db.Store, bootstrap bool) ([]syncer.Tas
 		{Name: syncer.SourceKEV, Interval: cfg.Intervals.KEV, Fn: enrich.SyncKEV},
 		{Name: syncer.SourceEPSS, Interval: cfg.Intervals.EPSS, Fn: enrich.SyncEPSS},
 	}
-	for _, src := range []string{exploits.SourceExploitDB, exploits.SourceMetasploit, exploits.SourceNuclei} {
+	for _, src := range []string{exploits.SourceExploitDB, exploits.SourceMetasploit, exploits.SourceNuclei, exploits.SourceGitHub} {
 		tasks = append(tasks, syncer.Task{Name: src, Interval: cfg.Intervals.Exploits,
 			Fn: func(ctx context.Context) error { return enrich.SyncExploits(ctx, src) }})
 	}
-	tasks = append(tasks, syncer.Task{Name: syncer.SourceStats, Interval: cfg.Intervals.Stats, Fn: enrich.RefreshStats})
+	tasks = append(tasks,
+		syncer.Task{Name: syncer.SourceCWE, Interval: cfg.Intervals.CWE, Fn: enrich.SyncCWE},
+		syncer.Task{Name: syncer.SourceStats, Interval: cfg.Intervals.Stats, Fn: enrich.RefreshStats},
+	)
 	return tasks, runner
 }
 
@@ -140,6 +147,19 @@ func syncOnce(ctx context.Context, cfg config.Config, args []string) error {
 		names = append(names, t.Name)
 	}
 	return fmt.Errorf("unknown source %q; available: %s", args[0], strings.Join(names, ", "))
+}
+
+func rederive(ctx context.Context, cfg config.Config) error {
+	store, closeStore, err := openStore(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer closeStore()
+	runner := syncer.NewRunner(store)
+	if err := syncer.Rederive(ctx, store, runner); err != nil {
+		return err
+	}
+	return syncer.NewEnrichment(fetch.NewClient(), store, runner).RefreshStats(ctx)
 }
 
 func serve(ctx context.Context, cfg config.Config) error {

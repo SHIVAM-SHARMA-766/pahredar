@@ -264,6 +264,8 @@ type CVEDetail struct {
 	KEV             *KEVOut
 	EPSS            *EPSSOut
 	Exploits        []ExploitOut
+	// CWENames maps the CVE's CWE IDs to MITRE names where known.
+	CWENames map[string]string
 }
 
 type KEVOut struct {
@@ -301,11 +303,13 @@ type ExploitOut struct {
 }
 
 type AffectedOut struct {
-	Source   string          `json:"source"`
-	Vendor   string          `json:"vendor"`
-	Product  string          `json:"product"`
-	CPEs     []string        `json:"cpes"`
-	Versions json.RawMessage `json:"versions"`
+	Source       string          `json:"source"`
+	Vendor       string          `json:"vendor"`
+	Product      string          `json:"product"`
+	VendorLabel  string          `json:"vendor_label"`
+	ProductLabel string          `json:"product_label"`
+	CPEs         []string        `json:"cpes"`
+	Versions     json.RawMessage `json:"versions"`
 }
 
 func (s *Store) GetCVE(ctx context.Context, id string) (*CVEDetail, error) {
@@ -323,7 +327,7 @@ func (s *Store) GetCVE(ctx context.Context, id string) (*CVEDetail, error) {
 		return nil, err
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT source, vendor, product, cpes, versions FROM cve_affected
+		SELECT source, vendor, product, vendor_label, product_label, cpes, versions FROM cve_affected
 		WHERE cve_id = $1 ORDER BY source, vendor, product, id`, id)
 	if err != nil {
 		return nil, err
@@ -331,6 +335,10 @@ func (s *Store) GetCVE(ctx context.Context, id string) (*CVEDetail, error) {
 	d.Affected, err = pgx.CollectRows(rows, pgx.RowToStructByPos[AffectedOut])
 	if err != nil {
 		return nil, err
+	}
+	for i := range d.Affected {
+		d.Affected[i].VendorLabel = PrettyLabel(d.Affected[i].VendorLabel)
+		d.Affected[i].ProductLabel = PrettyLabel(d.Affected[i].ProductLabel)
 	}
 
 	var k KEVOut
@@ -365,12 +373,31 @@ func (s *Store) GetCVE(ctx context.Context, id string) (*CVEDetail, error) {
 
 	rows, err = s.pool.Query(ctx, `
 		SELECT source, source_ref, title, url, published_at FROM exploit
-		WHERE cve_id = $1 ORDER BY published_at NULLS LAST, source, source_ref`, id)
+		WHERE cve_id = $1 ORDER BY (source = 'github'), published_at NULLS LAST, source, source_ref`, id)
 	if err != nil {
 		return nil, err
 	}
 	if d.Exploits, err = pgx.CollectRows(rows, pgx.RowToStructByPos[ExploitOut]); err != nil {
 		return nil, err
+	}
+
+	d.CWENames = map[string]string{}
+	if len(d.CWEIDs) > 0 {
+		rows, err = s.pool.Query(ctx, `SELECT id, name FROM cwe WHERE id = ANY($1)`, d.CWEIDs)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id, name string
+			if err := rows.Scan(&id, &name); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			d.CWENames[id] = name
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 	}
 	return &d, nil
 }

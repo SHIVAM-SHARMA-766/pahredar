@@ -98,6 +98,8 @@ All sources are free. Only NVD needs an API key (free, raises rate limit).
 | **Exploit-DB** | Public exploits mapped to CVE IDs | `files_exploits.csv` on GitLab; CVEs in the `;`-separated `codes` column (~27k of ~47k exploits) | Daily |
 | **Metasploit** | Modules referencing CVEs | `db/modules_metadata_base.json` (~7k modules, ~3k with CVEs) | Daily |
 | **Nuclei templates** | Detection templates per CVE | `cves.json`, one JSON object per line (~4.5k) | Daily |
+| **PoC-in-GitHub** (nomi-sec, CC0) | GitHub proof-of-concept repositories per CVE | The repo's `README.md` (~7 MB): `### CVE-…` headings followed by `- [owner/repo](url)` lines (~27.5k repos for ~11.5k CVEs). Used instead of the ~1 GB repository | Daily |
+| **MITRE CWE** | Weakness names | `cwe.mitre.org/data/csv/1000.csv.zip` (research view, ~940 entries) | Weekly |
 
 Exact URLs live as constants in `backend/internal/sources/*` and are verified when each source is implemented (EPSS in particular has changed hosts before).
 
@@ -143,11 +145,14 @@ Raw source JSON is kept so derived columns can be recomputed after a logic chang
 | `id` | bigserial PK | |
 | `cve_id` | text FK → `cve` | |
 | `source` | text | `cna`, `adp` (CISA Vulnrichment), or `nvd` (vulnerable `cpeMatch` criteria from NVD configurations, grouped by CPE vendor/product) |
-| `vendor`, `product` | text | Lower-cased, trimmed; indexed with `pg_trgm`. Placeholders (`n/a`, `unknown`, …) become `''`; entries with no product are dropped |
+| `vendor`, `product` | text | **Canonical keys** (see below); indexed with `pg_trgm`. Placeholders (`n/a`, `unknown`, …) become `''`; entries with no product are dropped |
+| `vendor_label`, `product_label` | text | The spelling as published (CPE underscores as spaces), for display. Added in migration 00007 |
 | `cpes` | text[] | CPE 2.3 strings when the provider gives them (migration 00002 replaced the single `cpe` column) |
 | `versions` | jsonb | Shape depends on `source`. `cna`/`adp`: CVE JSON 5 version entries (`version`, `lessThan`, `lessThanOrEqual`, `status`, …). `nvd`: NVD `cpeMatch` objects (`criteria`, `versionStartIncluding`, `versionEndExcluding`, …) |
 
-All rows for a CVE are replaced together whenever that CVE is upserted. This table powers vendor/product pages now and stack matching later. Note that NVD names come from CPEs (`apache` / `log4j`) while CNA names are free text (`apache software foundation` / `apache log4j2`); they are not reconciled.
+All rows for a CVE are replaced together whenever that CVE is upserted. This table powers vendor/product pages now and stack matching later.
+
+**Canonical names** (`cverecord.CanonicalVendor` / `CanonicalProduct`): lower-case, underscores to spaces, whitespace collapsed; for vendors, trailing legal-entity suffixes are stripped repeatedly (`inc`, `corp`, `corporation`, `co., ltd`, `llc`, `gmbh`, `plc`, …; deliberately not bare two-letter forms like `ag` or `sa`) and a short alias list maps known duplicates (`redhat` → `red hat`, `apache software foundation` → `apache`, `cisco systems` → `cisco`, …). So "Oracle Corporation" (CNA) and "oracle" (CPE) are one vendor, and "Windows Server 2016" and "windows_server_2016" one product. Products with genuinely different names ("Apache Log4j2" vs CPE "log4j") stay separate. The API canonicalises `vendor`/`product` parameters the same way. Display labels are the most common CNA/ADP spelling, else the CPE spelling title-cased when it has no capitals (`db.PrettyLabel`).
 
 ### `kev`
 
@@ -160,7 +165,11 @@ All rows for a CVE are replaced together whenever that CVE is upserted. This tab
 
 ### `exploit`
 
-`id` PK, `cve_id`, `source` (`exploitdb`/`metasploit`/`nuclei`), `source_ref`, `title`, `url`, `published_at`. Unique on `(source, source_ref, cve_id)` because one exploit or module can cover several CVEs; upserts use that key.
+`id` PK, `cve_id`, `source` (`exploitdb`/`metasploit`/`nuclei`/`github`), `source_ref`, `title`, `url`, `published_at` (none for `github`). Unique on `(source, source_ref, cve_id)` because one exploit or module can cover several CVEs; upserts use that key.
+
+### `cwe`
+
+`id` PK (`CWE-79`), `name`. Snapshot of MITRE's research view; the detail endpoint resolves a CVE's CWE IDs to names.
 
 ### Foreign keys
 
@@ -229,9 +238,14 @@ Bootstrap is triggered automatically when `sync_state` has no row for a source, 
 | nvd | every 2 h | See "NVD" above. |
 | kev | every 6 h | Snapshot; cursor is the catalog version. |
 | epss | every 6 h | Snapshot when the file's score date differs from the cursor; history rows appended first. `sync_run.updated` = current scores loaded, `inserted` = history rows added. |
-| exploitdb / metasploit / nuclei | daily | Snapshot per source, keyed `(source, source_ref, cve_id)`; cursor is the run time. |
+| exploitdb / metasploit / nuclei / github | daily | Snapshot per source, keyed `(source, source_ref, cve_id)`; cursor is the run time. |
+| cwe | weekly | Snapshot of the CWE name list. |
 
-Every source also runs once at startup (all concurrently; CVE writes serialize on the `cve-write` lock) and on demand via `POST /api/v1/sync/{source}`. Intervals: `CVELIST_SYNC_INTERVAL`, `NVD_SYNC_INTERVAL`, `KEV_SYNC_INTERVAL`, `EPSS_SYNC_INTERVAL`, `EXPLOITS_SYNC_INTERVAL`.
+Every source also runs once at startup (all concurrently; CVE writes serialize on the `cve-write` lock) and on demand via `POST /api/v1/sync/{source}`. Intervals: `CVELIST_SYNC_INTERVAL`, `NVD_SYNC_INTERVAL`, `KEV_SYNC_INTERVAL`, `EPSS_SYNC_INTERVAL`, `EXPLOITS_SYNC_INTERVAL`, `CWE_SYNC_INTERVAL`, `STATS_REFRESH_INTERVAL`.
+
+### Rederive
+
+Sync jobs only rewrite a CVE when its upstream record changes, so a change to derivation logic (canonical names, severity rules, …) does not reach stored rows by itself. `pahredar rederive` walks every CVE in ID order, rebuilds each row and its affected rows from the stored raw cvelist and NVD JSON (no downloads), then refreshes the stats views. It holds the cvelist and NVD locks while it runs and is logged as source `rederive`. Full corpus: ~10 min.
 
 ### cvelist release layout and cursor
 
@@ -253,13 +267,31 @@ JSON over REST under `/api/v1`. Read-only except sync triggers.
 |---|---|
 | `GET /healthz` | Liveness + DB connectivity |
 | `GET /api/v1/cves` | Search/list. Params: `q`, `severity` (comma list), `state`, `vendor` / `product` (comma lists, any of), `cwe`, `published_from`, `published_to` (inclusive, `YYYY-MM-DD`), `kev` / `exploit` / `ransomware` (`true`/`false`; ransomware = KEV known ransomware use), `epss_min` / `epss_max` (0–1), `cvss_min` / `cvss_max` (0–10, best effective score), `sort` (`relevance`, `published`, `updated`, `cvss`, `epss`, `kev_added`), `order` (`asc`/`desc`, default `desc`), `page`, `page_size` (1–250, default 25). Items carry `kev`, `kev_date_added`, `ransomware`, `epss_score`, `epss_percentile`, `has_exploit`, `vendor` (display name: the CNA's first affected vendor as written, else the first normalized vendor), `ssvc_exploitation` (CISA SSVC `none`/`poc`/`active`) |
-| `GET /api/v1/cves/{id}` | Detail: core fields, effective CVSS per version, all per-provider metrics, SSVC, `kev` (or null), `epss` with `history`, `exploits`, `has_exploit`, `timeline`, affected products, references |
+| `GET /api/v1/cves/{id}` | Detail: core fields, effective CVSS per version, all per-provider metrics, SSVC, `kev` (or null), `epss` with `history`, `exploits` (including GitHub PoCs), `has_exploit`, `assessment` (see below), `advisory` (the CNA's solutions, workarounds, exploit statements, required configurations, credits, CAPEC attack patterns, and CNA timeline), `cwes` (ID + MITRE name), `timeline`, affected products with labels, references |
 | `GET /api/v1/stats/dashboard` | Published counts (today, 7 d, 30 d, total; UTC days), critical in 7 d, KEV total and added in 30 d, severity mix of the last 30 d, `daily` (90 days, every day present, severity mix per day), `epss_movers` (top 10 `delta_7d`). ~240 ms. The dashboard's CVE lists come from `/cves` |
 | `GET /api/v1/vendors` | `{items}` of vendor summaries by CVE count. `q` = case-insensitive substring (exact match first), `page_size` 1–100 (default 25) |
+| `GET /api/v1/products` | `{items}` of product summaries across all vendors by CVE count. `q` = case-insensitive product substring, `page_size` 1–100 |
 | `GET /api/v1/vendors/{vendor}` | Vendor summary, `years` (CVEs per year), `top_products` (top 200 by CVE count). 404 if unknown |
 | `GET /api/v1/vendors/{vendor}/products/{product}` | Product summary and `years`. The CVE list itself is `/cves?vendor=&product=`. Names are lower-case and URL-encoded |
 | `GET /api/v1/sync/status` | Per-source state and the 20 most recent runs (implemented) |
 | `POST /api/v1/sync/{source}` | Queue an immediate run: 202 `{status: queued}`, 404 unknown source, 409 if `SYNC_ENABLED=false`. Repeated triggers while one is pending collapse |
+
+**Assessment.** The detail endpoint adds Pahredar's own triage summary (`assess()` in `internal/api/cves.go`), with the reasons it fired:
+
+| Exploitation | When |
+|---|---|
+| `active` | in CISA KEV, or CISA SSVC exploitation is `active` |
+| `poc` | any exploit row (Exploit-DB, Metasploit, Nuclei, GitHub PoC), an exploit-tagged reference, or SSVC `poc` |
+| `none` | otherwise |
+
+| Priority | When |
+|---|---|
+| P1 Patch now | exploitation `active` |
+| P2 Patch soon | EPSS ≥ 10 %, or exploitation `poc` and best CVSS ≥ 7 |
+| P3 Plan to patch | best CVSS ≥ 7, or exploitation `poc` |
+| P4 Monitor | otherwise (rejected CVEs get no priority) |
+
+It is a rule of thumb over public signals, not a vendor score; the UI says so.
 
 Search behaviour: if `q` matches a CVE ID pattern (case-insensitive), it becomes an exact ID filter; otherwise it is `websearch_to_tsquery('english', q)` against `search`, and the default sort becomes `relevance` (`ts_rank`, then recency). Without `q`, the default sort is `published`.
 
@@ -280,9 +312,9 @@ Implemented in `frontend/` (details, routes, and conventions in `frontend/README
 | Page | Route | Content |
 |---|---|---|
 | Dashboard | `/` | Hero figure (critical CVEs published in 7 days) and stat tiles (today, 7 d, 30 d, KEV added 30 d, total); 90-day stacked daily publish volume by severity with legend, tooltip, and table view; 30-day severity mix; EPSS movers; lists of newest critical, recently added to KEV, and highest-EPSS CVEs from the last 90 days not in KEV, each linking to the matching filtered list. Refreshes every 5 min |
-| CVE explorer | `/cves` | Query bar with example chips and a syntax panel; compact one-line table (CVE, title, vendor, CISA SSVC, KEV listed, published, EPSS, CVSS, signals) with sortable headers (KEV listed, published, EPSS, CVSS), rows per page (50/100/250), previous/next |
-| CVE detail | `/cves/:id` | Badges; description and CWE links; CVSS per version with vector breakdown and every provider's score; affected products with version ranges and links to vendor/product pages; exploits; references with tags; KEV block; EPSS score and history chart; SSVC; timeline; record metadata with cve.org / NVD links |
-| Vendors | `/vendors` | Vendor search and ranking with severity mix bars |
+| CVE explorer | `/cves` | Query bar with example chips and a syntax panel; compact one-line table (CVE, title, vendor, CISA SSVC, KEV listed, published, EPSS, CVSS, signals) with sortable headers (KEV listed, published, EPSS, CVSS), rows per page (50/100/250) above the table, numbered pagination below it |
+| CVE detail | `/cves/:id` | Badges; assessment banner (priority, exploitation, reasons); key-facts strip (CVSS, EPSS, KEV, exploit modules, GitHub PoCs, affected count); description; remediation (CNA solutions and workarounds, CISA required action, patch/advisory references); CVSS per version with vector breakdown and every provider's score; affected products with version ranges; exploits and GitHub PoCs (with an unvetted-code warning); CNA advisory details (configurations, CAPEC, credits, CNA timeline); references grouped by kind; other CVEs for the same product; CWE names; KEV block; EPSS chart; SSVC; timeline; record metadata |
+| Vendors & products | `/vendors` | Tabs for vendors and products (`?tab=products`), each with substring search, CVE count, severity mix, critical and KEV counts, latest CVE |
 | Vendor | `/vendors/:vendor` | Severity counts, CVEs per year chart, top products table |
 | Product | `/vendors/:vendor/products/:product` | Severity counts, CVEs per year, the CVE list fixed to the product |
 | Sync | `/sync` | Each source's last success, latest run, cursor, "Run now"; recent runs with counts and errors |
@@ -335,6 +367,9 @@ Configuration is environment-only, documented in `.env.example`. Secrets (`NVD_A
 | 2026-10-28 | Severity in charts is an ordinal one-hue ramp, validated per colour scheme; badges keep conventional colours. |
 | 2026-10-28 | EPSS 7-day change is precomputed at load (`score_7d_ago`, `delta_7d`): dashboard 3 s → 0.24 s. |
 | 2026-10-28 | UI moved to a left sidebar and a dark-only theme (user request, SOCRadar as reference); light mode dropped. |
+| 2026-10-28 | Vendor/product names are canonicalised (suffix stripping + aliases) with separate display labels; existing data rewritten with the new `rederive` command. |
+| 2026-10-28 | GitHub PoCs come from the PoC-in-GitHub README index, not the 1 GB repo; no stars or descriptions, links only. |
+| 2026-10-28 | Social-media mentions, news, threat-actor and dark-web data (as on SOCRadar) are out of scope: no free, reliable source. |
 | 2026-10-28 | Explorer filters replaced by a Kibana-style query bar parsed client-side; table redesigned to one line per CVE. Palette moved to graphite + cyan with muted severity colours (user found the bright red childish). |
 
 ### Corpus after first full sync (2026-10-28)

@@ -160,6 +160,20 @@ func (s *Store) replaceSnapshot(ctx context.Context, sn snapshot) (inserted, upd
 	return inserted, updated, int(tag.RowsAffected()), tx.Commit(ctx)
 }
 
+type CWERow struct {
+	ID   string
+	Name string
+}
+
+// ReplaceCWE makes the cwe table equal to rows.
+func (s *Store) ReplaceCWE(ctx context.Context, rows []CWERow) (inserted, updated, deleted int, err error) {
+	data := make([][]any, len(rows))
+	for i, r := range rows {
+		data[i] = []any{r.ID, r.Name}
+	}
+	return s.replaceSnapshot(ctx, snapshot{table: "cwe", columns: []string{"id", "name"}, key: []string{"id"}, rows: data})
+}
+
 type EPSSRow struct {
 	CVEID      string
 	Score      float64

@@ -3,6 +3,7 @@ import type {
   CveList,
   Dashboard,
   ProductDetail,
+  ProductSummary,
   SyncStatus,
   VendorDetail,
   VendorSummary,
@@ -34,6 +35,8 @@ export const api = {
   getCve: (id: string) => request<CveDetail>(`/api/v1/cves/${enc(id)}`),
   listVendors: (q: string, pageSize = 50) =>
     request<{ items: VendorSummary[] }>(`/api/v1/vendors?${new URLSearchParams({ q, page_size: String(pageSize) })}`),
+  listProducts: (q: string, pageSize = 50) =>
+    request<{ items: ProductSummary[] }>(`/api/v1/products?${new URLSearchParams({ q, page_size: String(pageSize) })}`),
   getVendor: (vendor: string) => request<VendorDetail>(`/api/v1/vendors/${enc(vendor)}`),
   getProduct: (vendor: string, product: string) =>
     request<ProductDetail>(`/api/v1/vendors/${enc(vendor)}/products/${enc(product)}`),

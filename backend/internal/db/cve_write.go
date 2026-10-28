@@ -48,11 +48,13 @@ type CVERow struct {
 }
 
 type AffectedRow struct {
-	Source   string
-	Vendor   string
-	Product  string
-	CPEs     []string
-	Versions []byte
+	Source       string
+	Vendor       string
+	Product      string
+	VendorLabel  string
+	ProductLabel string
+	CPEs         []string
+	Versions     []byte
 }
 
 var cveColumns = []string{
@@ -169,11 +171,11 @@ func (s *Store) WriteCVEBatch(ctx context.Context, ids []string, build func(map[
 			if cpes == nil {
 				cpes = []string{}
 			}
-			affected = append(affected, []any{r.ID, a.Source, a.Vendor, a.Product, cpes, string(a.Versions)})
+			affected = append(affected, []any{r.ID, a.Source, a.Vendor, a.Product, a.VendorLabel, a.ProductLabel, cpes, string(a.Versions)})
 		}
 	}
 	if _, err := tx.CopyFrom(ctx, pgx.Identifier{"cve_affected"},
-		[]string{"cve_id", "source", "vendor", "product", "cpes", "versions"}, pgx.CopyFromRows(affected)); err != nil {
+		[]string{"cve_id", "source", "vendor", "product", "vendor_label", "product_label", "cpes", "versions"}, pgx.CopyFromRows(affected)); err != nil {
 		return 0, 0, fmt.Errorf("copy affected rows: %w", err)
 	}
 
@@ -186,4 +188,14 @@ func nullJSON(b []byte) any {
 		return nil
 	}
 	return string(b)
+}
+
+// CVEIDsAfter returns up to limit CVE IDs greater than after, in order, for
+// walking the whole table in batches.
+func (s *Store) CVEIDsAfter(ctx context.Context, after string, limit int) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id FROM cve WHERE id > $1 ORDER BY id LIMIT $2`, after, limit)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[string])
 }

@@ -95,7 +95,6 @@ export function CveResults({ filters, view, onView, defaultSort = 'published', t
   const total = result.data?.total ?? 0
   // The API caps offsets at 10,000.
   const lastPage = Math.max(1, Math.min(Math.ceil(total / pageSize), Math.floor(10000 / pageSize) + 1))
-  const btn = 'rounded-md border border-zinc-800 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40 disabled:hover:bg-transparent'
 
   return (
     <Card>
@@ -123,10 +122,6 @@ export function CveResults({ filters, view, onView, defaultSort = 'published', t
               ))}
             </div>
           </div>
-          <div className="flex gap-1.5">
-            <button className={btn} disabled={page <= 1} onClick={() => goto(page - 1)}>Previous</button>
-            <button className={btn} disabled={page >= lastPage} onClick={() => goto(page + 1)}>Next</button>
-          </div>
         </div>
       </div>
       {result.isPending ? (
@@ -136,8 +131,46 @@ export function CveResults({ filters, view, onView, defaultSort = 'published', t
       ) : (
         <div className={result.isPlaceholderData ? 'opacity-60' : ''}>
           <CveTable items={result.data.items} sort={{ sort, desc, onSort }} />
+          {lastPage > 1 && <Pager page={page} lastPage={lastPage} onPage={goto} />}
         </div>
       )}
     </Card>
+  )
+}
+
+// Page numbers around the current page, with the first and last always shown.
+function pageWindow(page: number, last: number): (number | '…')[] {
+  const pages = new Set([1, last, page - 2, page - 1, page, page + 1, page + 2])
+  const sorted = [...pages].filter((p) => p >= 1 && p <= last).sort((a, b) => a - b)
+  const out: (number | '…')[] = []
+  sorted.forEach((p, i) => {
+    if (i > 0 && p - sorted[i - 1] > 1) out.push('…')
+    out.push(p)
+  })
+  return out
+}
+
+function Pager({ page, lastPage, onPage }: { page: number; lastPage: number; onPage: (p: number) => void }) {
+  const btn = 'min-w-8 rounded-md border px-2.5 py-1 text-xs tabular-nums disabled:opacity-40'
+  const idle = 'border-zinc-800 text-zinc-300 hover:bg-zinc-800'
+  return (
+    <nav className="mt-4 flex flex-wrap items-center justify-center gap-1.5" aria-label="Pagination">
+      <button className={`${btn} ${idle}`} disabled={page <= 1} onClick={() => onPage(page - 1)}>← Previous</button>
+      {pageWindow(page, lastPage).map((p, i) =>
+        p === '…' ? (
+          <span key={`gap-${i}`} className="px-1 text-xs text-zinc-600">…</span>
+        ) : (
+          <button
+            key={p}
+            onClick={() => onPage(p)}
+            aria-current={p === page ? 'page' : undefined}
+            className={`${btn} ${p === page ? 'border-cyan-400/40 bg-cyan-500/10 text-cyan-200' : idle}`}
+          >
+            {p.toLocaleString()}
+          </button>
+        ),
+      )}
+      <button className={`${btn} ${idle}`} disabled={page >= lastPage} onClick={() => onPage(page + 1)}>Next →</button>
+    </nav>
   )
 }

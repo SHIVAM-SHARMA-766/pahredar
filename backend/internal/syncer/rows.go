@@ -54,7 +54,8 @@ func buildRow(rec *cverecord.Record, nvd *cverecord.NVD) (db.CVERow, error) {
 	row.CVSSv2Score, row.CVSSv2Vector = metricCols(d.V2)
 	for _, a := range d.Affected {
 		row.Affected = append(row.Affected, db.AffectedRow{
-			Source: a.Source, Vendor: a.Vendor, Product: a.Product, CPEs: a.CPEs, Versions: a.Versions,
+			Source: a.Source, Vendor: a.Vendor, Product: a.Product, VendorLabel: a.VendorLabel, ProductLabel: a.ProductLabel,
+			CPEs: a.CPEs, Versions: a.Versions,
 		})
 	}
 	return row, nil

@@ -79,8 +79,9 @@ func parseListParams(q url.Values) (db.ListCVEParams, int, error) {
 		}
 		p.State = v
 	}
-	p.Vendors = listParam(q.Get("vendor"))
-	p.Products = listParam(q.Get("product"))
+	// Filters match canonical keys, so "Oracle Corporation" finds "oracle".
+	p.Vendors = listParam(q.Get("vendor"), cverecord.CanonicalVendor)
+	p.Products = listParam(q.Get("product"), cverecord.CanonicalProduct)
 	if v := strings.ToUpper(q.Get("cwe")); v != "" {
 		if !cweParam.MatchString(v) {
 			return p, 0, errors.New("cwe must look like CWE-79")
@@ -164,11 +165,12 @@ func parseListParams(q url.Values) (db.ListCVEParams, int, error) {
 	return p, page, nil
 }
 
-// listParam splits a comma-separated, case-insensitive list, dropping blanks.
-func listParam(v string) []string {
+// listParam splits a comma-separated list, maps each item through norm, and
+// drops blanks.
+func listParam(v string, norm func(string) string) []string {
 	var out []string
 	for _, part := range strings.Split(v, ",") {
-		if part = strings.ToLower(strings.TrimSpace(part)); part != "" {
+		if part = norm(part); part != "" {
 			out = append(out, part)
 		}
 	}
@@ -193,6 +195,7 @@ type cveDetailResponse struct {
 	Title           *string            `json:"title"`
 	Description     *string            `json:"description"`
 	CWEIDs          []string           `json:"cwe_ids"`
+	CWEs            []cweOut           `json:"cwes"`
 	Severity        string             `json:"severity"`
 	SeveritySource  *string            `json:"severity_source"`
 	CVSS            effectiveCVSS      `json:"cvss"`
@@ -201,12 +204,89 @@ type cveDetailResponse struct {
 	NVDStatus       *string            `json:"nvd_status"`
 	NVDLastModified *time.Time         `json:"nvd_last_modified"`
 	HasExploit      bool               `json:"has_exploit"`
+	Assessment      assessment         `json:"assessment"`
+	Advisory        cverecord.Advisory `json:"advisory"`
 	KEV             *db.KEVOut         `json:"kev"`
 	EPSS            *db.EPSSOut        `json:"epss"`
 	Exploits        []db.ExploitOut    `json:"exploits"`
 	Timeline        []timelineEvent    `json:"timeline"`
 	References      json.RawMessage    `json:"references"`
 	Affected        []db.AffectedOut   `json:"affected"`
+}
+
+type cweOut struct {
+	ID   string  `json:"id"`
+	Name *string `json:"name"`
+}
+
+// assessment is Pahredar's summary of how urgent a CVE is. It is a heuristic
+// over the signals on the page, not an external score; the rules are in
+// ARCHITECTURE.md ("Assessment") and assess() below, and every outcome lists
+// its reasons.
+type assessment struct {
+	Exploitation string   `json:"exploitation"` // active, poc, none
+	Priority     string   `json:"priority"`     // P1 (patch now) … P4 (monitor); "" for rejected
+	Reasons      []string `json:"reasons"`
+}
+
+func assess(d *db.CVEDetail, best *cverecord.Metric, ssvc *cverecord.SSVC) assessment {
+	a := assessment{Exploitation: "none", Reasons: []string{}}
+	if d.State == "REJECTED" {
+		a.Reasons = append(a.Reasons, "CVE ID was rejected")
+		return a
+	}
+	pocs := 0
+	for _, e := range d.Exploits {
+		if e.Source == "github" {
+			pocs++
+		}
+	}
+	switch {
+	case d.KEV != nil:
+		a.Exploitation = "active"
+		a.Reasons = append(a.Reasons, "listed in CISA KEV (exploited in the wild)")
+	case ssvc != nil && strings.EqualFold(ssvc.Exploitation, "active"):
+		a.Exploitation = "active"
+		a.Reasons = append(a.Reasons, "CISA SSVC exploitation: active")
+	case len(d.Exploits) > 0 || d.ExploitRef || (ssvc != nil && strings.EqualFold(ssvc.Exploitation, "poc")):
+		a.Exploitation = "poc"
+		switch {
+		case len(d.Exploits) > pocs:
+			a.Reasons = append(a.Reasons, "public exploit or attack module available")
+		case pocs > 0:
+			a.Reasons = append(a.Reasons, fmt.Sprintf("%d proof-of-concept repositories on GitHub", pocs))
+		default:
+			a.Reasons = append(a.Reasons, "exploit or proof of concept referenced")
+		}
+	}
+
+	score := 0.0
+	if best != nil {
+		score = best.Score
+	}
+	epss := 0.0
+	if d.EPSS != nil {
+		epss = d.EPSS.Score
+	}
+	switch {
+	case a.Exploitation == "active":
+		a.Priority = "P1"
+	case epss >= 0.1:
+		a.Priority = "P2"
+		a.Reasons = append(a.Reasons, fmt.Sprintf("EPSS %.1f%% (≥ 10%%)", epss*100))
+	case a.Exploitation == "poc" && score >= 7:
+		a.Priority = "P2"
+		a.Reasons = append(a.Reasons, fmt.Sprintf("CVSS %.1f with public exploit code", score))
+	case score >= 7 || a.Exploitation == "poc":
+		a.Priority = "P3"
+		if score >= 7 {
+			a.Reasons = append(a.Reasons, fmt.Sprintf("CVSS %.1f (high or critical)", score))
+		}
+	default:
+		a.Priority = "P4"
+		a.Reasons = append(a.Reasons, "no exploitation signal and CVSS below 7")
+	}
+	return a
 }
 
 type timelineEvent struct {
@@ -252,6 +332,21 @@ func (s *Server) getCVE(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	derived := cverecord.Derive(rec, nvd)
+	ssvc := cverecord.CISASSVC(rec)
+	best := derived.V4
+	if best == nil {
+		best = derived.V3
+	}
+	if best == nil {
+		best = derived.V2
+	}
+	cwes := make([]cweOut, len(d.CWEIDs))
+	for i, id := range d.CWEIDs {
+		cwes[i] = cweOut{ID: id}
+		if name, ok := d.CWENames[id]; ok {
+			cwes[i].Name = &name
+		}
+	}
 	metrics := cverecord.Metrics(rec, nvd)
 	if metrics == nil {
 		metrics = []cverecord.Metric{}
@@ -266,13 +361,15 @@ func (s *Server) getCVE(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, cveDetailResponse{
 		ID: d.ID, State: d.State, Assigner: d.Assigner,
 		DateReserved: d.DateReserved, DatePublished: d.DatePublished, DateUpdated: d.DateUpdated,
-		Title: d.Title, Description: d.Description, CWEIDs: d.CWEIDs,
+		Title: d.Title, Description: d.Description, CWEIDs: d.CWEIDs, CWEs: cwes,
 		Severity: d.Severity, SeveritySource: d.SeveritySource,
 		CVSS:      effectiveCVSS{V4: derived.V4, V3: derived.V3, V2: derived.V2},
 		Metrics:   metrics,
-		SSVC:      cverecord.CISASSVC(rec),
+		SSVC:      ssvc,
 		NVDStatus: d.NVDStatus, NVDLastModified: d.NVDLastModified,
 		HasExploit: d.ExploitRef || d.KEV != nil || len(d.Exploits) > 0,
+		Assessment: assess(d, best, ssvc),
+		Advisory:   cverecord.CNAAdvisory(rec),
 		KEV:        d.KEV,
 		EPSS:       d.EPSS,
 		Exploits:   d.Exploits,

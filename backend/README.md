@@ -11,7 +11,7 @@ Go module for the Pahredar backend: one binary that applies database migrations,
 | `internal/cverecord/` | Pure parsing and derivation, no I/O. `Parse` (CVE JSON 5), `ParseNVD` (NVD API 2.0 `cve` object), `Derive` (effective CVSS, severity, CWEs, merged references, normalized affected products, search text), `Metrics` (all per-provider CVSS, best first), `CISASSVC`. Unit-tested with real records in `testdata/`. |
 | `internal/sources/cvelist/` | GitHub client for CVEProject/cvelistV5 releases: release lookup (latest, by tag, recent) and record iteration over the baseline (streamed, nested zip) and delta zips. |
 | `internal/sources/nvd/` | NVD CVE API 2.0 pager: request spacing for the rate limit, concurrent page fetches, retry with backoff on 403/429/5xx/network errors. |
-| `internal/sources/kev/`, `epss/`, `exploits/` | Single-file feeds: CISA KEV JSON, EPSS gzip CSV, and the Exploit-DB / Metasploit / Nuclei indexes (each mapped to `(CVE, source_ref)` entries). |
+| `internal/sources/kev/`, `epss/`, `exploits/`, `cwe/` | Single-file feeds: CISA KEV JSON, EPSS gzip CSV, the Exploit-DB / Metasploit / Nuclei / PoC-in-GitHub indexes (each mapped to `(CVE, source_ref)` entries), and MITRE's CWE CSV. |
 | `internal/sources/fetch/` | Shared HTTP client and `Get` (User-Agent, non-200 → `StatusError`). |
 
 Source packages know nothing about the database.
@@ -28,7 +28,8 @@ Dependency direction: `api` and `syncer` → `db`, `cverecord`; `syncer` → `so
 |---|---|
 | `pahredar serve` | Applies pending migrations, starts the scheduler (unless `SYNC_ENABLED=false`), listens on `HTTP_ADDR`. Every source runs once at startup; on an empty database that bootstraps everything in the background (~5 min cvelist, ~15 min NVD, seconds for the rest) while the API is already up. |
 | `pahredar migrate` | Applies pending migrations and exits. |
-| `pahredar sync <source> [--bootstrap]` | Runs one sync in the foreground and exits. Sources: `cvelist`, `nvd`, `kev`, `epss`, `exploitdb`, `metasploit`, `nuclei`, `stats`. `--bootstrap` (cvelist, nvd) re-imports everything even when a cursor exists; use after changing derivation logic. Safe while `serve` is up: the per-source lock makes one of them skip. |
+| `pahredar sync <source> [--bootstrap]` | Runs one sync in the foreground and exits. Sources: `cvelist`, `nvd`, `kev`, `epss`, `exploitdb`, `metasploit`, `nuclei`, `github`, `cwe`, `stats`. `--bootstrap` (cvelist, nvd) re-imports everything even when a cursor exists; use after changing derivation logic. Safe while `serve` is up: the per-source lock makes one of them skip. |
+| `pahredar rederive` | Rewrites every CVE's derived fields and affected rows from the stored raw JSON, then refreshes stats. Use after changing anything in `cverecord`. ~10 min on the full corpus; safe while `serve` runs (it takes the cvelist and NVD locks) |
 | `pahredar healthcheck` | GETs `http://127.0.0.1:8080/healthz`; exit 0 on HTTP 200. Used by the Compose health check because the distroless image has no curl. Assumes the default port. |
 
 Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
@@ -48,6 +49,7 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `EPSS_SYNC_INTERVAL` | no | `6h` | Runs are no-ops until a new score date appears |
 | `EXPLOITS_SYNC_INTERVAL` | no | `24h` | Shared by exploitdb, metasploit, nuclei |
 | `STATS_REFRESH_INTERVAL` | no | `6h` | Fallback; stats also refresh after data-changing cvelist/NVD/KEV runs |
+| `CWE_SYNC_INTERVAL` | no | `168h` | MITRE CWE names |
 | `NVD_API_KEY` | strongly recommended | none | Without it requests are spaced 6.5 s apart instead of 0.7 s |
 | `GITHUB_TOKEN` | no | none | Raises the GitHub API limit above 60 requests/hour; not needed at the default interval |
 
@@ -60,6 +62,7 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `GET /api/v1/cves/{id}` | Full detail: `cvss`, `metrics`, `ssvc`, `kev`, `epss` (+ `history`), `exploits`, `has_exploit`, `timeline`, `affected`, `references` |
 | `GET /api/v1/stats/dashboard` | Landing-page aggregates (`internal/db/dashboard_read.go`; field list in ARCHITECTURE.md §8) |
 | `GET /api/v1/vendors` | Vendor ranking/search (`q`, `page_size`) from `vendor_stats` |
+| `GET /api/v1/products` | Product ranking/search across vendors (`q`, `page_size`) from `product_stats` |
 | `GET /api/v1/vendors/{vendor}` | Vendor summary, CVEs per year, top 200 products |
 | `GET /api/v1/vendors/{vendor}/products/{product}` | Product summary and CVEs per year |
 | `GET /api/v1/sync/status` | `scheduler_enabled`, `sources` (cursor, last success), `recent_runs` |
@@ -82,6 +85,7 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `00003_sort_indexes.sql` | Sort indexes rebuilt as `DESC NULLS LAST, id DESC` (and a COALESCE CVSS expression index) to match the list API's `ORDER BY` |
 | `00004_enrichment.sql` | `kev.forensic_triage`; `cve.exploit_ref` with a backfill from `refs` (~10 s on the full corpus); `kev (date_added DESC, cve_id)` index |
 | `00005_vendor_stats.sql` | Materialized views `vendor_stats`, `product_stats`, `vendor_year_stats` with unique indexes (required for `REFRESH … CONCURRENTLY`); ~12 s to create on the full corpus |
+| `00007_labels_cwe_github.sql` | `exploit.source` allows `github`; `cwe` table; `cve_affected.vendor_label` / `product_label`; stats views recreated with a `label` column and a product trigram index. Run `pahredar rederive` afterwards so existing rows get canonical names and real labels |
 | `00006_epss_delta.sql` | `epss.score_7d_ago` and generated, indexed `epss.delta_7d` for the dashboard's EPSS movers |
 
 Applied automatically by `serve`, `migrate`, and `sync`; tracked in `goose_db_version`.

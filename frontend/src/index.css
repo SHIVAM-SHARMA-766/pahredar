@@ -3,4 +3,32 @@
 :root {
   color-scheme: light dark;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Chart tokens. Severity is ordinal, so charts use one red ramp with
+     monotone lightness (validated with the dataviz skill's validator,
+     --ordinal, against these surfaces). Light mode: darker = more severe. */
+  --surface: #ffffff;
+  --grid: #e4e4e7;
+  --axis-text: #71717a;
+  --sev-critical: #5f1414;
+  --sev-high: #991b1b;
+  --sev-medium: #dc2626;
+  --sev-low: #f87171;
+  --sev-other: #a1a1aa;
+  --track: #e4e4e7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Dark mode flips the anchor: brighter = more severe. */
+    --surface: #18181b;
+    --grid: #27272a;
+    --axis-text: #a1a1aa;
+    --sev-critical: #fecaca;
+    --sev-high: #f87171;
+    --sev-medium: #dc2626;
+    --sev-low: #991b1b;
+    --sev-other: #52525b;
+    --track: #27272a;
+  }
 }

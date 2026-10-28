@@ -2,13 +2,13 @@
 
 A personal, self-hosted CVE tracker. Pahredar keeps a local copy of every published CVE, enriches it with CVSS, CISA KEV, EPSS, and public-exploit data, syncs on a schedule, and shows it in a web UI.
 
-> **Status:** milestone 4 of 5. Data sync, API, and web UI work; the dashboard landing page is next. See [ARCHITECTURE.md](ARCHITECTURE.md) for the design and milestone list.
+> **Status:** v1 complete. Data sync, API, dashboard, and web UI all work. Stack matching and alerts are the next phases (see ARCHITECTURE.md §11). See [ARCHITECTURE.md](ARCHITECTURE.md) for the design and milestone list.
 
 ## Features
 
 - Full CVE corpus from the official CVE List (cvelistV5), kept current hourly
 - Enrichment from NVD, CISA KEV, EPSS, Exploit-DB, Metasploit, and Nuclei templates
-- Dashboard with new, critical, actively exploited, and high-EPSS CVEs (milestone 5, in progress)
+- Dashboard: critical CVEs this week, publish volume by severity over 90 days, newest critical, recently added to KEV, likely-exploited CVEs not yet in KEV, biggest EPSS increases
 - Full-text search and filters (severity, KEV, exploit available, vendor, product, CWE, dates, EPSS)
 - CVE detail page with CVSS breakdown, EPSS history, KEV info, affected products, references, exploits, and a timeline
 - Vendor and product pages with severity mix and CVEs-per-year charts

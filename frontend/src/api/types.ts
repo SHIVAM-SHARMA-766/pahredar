@@ -18,6 +18,7 @@ export interface CveSummary {
   date_published: string | null
   date_updated: string | null
   kev: boolean
+  kev_date_added: string | null
   epss_score: number | null
   epss_percentile: number | null
   has_exploit: boolean
@@ -198,4 +199,41 @@ export interface SyncStatus {
   scheduler_enabled: boolean
   sources: SyncState[]
   recent_runs: SyncRun[]
+}
+
+export interface SeverityMix {
+  critical: number
+  high: number
+  medium: number
+  low: number
+  // NONE plus UNKNOWN (not yet scored).
+  other: number
+}
+
+export interface DailyCount extends SeverityMix {
+  date: string
+}
+
+export interface EpssMover {
+  id: string
+  title: string | null
+  severity: Severity
+  kev: boolean
+  from: number
+  to: number
+  score_date: string
+}
+
+export interface Dashboard {
+  generated_at: string
+  published_today: number
+  published_7d: number
+  published_30d: number
+  critical_7d: number
+  total_published: number
+  kev_total: number
+  kev_added_30d: number
+  severity_30d: SeverityMix
+  daily: DailyCount[]
+  epss_movers: EpssMover[]
 }

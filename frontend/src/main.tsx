@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { lazy, StrictMode, Suspense, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { createBrowserRouter, Navigate, RouterProvider } from 'react-router'
+import { createBrowserRouter, RouterProvider } from 'react-router'
 import { Layout } from './components/Layout'
 import { ErrorBox, Spinner } from './components/ui'
 import './index.css'
@@ -13,6 +13,7 @@ const CveDetailPage = lazy(() => import('./pages/CveDetailPage').then((m) => ({ 
 const VendorPage = lazy(() => import('./pages/VendorPage').then((m) => ({ default: m.VendorPage })))
 const ProductPage = lazy(() => import('./pages/VendorPage').then((m) => ({ default: m.ProductPage })))
 const VendorsPage = lazy(() => import('./pages/VendorsPage').then((m) => ({ default: m.VendorsPage })))
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
 const SyncPage = lazy(() => import('./pages/SyncPage').then((m) => ({ default: m.SyncPage })))
 
 const page = (el: ReactNode) => <Suspense fallback={<Spinner />}>{el}</Suspense>
@@ -31,8 +32,7 @@ const router = createBrowserRouter([
   {
     element: <Layout />,
     children: [
-      // The dashboard (milestone 5) will live at "/"; until then it opens the list.
-      { index: true, element: <Navigate to="/cves" replace /> },
+      { index: true, element: page(<DashboardPage />) },
       { path: 'cves', element: <CveListPage /> },
       { path: 'cves/:id', element: page(<CveDetailPage />) },
       { path: 'vendors', element: page(<VendorsPage />) },

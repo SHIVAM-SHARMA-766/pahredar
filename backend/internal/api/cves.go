@@ -27,7 +27,7 @@ const (
 
 var (
 	severities = []string{"CRITICAL", "HIGH", "MEDIUM", "LOW", "NONE", "UNKNOWN"}
-	sorts      = []string{"relevance", "published", "updated", "cvss", "epss"}
+	sorts      = []string{"relevance", "published", "updated", "cvss", "epss", "kev_added"}
 	cweParam   = regexp.MustCompile(`^CWE-\d+$`)
 )
 

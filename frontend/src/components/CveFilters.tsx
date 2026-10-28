@@ -114,6 +114,7 @@ export function SortControl({ params, onChange }: Omit<Props, 'locked'>) {
         <option value="updated">Updated</option>
         <option value="cvss">CVSS</option>
         <option value="epss">EPSS</option>
+        <option value="kev_added">Added to KEV</option>
         <option value="relevance">Relevance</option>
       </select>
       <select className="rounded border border-zinc-300 bg-white px-2 py-1 dark:border-zinc-700 dark:bg-zinc-950" value={params.get('order') ?? 'desc'} onChange={(e) => set('order', e.target.value === 'desc' ? '' : e.target.value)}>

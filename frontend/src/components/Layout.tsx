@@ -31,6 +31,7 @@ export function Layout() {
             Pahredar
           </NavLink>
           <nav className="flex gap-1">
+            <NavLink to="/" end className={link}>Dashboard</NavLink>
             <NavLink to="/cves" className={link}>CVEs</NavLink>
             <NavLink to="/vendors" className={link}>Vendors</NavLink>
             <NavLink to="/sync" className={link}>Sync</NavLink>

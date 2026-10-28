@@ -30,7 +30,7 @@ type ListCVEParams struct {
 	KEV     *bool
 	Exploit *bool
 	EPSSMin *float64
-	Sort    string // relevance, published, updated, cvss, epss
+	Sort    string // relevance, published, updated, cvss, epss, kev_added
 	Desc    bool
 	Limit   int
 	Offset  int
@@ -50,6 +50,7 @@ type CVESummary struct {
 	DatePublished  *time.Time `json:"date_published"`
 	DateUpdated    *time.Time `json:"date_updated"`
 	KEV            bool       `json:"kev"`
+	KEVDateAdded   *time.Time `json:"kev_date_added"`
 	EPSSScore      *float64   `json:"epss_score"`
 	EPSSPercentile *float64   `json:"epss_percentile"`
 	HasExploit     bool       `json:"has_exploit"`
@@ -153,6 +154,8 @@ func (s *Store) ListCVEs(ctx context.Context, p ListCVEParams) ([]CVESummary, in
 		order = "COALESCE(cvss_v4_score, cvss_v3_score, cvss_v2_score) " + dir + " NULLS LAST"
 	case "epss":
 		order = "epss.score " + dir + " NULLS LAST"
+	case "kev_added":
+		order = "kev.date_added " + dir + " NULLS LAST"
 	default:
 		order = "date_published " + dir + " NULLS LAST"
 	}
@@ -179,7 +182,7 @@ func (s *Store) ListCVEs(ctx context.Context, p ListCVEParams) ([]CVESummary, in
 	rows, err := s.pool.Query(ctx, fmt.Sprintf(`
 		SELECT cve.id, state, assigner, title, left(description, %d), severity, severity_source,
 		       cvss_v4_score, cvss_v3_score, cvss_v2_score, date_published, date_updated,
-		       kev.cve_id IS NOT NULL, epss.score, epss.percentile, %s
+		       kev.cve_id IS NOT NULL, kev.date_added, epss.score, epss.percentile, %s
 		FROM unnest(ARRAY(%s)) WITH ORDINALITY AS page(id, ord)
 		JOIN cve ON cve.id = page.id
 		LEFT JOIN kev ON kev.cve_id = cve.id

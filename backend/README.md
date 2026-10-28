@@ -56,8 +56,9 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | Method & path | Notes |
 |---|---|
 | `GET /healthz` | `200 {"status":"ok","database":"ok"}`, or `503` if Postgres does not answer a ping within 2 s |
-| `GET /api/v1/cves` | Search and filter; parameters in ARCHITECTURE.md §8. Example: `/api/v1/cves?kev=true&sort=epss&page_size=10` |
+| `GET /api/v1/cves` | Search and filter; parameters in ARCHITECTURE.md §8. Example: `/api/v1/cves?kev=true&sort=kev_added&page_size=10` |
 | `GET /api/v1/cves/{id}` | Full detail: `cvss`, `metrics`, `ssvc`, `kev`, `epss` (+ `history`), `exploits`, `has_exploit`, `timeline`, `affected`, `references` |
+| `GET /api/v1/stats/dashboard` | Landing-page aggregates (`internal/db/dashboard_read.go`; field list in ARCHITECTURE.md §8) |
 | `GET /api/v1/vendors` | Vendor ranking/search (`q`, `page_size`) from `vendor_stats` |
 | `GET /api/v1/vendors/{vendor}` | Vendor summary, CVEs per year, top 200 products |
 | `GET /api/v1/vendors/{vendor}/products/{product}` | Product summary and CVEs per year |
@@ -81,6 +82,7 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `00003_sort_indexes.sql` | Sort indexes rebuilt as `DESC NULLS LAST, id DESC` (and a COALESCE CVSS expression index) to match the list API's `ORDER BY` |
 | `00004_enrichment.sql` | `kev.forensic_triage`; `cve.exploit_ref` with a backfill from `refs` (~10 s on the full corpus); `kev (date_added DESC, cve_id)` index |
 | `00005_vendor_stats.sql` | Materialized views `vendor_stats`, `product_stats`, `vendor_year_stats` with unique indexes (required for `REFRESH … CONCURRENTLY`); ~12 s to create on the full corpus |
+| `00006_epss_delta.sql` | `epss.score_7d_ago` and generated, indexed `epss.delta_7d` for the dashboard's EPSS movers |
 
 Applied automatically by `serve`, `migrate`, and `sync`; tracked in `goose_db_version`.
 

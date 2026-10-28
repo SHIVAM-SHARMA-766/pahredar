@@ -1,6 +1,6 @@
 # Pahredar — Architecture
 
-> Status: **milestone 4 done** (2026-10-28): all seven sources sync, the API serves search, enriched detail, and vendor/product stats, and the web UI runs at `127.0.0.1:3001`. The dashboard is next. See §13. This document is the source of truth for the design and is updated in the same change as any code, schema, or decision it describes.
+> Status: **v1 complete** (2026-10-28): all seven sources sync, the API serves search, enriched detail, vendor/product stats, and dashboard aggregates, and the web UI (dashboard, CVEs, vendors, sync) runs at `127.0.0.1:3001`. Next are the future phases in §11. See §13. This document is the source of truth for the design and is updated in the same change as any code, schema, or decision it describes.
 
 ## 1. Purpose
 
@@ -155,7 +155,7 @@ All rows for a CVE are replaced together whenever that CVE is upserted. This tab
 
 ### `epss` and `epss_history`
 
-- `epss`: `cve_id` PK, `score`, `percentile`, `score_date`. Replaced with `TRUNCATE` + `INSERT` in one transaction when a new score date appears.
+- `epss`: `cve_id` PK, `score`, `percentile`, `score_date`, `score_7d_ago` (latest history score on or before `score_date − 7`, written at load), `delta_7d` (generated `score − score_7d_ago`, indexed). Replaced with `TRUNCATE` + `INSERT` in one transaction when a new score date appears. The 7-day columns (migration 00006) make the dashboard's EPSS movers an index lookup instead of a ~1.7 s lateral scan; they stay NULL until a week of history exists.
 - `epss_history`: `(cve_id, score_date)` PK, `score`, `percentile`. A row is written only when a CVE's score changes by ≥ 0.01 from its last history row, keeping growth bounded (a full daily snapshot would be ~100M rows/year).
 
 ### `exploit`
@@ -252,9 +252,9 @@ JSON over REST under `/api/v1`. Read-only except sync triggers.
 | Method & path | Purpose |
 |---|---|
 | `GET /healthz` | Liveness + DB connectivity |
-| `GET /api/v1/cves` | Search/list. Params: `q`, `severity` (comma list), `state`, `vendor`, `product`, `cwe`, `published_from`, `published_to` (inclusive, `YYYY-MM-DD`), `kev` / `exploit` (`true`/`false`), `epss_min` (0–1), `sort` (`relevance`, `published`, `updated`, `cvss`, `epss`), `order` (`asc`/`desc`, default `desc`), `page`, `page_size` (1–100, default 25). Items carry `kev`, `epss_score`, `epss_percentile`, `has_exploit` |
+| `GET /api/v1/cves` | Search/list. Params: `q`, `severity` (comma list), `state`, `vendor`, `product`, `cwe`, `published_from`, `published_to` (inclusive, `YYYY-MM-DD`), `kev` / `exploit` (`true`/`false`), `epss_min` (0–1), `sort` (`relevance`, `published`, `updated`, `cvss`, `epss`, `kev_added`), `order` (`asc`/`desc`, default `desc`), `page`, `page_size` (1–100, default 25). Items carry `kev`, `kev_date_added`, `epss_score`, `epss_percentile`, `has_exploit` |
 | `GET /api/v1/cves/{id}` | Detail: core fields, effective CVSS per version, all per-provider metrics, SSVC, `kev` (or null), `epss` with `history`, `exploits`, `has_exploit`, `timeline`, affected products, references |
-| `GET /api/v1/stats/dashboard` | Counts and series for the dashboard (milestone 5) |
+| `GET /api/v1/stats/dashboard` | Published counts (today, 7 d, 30 d, total; UTC days), critical in 7 d, KEV total and added in 30 d, severity mix of the last 30 d, `daily` (90 days, every day present, severity mix per day), `epss_movers` (top 10 `delta_7d`). ~240 ms. The dashboard's CVE lists come from `/cves` |
 | `GET /api/v1/vendors` | `{items}` of vendor summaries by CVE count. `q` = case-insensitive substring (exact match first), `page_size` 1–100 (default 25) |
 | `GET /api/v1/vendors/{vendor}` | Vendor summary, `years` (CVEs per year), `top_products` (top 200 by CVE count). 404 if unknown |
 | `GET /api/v1/vendors/{vendor}/products/{product}` | Product summary and `years`. The CVE list itself is `/cves?vendor=&product=`. Names are lower-case and URL-encoded |
@@ -277,7 +277,7 @@ Implemented in `frontend/` (details, routes, and conventions in `frontend/README
 
 | Page | Route | Content |
 |---|---|---|
-| Dashboard (milestone 5) | `/` | New CVEs today / 7 d / 30 d, severity distribution, recently KEV-added, highest EPSS, newest critical CVEs, publish-volume trend. Until then `/` redirects to `/cves` |
+| Dashboard | `/` | Hero figure (critical CVEs published in 7 days) and stat tiles (today, 7 d, 30 d, KEV added 30 d, total); 90-day stacked daily publish volume by severity with legend, tooltip, and table view; 30-day severity mix; EPSS movers; lists of newest critical, recently added to KEV, and highest-EPSS CVEs from the last 90 days not in KEV, each linking to the matching filtered list. Refreshes every 5 min |
 | CVE list | `/cves` | Filter sidebar (keywords, severity, KEV, exploit, min EPSS, vendor, product, CWE, published range, state), sort control, paginated table (ID, severity + score, EPSS, KEV/exploit tags, title + description, published) |
 | CVE detail | `/cves/:id` | Badges; description and CWE links; CVSS per version with vector breakdown and every provider's score; affected products with version ranges and links to vendor/product pages; exploits; references with tags; KEV block; EPSS score and history chart; SSVC; timeline; record metadata with cve.org / NVD links |
 | Vendors | `/vendors` | Vendor search and ranking with severity mix bars |
@@ -286,6 +286,8 @@ Implemented in `frontend/` (details, routes, and conventions in `frontend/README
 | Sync | `/sync` | Each source's last success, latest run, cursor, "Run now"; recent runs with counts and errors |
 
 Filter state lives in the URL query string using the API's parameter names, so every view is linkable. The header search box jumps straight to a CVE when given an ID.
+
+**Chart colour.** Severity is ordinal, so charts and severity bars use one red ramp with monotone lightness rather than the conventional red/orange/yellow/blue, which failed a colour-vision check (orange vs red ΔE 14.9 for normal vision; yellow outside the lightness band). The ramp passes the dataviz validator in `--ordinal` mode for both schemes; dark mode flips the anchor so the most severe step is the brightest. Colours are CSS variables in `frontend/src/index.css`. Text badges keep the conventional hues because they always carry a label.
 
 ## 10. Runtime and configuration
 
@@ -328,6 +330,8 @@ Configuration is environment-only, documented in `.env.example`. Secrets (`NVD_A
 | 2026-10-28 | Each exploit index is its own sync source (isolated failures) sharing one interval. |
 | 2026-10-28 | Vendor/product aggregates are materialized views refreshed by a `stats` source after data changes, not live queries (seconds → milliseconds). |
 | 2026-10-28 | UI routes lazy-load chart pages (initial JS 327 KB instead of 762 KB). |
+| 2026-10-28 | Severity in charts is an ordinal one-hue ramp, validated per colour scheme; badges keep conventional colours. |
+| 2026-10-28 | EPSS 7-day change is precomputed at load (`score_7d_ago`, `delta_7d`): dashboard 3 s → 0.24 s. |
 
 ### Corpus after first full sync (2026-10-28)
 
@@ -341,4 +345,4 @@ Configuration is environment-only, documented in `.env.example`. Secrets (`NVD_A
 | 2 | cvelistV5 bootstrap + incremental sync, scheduler, advisory locks, `sync_run` logging, CVE list/detail + sync status API | ✅ Done 2026-10-28 |
 | 3 | NVD, KEV, EPSS, Exploit-DB, Metasploit, Nuclei; NVD CPE affected rows; `kev`/`exploit`/`epss` filters and `sort=epss`; enriched detail + timeline; `POST /sync/{source}` | ✅ Done 2026-10-28 |
 | 4 | Frontend: list, detail, vendor, product, sync pages; `frontend` Compose service; vendor API and stats views | ✅ Done 2026-10-28 |
-| 5 | Dashboard (`/api/v1/stats/dashboard` + `/` page), polish | Next |
+| 5 | Dashboard (`/api/v1/stats/dashboard` + `/` page); chart polish (validated palette, mark specs, mobile layout) | ✅ Done 2026-10-28 |

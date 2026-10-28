@@ -36,9 +36,11 @@ export function ExploitTag() {
 
 export function Card({ title, children, actions }: { title?: ReactNode; children: ReactNode; actions?: ReactNode }) {
   return (
-    <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+    // min-w-0: as a grid/flex item a card must be allowed to shrink below its
+    // content's width, or wide rows (and charts measuring them) overflow.
+    <section className="min-w-0 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
       {(title || actions) && (
-        <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           {title && <h2 className="text-sm font-semibold tracking-wide text-zinc-500 uppercase dark:text-zinc-400">{title}</h2>}
           {actions}
         </div>
@@ -61,16 +63,23 @@ export function ErrorBox({ error }: { error: unknown }) {
   )
 }
 
-export function Stat({ label, value, tone }: { label: string; value: ReactNode; tone?: string }) {
+// Stat tile. Values stay in text colour; a swatch beside the label carries
+// series identity. Proportional figures, not tabular, at display size.
+export function Stat({ label, value, swatch, hint }: { label: string; value: ReactNode; swatch?: string; hint?: ReactNode }) {
   return (
     <div>
-      <div className="text-xs text-zinc-500 dark:text-zinc-400">{label}</div>
-      <div className={`text-2xl font-semibold tabular-nums ${tone ?? ''}`}>{value}</div>
+      <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+        {swatch && <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: swatch }} />}
+        {label}
+      </div>
+      <div className="text-2xl font-semibold">{value}</div>
+      {hint && <div className="text-xs text-zinc-500">{hint}</div>}
     </div>
   )
 }
 
-// Horizontal stacked bar of severity counts. Unscored CVEs fill the remainder.
+// Horizontal stacked bar of severity counts, segments split by 2px gaps.
+// Unscored CVEs fill the remainder in the track colour.
 export function SeverityBar({ counts, className = 'h-2' }: { counts: SeverityCounts; className?: string }) {
   const parts: [Severity, number][] = [
     ['CRITICAL', counts.critical],
@@ -79,14 +88,16 @@ export function SeverityBar({ counts, className = 'h-2' }: { counts: SeverityCou
     ['LOW', counts.low],
   ]
   const total = Math.max(counts.cves, 1)
+  const rest = Math.max(counts.cves - parts.reduce((a, [, n]) => a + n, 0), 0)
   return (
     <div
-      className={`flex w-full overflow-hidden rounded bg-zinc-200 dark:bg-zinc-800 ${className}`}
-      title={parts.map(([s, n]) => `${severityLabel(s)}: ${fmtNumber(n)}`).join(' · ')}
+      className={`flex w-full gap-[2px] overflow-hidden rounded ${className}`}
+      title={[...parts.map(([s, n]) => `${severityLabel(s)}: ${fmtNumber(n)}`), `Unscored: ${fmtNumber(rest)}`].join(' · ')}
     >
-      {parts.map(([s, n]) => (
-        <div key={s} style={{ width: `${(n / total) * 100}%`, background: severityFill[s] }} />
+      {parts.filter(([, n]) => n > 0).map(([s, n]) => (
+        <div key={s} style={{ flexBasis: `${(n / total) * 100}%`, background: severityFill[s] }} />
       ))}
+      {rest > 0 && <div style={{ flexBasis: `${(rest / total) * 100}%`, background: 'var(--track)' }} />}
     </div>
   )
 }
@@ -95,11 +106,11 @@ export function SeverityStats({ counts }: { counts: SeverityCounts }) {
   return (
     <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">
       <Stat label="CVEs" value={fmtNumber(counts.cves)} />
-      <Stat label="Critical" value={fmtNumber(counts.critical)} tone="text-red-600" />
-      <Stat label="High" value={fmtNumber(counts.high)} tone="text-orange-500" />
-      <Stat label="Medium" value={fmtNumber(counts.medium)} tone="text-amber-500" />
-      <Stat label="Low" value={fmtNumber(counts.low)} tone="text-sky-500" />
-      <Stat label="In KEV" value={fmtNumber(counts.kev)} tone="text-red-700 dark:text-red-400" />
+      <Stat label="Critical" value={fmtNumber(counts.critical)} swatch={severityFill.CRITICAL} />
+      <Stat label="High" value={fmtNumber(counts.high)} swatch={severityFill.HIGH} />
+      <Stat label="Medium" value={fmtNumber(counts.medium)} swatch={severityFill.MEDIUM} />
+      <Stat label="Low" value={fmtNumber(counts.low)} swatch={severityFill.LOW} />
+      <Stat label="In KEV" value={fmtNumber(counts.kev)} />
     </div>
   )
 }

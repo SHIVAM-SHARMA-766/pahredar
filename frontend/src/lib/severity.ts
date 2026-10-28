@@ -12,15 +12,26 @@ export const severityBadge: Record<Severity, string> = {
   UNKNOWN: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300',
 }
 
-// Solid fills for bars and charts, in the same order as SEVERITIES.
+// Chart fills: CSS variables from index.css (an ordinal one-hue ramp that
+// changes with the colour scheme). Badges keep the conventional hues above
+// because they always carry a text label.
 export const severityFill: Record<Severity, string> = {
-  CRITICAL: '#dc2626',
-  HIGH: '#f97316',
-  MEDIUM: '#fbbf24',
-  LOW: '#0ea5e9',
-  NONE: '#a1a1aa',
-  UNKNOWN: '#d4d4d8',
+  CRITICAL: 'var(--sev-critical)',
+  HIGH: 'var(--sev-high)',
+  MEDIUM: 'var(--sev-medium)',
+  LOW: 'var(--sev-low)',
+  NONE: 'var(--sev-other)',
+  UNKNOWN: 'var(--sev-other)',
 }
+
+// Severity series drawn in charts, most severe first, plus the unscored rest.
+export const chartSeries = [
+  { key: 'critical', label: 'Critical', fill: 'var(--sev-critical)' },
+  { key: 'high', label: 'High', fill: 'var(--sev-high)' },
+  { key: 'medium', label: 'Medium', fill: 'var(--sev-medium)' },
+  { key: 'low', label: 'Low', fill: 'var(--sev-low)' },
+  { key: 'other', label: 'Unscored', fill: 'var(--sev-other)' },
+] as const
 
 export function severityLabel(s: Severity): string {
   return s.charAt(0) + s.slice(1).toLowerCase()

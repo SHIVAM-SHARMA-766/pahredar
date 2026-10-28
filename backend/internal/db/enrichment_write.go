@@ -215,7 +215,13 @@ func (s *Store) ReplaceEPSS(ctx context.Context, scoreDate time.Time, rows []EPS
 	if _, err := tx.Exec(ctx, "TRUNCATE epss"); err != nil {
 		return 0, 0, err
 	}
-	tag, err = tx.Exec(ctx, "INSERT INTO epss (cve_id, score, percentile, score_date) SELECT cve_id, score, percentile, $1 FROM stage_epss", scoreDate)
+	tag, err = tx.Exec(ctx, `
+		INSERT INTO epss (cve_id, score, percentile, score_date, score_7d_ago)
+		SELECT s.cve_id, s.score, s.percentile, $1,
+		       (SELECT h.score FROM epss_history h
+		        WHERE h.cve_id = s.cve_id AND h.score_date <= $1::date - 7
+		        ORDER BY h.score_date DESC LIMIT 1)
+		FROM stage_epss s`, scoreDate)
 	if err != nil {
 		return 0, 0, fmt.Errorf("load epss: %w", err)
 	}

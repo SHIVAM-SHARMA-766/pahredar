@@ -19,7 +19,7 @@ React Router 8 needs Node ≥ 22.22 and the dev machine has Node 20, so the app 
 | `src/components/ui.tsx` | Small shared pieces: severity badge, KEV/exploit tags, card, stats, severity bar, pagination, loading and error states. |
 | `src/components/CveFilters.tsx` | Filter sidebar and sort control. |
 | `src/components/CveTable.tsx` | CVE result table. |
-| `src/components/charts.tsx` | Year bar chart and EPSS history line chart. |
+| `src/components/charts.tsx` | Daily stacked volume chart (with legend and table view), year bar chart, EPSS history line chart, shared tooltip and tick formatting. |
 | `src/components/Layout.tsx` | Header (nav plus a search box that jumps to a CVE when given an ID) and page frame. |
 | `src/pages/` | One component per route (below). |
 
@@ -27,7 +27,7 @@ React Router 8 needs Node ≥ 22.22 and the dev machine has Node 20, so the app 
 
 | Path | Page |
 |---|---|
-| `/` | Redirects to `/cves` until the dashboard lands (milestone 5) |
+| `/` | Dashboard: headline counts, 90-day volume chart, severity mix, EPSS movers, and three CVE lists (`pages/DashboardPage.tsx`) |
 | `/cves` | Filterable, sortable CVE list |
 | `/cves/:id` | CVE detail: CVSS breakdown per version and provider, affected products, exploits, references, KEV, EPSS chart, SSVC, timeline |
 | `/vendors` | Vendor search, ranked by CVE count |
@@ -42,6 +42,10 @@ React Router 8 needs Node ≥ 22.22 and the dev machine has Node 20, so the app 
 - EPSS is shown as a percentage, truncated rather than rounded (0.99999 → 99.99%).
 - Vendor and product names are URL-encoded in paths (`vendorPath`, `productPath` in `format.ts`); they can contain spaces and slashes.
 - Charts have animation disabled: it adds nothing here and Recharts' animation does not progress in headless screenshot runs.
+- **Chart colours are CSS variables** in `src/index.css` (`--sev-*`, `--surface`, `--grid`, `--axis-text`, `--track`), with a dark-mode block. Severity uses an ordinal one-hue red ramp validated with the dataviz skill's `validate_palette.js --ordinal` for both schemes; change the values only together with a re-validation. `severityFill` / `chartSeries` in `src/lib/severity.ts` reference the variables. Badges (`severityBadge`) keep conventional colours because they carry text.
+- **Mark specs:** solid hairline grid, bars ≤ 24px with a 4px rounded top and square baseline, a 2px gap between stacked segments (custom bar shape in `charts.tsx`), 2px lines, values in text colours with a swatch for identity, a legend plus a table view for multi-series charts.
+- Each chart sits in an `overflow-hidden` box and every `Card` is `min-w-0`, so wide content can never widen a card on narrow screens.
+- **Open issue (unverified on a real phone):** in 390px headless-Chromium screenshots the page lays out at 390px but Recharts measures ~419px for chart width (it measures 500 − 81, the same as at a 500px window), so the right edge of charts is clipped. The likely cause is headless Chromium starting at its 500px minimum window width and the ResizeObserver update not running under `--virtual-time-budget`, but this has not been confirmed; check charts in a real browser's device mode or on a phone.
 - Dark mode follows the OS (`prefers-color-scheme`) through Tailwind's default `dark:` variant.
 
 ## Development

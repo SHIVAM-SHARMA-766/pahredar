@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/syncer"
@@ -49,4 +50,13 @@ func (s *Server) triggerSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued", "source": source})
+}
+
+func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
+	d, err := s.store.Dashboard(r.Context(), time.Now())
+	if err != nil {
+		internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
 }

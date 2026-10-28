@@ -1,0 +1,42 @@
+name: pahredar
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      # Published on localhost only, for running the backend outside Docker.
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      NVD_API_KEY: ${NVD_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${BACKEND_HOST_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "/pahredar", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  pgdata:

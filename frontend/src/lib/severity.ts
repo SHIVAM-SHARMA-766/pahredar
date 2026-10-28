@@ -2,19 +2,30 @@ import type { Severity } from '../api/types'
 
 export const SEVERITIES: Severity[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'NONE', 'UNKNOWN']
 
-// Badge styles per severity. Full class strings so Tailwind can see them.
+// Badge styles per severity: tinted, low-saturation, always with a text label.
+// Full class strings so Tailwind can see them.
 export const severityBadge: Record<Severity, string> = {
-  CRITICAL: 'bg-red-600 text-white',
-  HIGH: 'bg-orange-500 text-white',
-  MEDIUM: 'bg-amber-400 text-amber-950',
-  LOW: 'bg-sky-500 text-white',
-  NONE: 'bg-zinc-300 text-zinc-800 dark:bg-zinc-600 dark:text-zinc-100',
-  UNKNOWN: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300',
+  CRITICAL: 'bg-red-500/10 text-red-300 ring-red-400/25',
+  HIGH: 'bg-orange-500/10 text-orange-300 ring-orange-400/25',
+  MEDIUM: 'bg-amber-500/10 text-amber-200 ring-amber-400/25',
+  LOW: 'bg-sky-500/10 text-sky-300 ring-sky-400/25',
+  NONE: 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/25',
+  UNKNOWN: 'bg-zinc-500/10 text-zinc-400 ring-zinc-500/25',
+}
+
+// Text colour for a bare score, matching the badge hue.
+export const severityText: Record<Severity, string> = {
+  CRITICAL: 'text-red-300',
+  HIGH: 'text-orange-300',
+  MEDIUM: 'text-amber-200',
+  LOW: 'text-sky-300',
+  NONE: 'text-zinc-400',
+  UNKNOWN: 'text-zinc-500',
 }
 
 // Chart fills: CSS variables from index.css (an ordinal one-hue ramp that
-// changes with the colour scheme). Badges keep the conventional hues above
-// because they always carry a text label.
+// is validated for the dark surface). Badges use conventional hues because
+// they always carry a text label.
 export const severityFill: Record<Severity, string> = {
   CRITICAL: 'var(--sev-critical)',
   HIGH: 'var(--sev-high)',

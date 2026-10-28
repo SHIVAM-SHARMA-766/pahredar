@@ -56,7 +56,7 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | Method & path | Notes |
 |---|---|
 | `GET /healthz` | `200 {"status":"ok","database":"ok"}`, or `503` if Postgres does not answer a ping within 2 s |
-| `GET /api/v1/cves` | Search and filter; parameters in ARCHITECTURE.md §8. Example: `/api/v1/cves?kev=true&sort=kev_added&page_size=10` |
+| `GET /api/v1/cves` | Search and filter; parameters in ARCHITECTURE.md §8. Example: `/api/v1/cves?vendor=cisco,citrix&kev=true&sort=kev_added&page_size=10` |
 | `GET /api/v1/cves/{id}` | Full detail: `cvss`, `metrics`, `ssvc`, `kev`, `epss` (+ `history`), `exploits`, `has_exploit`, `timeline`, `affected`, `references` |
 | `GET /api/v1/stats/dashboard` | Landing-page aggregates (`internal/db/dashboard_read.go`; field list in ARCHITECTURE.md §8) |
 | `GET /api/v1/vendors` | Vendor ranking/search (`q`, `page_size`) from `vendor_stats` |

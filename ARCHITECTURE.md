@@ -252,7 +252,7 @@ JSON over REST under `/api/v1`. Read-only except sync triggers.
 | Method & path | Purpose |
 |---|---|
 | `GET /healthz` | Liveness + DB connectivity |
-| `GET /api/v1/cves` | Search/list. Params: `q`, `severity` (comma list), `state`, `vendor`, `product`, `cwe`, `published_from`, `published_to` (inclusive, `YYYY-MM-DD`), `kev` / `exploit` (`true`/`false`), `epss_min` (0–1), `sort` (`relevance`, `published`, `updated`, `cvss`, `epss`, `kev_added`), `order` (`asc`/`desc`, default `desc`), `page`, `page_size` (1–100, default 25). Items carry `kev`, `kev_date_added`, `epss_score`, `epss_percentile`, `has_exploit` |
+| `GET /api/v1/cves` | Search/list. Params: `q`, `severity` (comma list), `state`, `vendor` / `product` (comma lists, any of), `cwe`, `published_from`, `published_to` (inclusive, `YYYY-MM-DD`), `kev` / `exploit` / `ransomware` (`true`/`false`; ransomware = KEV known ransomware use), `epss_min` / `epss_max` (0–1), `cvss_min` / `cvss_max` (0–10, best effective score), `sort` (`relevance`, `published`, `updated`, `cvss`, `epss`, `kev_added`), `order` (`asc`/`desc`, default `desc`), `page`, `page_size` (1–250, default 25). Items carry `kev`, `kev_date_added`, `ransomware`, `epss_score`, `epss_percentile`, `has_exploit`, `vendor` (display name: the CNA's first affected vendor as written, else the first normalized vendor), `ssvc_exploitation` (CISA SSVC `none`/`poc`/`active`) |
 | `GET /api/v1/cves/{id}` | Detail: core fields, effective CVSS per version, all per-provider metrics, SSVC, `kev` (or null), `epss` with `history`, `exploits`, `has_exploit`, `timeline`, affected products, references |
 | `GET /api/v1/stats/dashboard` | Published counts (today, 7 d, 30 d, total; UTC days), critical in 7 d, KEV total and added in 30 d, severity mix of the last 30 d, `daily` (90 days, every day present, severity mix per day), `epss_movers` (top 10 `delta_7d`). ~240 ms. The dashboard's CVE lists come from `/cves` |
 | `GET /api/v1/vendors` | `{items}` of vendor summaries by CVE count. `q` = case-insensitive substring (exact match first), `page_size` 1–100 (default 25) |
@@ -265,7 +265,7 @@ Search behaviour: if `q` matches a CVE ID pattern (case-insensitive), it becomes
 
 Errors are `{"error": "<message>"}` with 400 for invalid parameters, 404 for an unknown CVE, 500 (details only in the server log) otherwise. List responses are `{items, total, page, page_size}`; list items carry a description truncated to 300 characters.
 
-The list query runs in two steps: an inner `SELECT cve.id … ORDER BY … LIMIT` that touches only sort and filter columns, then a fetch of display columns (truncated description, KEV/EPSS, has-exploit) for just that page's IDs via `unnest(ARRAY(…)) WITH ORDINALITY`. Doing both at once made Postgres read every candidate's TOASTed description before the top-N sort. For the selective filters `kev=true` and `epss_min`, the matching IDs are built first in a `MATERIALIZED` CTE, because the planner otherwise walks the date index hoping to fill a page and scans most of the table (matching CVEs are old).
+The list query runs in two steps: an inner `SELECT cve.id … ORDER BY … LIMIT` that touches only sort and filter columns, then a fetch of display columns (truncated description, KEV/EPSS, has-exploit) for just that page's IDs via `unnest(ARRAY(…)) WITH ORDINALITY`. Doing both at once made Postgres read every candidate's TOASTed description before the top-N sort. For the selective filters `kev=true`, `ransomware=true`, and `epss_min`, the matching IDs are built first in a `MATERIALIZED` CTE, because the planner otherwise walks the date index hoping to fill a page and scans most of the table (matching CVEs are old).
 
 Measured on the full corpus (415,607 IDs, local, warm cache): default list, `sort=cvss`, `kev=true`, `epss_min=0.9` ~15–40 ms; `sort=epss`, `exploit=true`, full-text with ~20k matches, `vendor=microsoft` ~170–290 ms; `epss_min` with a very low threshold (fence over ~390k rows) ~600 ms; `GET /cves/{id}` ~5 ms. `order=asc` is not index-backed and sorts in memory.
 
@@ -273,12 +273,14 @@ Pagination is offset-based, capped at offset 10,000 (single user; narrow the fil
 
 ## 9. Frontend
 
-Implemented in `frontend/` (details, routes, and conventions in `frontend/README.md`). The shell is a SOCRadar-style collapsible left sidebar: brand, CVE search, sections *Overview* (Dashboard), *Vulnerability intelligence* (CVE explorer, Known exploited, Likely exploited, Vendors & products) and *System* (Data sync), and a sync-health card. The theme is dark only: navy neutrals with a rose accent.
+Implemented in `frontend/` (details, routes, and conventions in `frontend/README.md`). The shell is a SOCRadar-style collapsible left sidebar: brand, CVE search, sections *Overview* (Dashboard), *Vulnerability intelligence* (CVE explorer, Known exploited, Likely exploited, Vendors & products) and *System* (Data sync), and a sync-health card. The theme is dark only: graphite neutrals, a cyan accent, and low-saturation tinted badges.
+
+**Query language.** The CVE explorer is driven by one Kibana-style search bar (`frontend/src/lib/query.ts`): free text plus `field:value` terms such as `is:kev`, `-is:kev`, `has:exploit`, `has:ransomware`, `severity:critical,high`, `epss:>10`, `cvss:>=9`, `vendor:cisco,citrix`, `product:log4j`, `cwe:79`, `age:<30`, `published:>=2024-01-01`, `is:rejected`. The parser runs in the browser and translates the query into `/api/v1/cves` parameters; unknown fields or bad values are reported under the bar and ignored. The URL carries `query` (plus `sort`, `order`, `page`, `page_size`), so saved views such as *Known exploited* are just links with a query.
 
 | Page | Route | Content |
 |---|---|---|
 | Dashboard | `/` | Hero figure (critical CVEs published in 7 days) and stat tiles (today, 7 d, 30 d, KEV added 30 d, total); 90-day stacked daily publish volume by severity with legend, tooltip, and table view; 30-day severity mix; EPSS movers; lists of newest critical, recently added to KEV, and highest-EPSS CVEs from the last 90 days not in KEV, each linking to the matching filtered list. Refreshes every 5 min |
-| CVE list | `/cves` | Filter sidebar (keywords, severity, KEV, exploit, min EPSS, vendor, product, CWE, published range, state), sort control, paginated table (ID, severity + score, EPSS, KEV/exploit tags, title + description, published) |
+| CVE explorer | `/cves` | Query bar with example chips and a syntax panel; compact one-line table (CVE, title, vendor, CISA SSVC, KEV listed, published, EPSS, CVSS, signals) with sortable headers (KEV listed, published, EPSS, CVSS), rows per page (50/100/250), previous/next |
 | CVE detail | `/cves/:id` | Badges; description and CWE links; CVSS per version with vector breakdown and every provider's score; affected products with version ranges and links to vendor/product pages; exploits; references with tags; KEV block; EPSS score and history chart; SSVC; timeline; record metadata with cve.org / NVD links |
 | Vendors | `/vendors` | Vendor search and ranking with severity mix bars |
 | Vendor | `/vendors/:vendor` | Severity counts, CVEs per year chart, top products table |
@@ -287,7 +289,7 @@ Implemented in `frontend/` (details, routes, and conventions in `frontend/README
 
 Filter state lives in the URL query string using the API's parameter names, so every view is linkable. The header search box jumps straight to a CVE when given an ID.
 
-**Chart colour.** Severity is ordinal, so charts and severity bars use one red ramp with monotone lightness rather than the conventional red/orange/yellow/blue, which failed a colour-vision check (orange vs red ΔE 14.9 for normal vision; yellow outside the lightness band). The ramp passes the dataviz validator in `--ordinal` mode against the navy card surface `#161a24`; the most severe step is the brightest. Colours are CSS variables in `frontend/src/index.css`. Text badges keep the conventional hues because they always carry a label.
+**Chart colour.** Severity is ordinal, so charts and severity bars use one red ramp with monotone lightness rather than the conventional red/orange/yellow/blue, which failed a colour-vision check (orange vs red ΔE 14.9 for normal vision; yellow outside the lightness band). The ramp (`#7a3c39` → `#eda99f`, desaturated so it reads professional rather than alarming) passes the dataviz validator in `--ordinal` mode against the graphite card surface `#151619`; the most severe step is the lightest. Colours are CSS variables in `frontend/src/index.css`. Text badges keep the conventional hues because they always carry a label.
 
 ## 10. Runtime and configuration
 
@@ -332,7 +334,8 @@ Configuration is environment-only, documented in `.env.example`. Secrets (`NVD_A
 | 2026-10-28 | UI routes lazy-load chart pages (initial JS 327 KB instead of 762 KB). |
 | 2026-10-28 | Severity in charts is an ordinal one-hue ramp, validated per colour scheme; badges keep conventional colours. |
 | 2026-10-28 | EPSS 7-day change is precomputed at load (`score_7d_ago`, `delta_7d`): dashboard 3 s → 0.24 s. |
-| 2026-10-28 | UI moved to a left sidebar and a dark-only navy theme (user request, SOCRadar as reference); light mode dropped. |
+| 2026-10-28 | UI moved to a left sidebar and a dark-only theme (user request, SOCRadar as reference); light mode dropped. |
+| 2026-10-28 | Explorer filters replaced by a Kibana-style query bar parsed client-side; table redesigned to one line per CVE. Palette moved to graphite + cyan with muted severity colours (user found the bright red childish). |
 
 ### Corpus after first full sync (2026-10-28)
 

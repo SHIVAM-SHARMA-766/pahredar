@@ -5,6 +5,7 @@ import { api } from '../api/client'
 import { YearChart } from '../components/charts'
 import { Card, ErrorBox, SeverityBar, SeverityStats, Spinner } from '../components/ui'
 import { fmtDate, fmtNumber, productPath, vendorPath } from '../lib/format'
+import { explorerLink } from '../lib/query'
 import { CveResults } from './CveListPage'
 
 export function VendorPage() {
@@ -23,7 +24,7 @@ export function VendorPage() {
         <h1 className="text-2xl font-bold">{v.vendor}</h1>
         <p className="text-sm text-zinc-500">
           {fmtNumber(v.products)} products · latest CVE {fmtDate(v.latest_published)} ·{' '}
-          <Link className="text-blue-700 hover:underline dark:text-blue-400" to={`/cves?vendor=${encodeURIComponent(v.vendor)}`}>browse all CVEs</Link>
+          <Link className="text-cyan-300 hover:text-cyan-200" to={explorerLink(`vendor:"${v.vendor}"`)}>browse all CVEs</Link>
         </p>
       </div>
       <Card>
@@ -55,11 +56,11 @@ export function VendorPage() {
               {products.map((p) => (
                 <tr key={p.product} className="border-b border-zinc-100 hover:bg-zinc-50 dark:border-zinc-800/60 dark:hover:bg-zinc-900">
                   <td className="py-1.5 pr-3">
-                    <Link className="text-blue-700 hover:underline dark:text-blue-400" to={productPath(v.vendor, p.product)}>{p.product}</Link>
+                    <Link className="text-cyan-300 hover:text-cyan-200" to={productPath(v.vendor, p.product)}>{p.product}</Link>
                   </td>
                   <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNumber(p.cves)}</td>
                   <td className="py-1.5 pr-3"><SeverityBar counts={p} /></td>
-                  <td className="py-1.5 pr-3 text-right tabular-nums">{p.kev > 0 ? <span className="text-red-600">{p.kev}</span> : '—'}</td>
+                  <td className="py-1.5 pr-3 text-right tabular-nums">{p.kev > 0 ? <span className="text-red-300">{p.kev}</span> : '—'}</td>
                   <td className="py-1.5 text-zinc-500">{fmtDate(p.latest_published)}</td>
                 </tr>
               ))}
@@ -74,18 +75,10 @@ export function VendorPage() {
 export function ProductPage() {
   const { vendor = '', product = '' } = useParams()
   const query = useQuery({ queryKey: ['product', vendor, product], queryFn: () => api.getProduct(vendor, product) })
-  const [extra, setExtra] = useSearchParams()
+  const [view, setView] = useSearchParams()
 
-  // The CVE list always carries this product's vendor/product; other filters
-  // and paging come from the page URL.
-  const params = new URLSearchParams(extra)
-  params.set('vendor', vendor)
-  params.set('product', product)
-  const onChange = (next: URLSearchParams) => {
-    next.delete('vendor')
-    next.delete('product')
-    setExtra(next)
-  }
+  // The CVE list is fixed to this product; sort and paging live in the URL.
+  const filters = new URLSearchParams({ vendor, product })
 
   if (query.isPending) return <Spinner />
   if (query.isError) return <ErrorBox error={query.error} />
@@ -95,7 +88,7 @@ export function ProductPage() {
     <div className="space-y-6">
       <div>
         <p className="text-sm">
-          <Link className="text-blue-700 hover:underline dark:text-blue-400" to={vendorPath(p.vendor)}>{p.vendor}</Link>
+          <Link className="text-cyan-300 hover:text-cyan-200" to={vendorPath(p.vendor)}>{p.vendor}</Link>
         </p>
         <h1 className="text-2xl font-bold">{p.product}</h1>
         <p className="text-sm text-zinc-500">Latest CVE {fmtDate(p.latest_published)}</p>
@@ -107,7 +100,7 @@ export function ProductPage() {
       <Card title="Published CVEs per year">
         <YearChart years={p.years} />
       </Card>
-      <CveResults params={params} onChange={onChange} title={`CVEs affecting ${p.product}`} />
+      <CveResults filters={filters} view={view} onView={setView} title={`CVEs affecting ${p.product}`} />
     </div>
   )
 }

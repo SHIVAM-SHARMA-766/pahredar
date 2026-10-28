@@ -1,48 +1,54 @@
 @import "tailwindcss";
 
-/* Pahredar is dark-only (navy surfaces, rose accent). Components still carry
+/* Pahredar is dark-only (graphite surfaces, cyan accent). Components still carry
    light/dark class pairs; the dark variant is always on via the class on
    <html>, so the light classes are inert. */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* The neutral scale is redefined as cool navy grays, so every zinc-* class in
-   the app takes the theme. 950 = page, 900 = cards/sidebar, 800 = borders. */
+/* The neutral scale is redefined as near-neutral graphite grays, so every
+   zinc-* class in the app takes the theme. 950 = page, 900 = cards/sidebar,
+   800 = borders. */
 @theme {
-  --color-zinc-50: #f5f7fa;
-  --color-zinc-100: #e8ecf2;
-  --color-zinc-200: #d0d6e1;
-  --color-zinc-300: #adb6c6;
-  --color-zinc-400: #8a94a6;
-  --color-zinc-500: #687184;
-  --color-zinc-600: #4a5263;
-  --color-zinc-700: #30364a;
-  --color-zinc-800: #232838;
-  --color-zinc-900: #161a24;
-  --color-zinc-950: #0d1017;
+  --color-zinc-50: #f6f7f8;
+  --color-zinc-100: #eceef0;
+  --color-zinc-200: #d4d6da;
+  --color-zinc-300: #b3b7be;
+  --color-zinc-400: #8e939c;
+  --color-zinc-500: #6b707a;
+  --color-zinc-600: #4b4f57;
+  --color-zinc-700: #32353b;
+  --color-zinc-800: #24262b;
+  --color-zinc-900: #151619;
+  --color-zinc-950: #0e0f11;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 :root {
   color-scheme: dark;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
-  /* Chart tokens. Severity is ordinal: one red ramp, brighter = more severe on
-     the dark surface. Validated with the dataviz skill's validator
-     (--mode dark --ordinal --surface #161a24); re-run it if these change. */
-  --surface: #161a24;
-  --grid: #232838;
-  --axis-text: #8a94a6;
-  --track: #232838;
-  --sev-critical: #fecaca;
-  --sev-high: #f87171;
-  --sev-medium: #dc2626;
-  --sev-low: #991b1b;
-  --sev-other: #4a5263;
+  /* Chart tokens. Severity is ordinal: one desaturated red ramp, lighter =
+     more severe on the dark surface. Validated with the dataviz skill's
+     validator (--mode dark --ordinal --surface #151619); re-run it if these
+     change. */
+  --surface: #151619;
+  --grid: #24262b;
+  --axis-text: #8e939c;
+  --track: #24262b;
+  --sev-critical: #eda99f;
+  --sev-high: #cd776d;
+  --sev-medium: #a5514b;
+  --sev-low: #7a3c39;
+  --sev-other: #4b4f57;
 }
 
 body {
   background: var(--color-zinc-950);
 }
 
-a {
-  text-decoration: none;
+/* !important because some browsers' "underline links" accessibility setting
+   otherwise wins over the reset. */
+a,
+a:hover {
+  text-decoration: none !important;
 }

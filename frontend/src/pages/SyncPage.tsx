@@ -33,7 +33,7 @@ export function SyncPage() {
     <div className="space-y-6">
       <PageHeader title="Data sync" subtitle="Where Pahredar's data comes from, when each source last updated, and every recent run." />
       {!scheduler_enabled && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+        <div className="rounded-lg border border-amber-400/25 bg-amber-500/10 p-3 text-sm text-amber-200">
           The scheduler is disabled (SYNC_ENABLED=false). Run syncs with <code>pahredar sync &lt;source&gt;</code>.
         </div>
       )}
@@ -104,7 +104,7 @@ export function SyncPage() {
                   <td className="py-1.5 pr-3 text-zinc-500">{r.kind}</td>
                   <td className="py-1.5 pr-3">
                     <RunStatus run={r} />
-                    {r.error && <div className="mt-1 max-w-md text-xs break-words text-red-600">{r.error}</div>}
+                    {r.error && <div className="mt-1 max-w-md text-xs break-words text-red-300">{r.error}</div>}
                   </td>
                   <td className="py-1.5 pr-3 whitespace-nowrap">{fmtDateTime(r.started_at)}</td>
                   <td className="py-1.5 pr-3 text-right tabular-nums">{duration(r.started_at, r.finished_at)}</td>

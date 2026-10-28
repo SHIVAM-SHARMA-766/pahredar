@@ -65,8 +65,8 @@ export function CveDetailPage() {
               <dd className="font-mono text-xs">{c.severity_source ?? '—'}</dd>
             </dl>
             <div className="mt-3 flex gap-3 text-sm">
-              <a className="text-blue-700 hover:underline dark:text-blue-400" href={`https://www.cve.org/CVERecord?id=${c.id}`} target="_blank" rel="noreferrer">cve.org</a>
-              <a className="text-blue-700 hover:underline dark:text-blue-400" href={`https://nvd.nist.gov/vuln/detail/${c.id}`} target="_blank" rel="noreferrer">NVD</a>
+              <a className="text-cyan-300 hover:text-cyan-200" href={`https://www.cve.org/CVERecord?id=${c.id}`} target="_blank" rel="noreferrer">cve.org</a>
+              <a className="text-cyan-300 hover:text-cyan-200" href={`https://nvd.nist.gov/vuln/detail/${c.id}`} target="_blank" rel="noreferrer">NVD</a>
             </div>
           </Card>
         </div>
@@ -173,10 +173,10 @@ function AffectedCard({ affected }: { affected: Affected[] }) {
                 <tr key={i} className="border-b border-zinc-100 align-top dark:border-zinc-800">
                   <td className="py-1 pr-3 text-zinc-500">{providerLabel[a.source]}</td>
                   <td className="py-1 pr-3">
-                    {a.vendor ? <Link className="text-blue-700 hover:underline dark:text-blue-400" to={vendorPath(a.vendor)}>{a.vendor}</Link> : '—'}
+                    {a.vendor ? <Link className="text-cyan-300 hover:text-cyan-200" to={vendorPath(a.vendor)}>{a.vendor}</Link> : '—'}
                   </td>
                   <td className="py-1 pr-3">
-                    {a.vendor ? <Link className="text-blue-700 hover:underline dark:text-blue-400" to={productPath(a.vendor, a.product)}>{a.product}</Link> : a.product}
+                    {a.vendor ? <Link className="text-cyan-300 hover:text-cyan-200" to={productPath(a.vendor, a.product)}>{a.product}</Link> : a.product}
                   </td>
                   <td className="py-1 font-mono text-xs">
                     {versions.slice(0, 6).join(', ') || '—'}
@@ -189,7 +189,7 @@ function AffectedCard({ affected }: { affected: Affected[] }) {
         </table>
       </div>
       {affected.length > shown.length && (
-        <button className="mt-2 text-sm text-blue-700 hover:underline dark:text-blue-400" onClick={() => setShowAll(true)}>
+        <button className="mt-2 text-sm text-cyan-300 hover:text-cyan-200" onClick={() => setShowAll(true)}>
           Show all {affected.length}
         </button>
       )}
@@ -206,7 +206,7 @@ function ExploitsCard({ c }: { c: CveDetail }) {
         {c.exploits.map((e) => (
           <li key={e.source + e.source_ref} className="flex gap-2">
             <span className="w-24 shrink-0 text-zinc-500">{exploitSource[e.source]}</span>
-            <a href={e.url ?? undefined} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline dark:text-blue-400">
+            <a href={e.url ?? undefined} target="_blank" rel="noreferrer" className="text-cyan-300 hover:text-cyan-200">
               {e.title ?? e.source_ref}
             </a>
             {e.published_at && <span className="ml-auto shrink-0 text-zinc-500">{fmtDate(e.published_at)}</span>}
@@ -224,7 +224,7 @@ function ReferencesCard({ refs }: { refs: Reference[] }) {
       <ul className="space-y-1 text-sm">
         {refs.map((r) => (
           <li key={r.url} className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <a href={r.url} target="_blank" rel="noreferrer" className="break-all text-blue-700 hover:underline dark:text-blue-400">
+            <a href={r.url} target="_blank" rel="noreferrer" className="break-all text-cyan-300 hover:text-cyan-200">
               {r.name && r.name !== r.url ? r.name : r.url}
             </a>
             {(r.tags ?? []).map((t) => (
@@ -249,7 +249,7 @@ function KevCard({ c }: { c: CveDetail }) {
           <dt className="text-zinc-500">Due</dt>
           <dd>{fmtDate(k.due_date)}</dd>
           <dt className="text-zinc-500">Ransomware use</dt>
-          <dd className={k.known_ransomware_use === 'Known' ? 'font-semibold text-red-600' : ''}>{k.known_ransomware_use ?? '—'}</dd>
+          <dd className={k.known_ransomware_use === 'Known' ? 'font-semibold text-red-300' : ''}>{k.known_ransomware_use ?? '—'}</dd>
         </dl>
         {k.required_action && <p className="text-zinc-600 dark:text-zinc-400">{k.required_action}</p>}
       </div>
@@ -292,7 +292,7 @@ function TimelineCard({ c }: { c: CveDetail }) {
       <ol className="relative space-y-3 border-l border-zinc-200 pl-4 text-sm dark:border-zinc-800">
         {c.timeline.map((e, i) => (
           <li key={i}>
-            <span className={`absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full ${e.type.startsWith('kev') ? 'bg-red-600' : e.type === 'exploit_published' ? 'bg-violet-600' : 'bg-zinc-400'}`} />
+            <span className={`absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full ${e.type.startsWith('kev') ? 'bg-red-400' : e.type === 'exploit_published' ? 'bg-violet-400' : 'bg-zinc-400'}`} />
             <div className="text-xs text-zinc-500">{fmtDate(e.date)}</div>
             <div className="font-medium">{eventLabel[e.type] ?? e.type}</div>
             {e.detail && e.type !== 'kev_added' && e.type !== 'kev_due' && e.type !== 'updated' && (

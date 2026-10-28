@@ -16,12 +16,14 @@ var ErrNotFound = errors.New("not found")
 
 // ListCVEParams are validated filters for ListCVEs. Zero values mean "no filter".
 type ListCVEParams struct {
-	ExactID       string
-	Text          string
-	Severities    []string
-	State         string
-	Vendor        string
-	Product       string
+	ExactID    string
+	Text       string
+	Severities []string
+	State      string
+	// Vendors and Products match any listed value (lower-case). When both
+	// are set, one affected row must match both.
+	Vendors       []string
+	Products      []string
 	CWE           string
 	PublishedFrom *time.Time
 	// PublishedTo is exclusive.
@@ -30,10 +32,16 @@ type ListCVEParams struct {
 	KEV     *bool
 	Exploit *bool
 	EPSSMin *float64
-	Sort    string // relevance, published, updated, cvss, epss, kev_added
-	Desc    bool
-	Limit   int
-	Offset  int
+	EPSSMax *float64
+	// CVSSMin/Max compare the best effective score (v4, else v3, else v2).
+	CVSSMin *float64
+	CVSSMax *float64
+	// Ransomware filters on KEV's knownRansomwareCampaignUse = "Known".
+	Ransomware *bool
+	Sort       string // relevance, published, updated, cvss, epss, kev_added
+	Desc       bool
+	Limit      int
+	Offset     int
 }
 
 type CVESummary struct {
@@ -51,10 +59,28 @@ type CVESummary struct {
 	DateUpdated    *time.Time `json:"date_updated"`
 	KEV            bool       `json:"kev"`
 	KEVDateAdded   *time.Time `json:"kev_date_added"`
+	Ransomware     bool       `json:"ransomware"`
 	EPSSScore      *float64   `json:"epss_score"`
 	EPSSPercentile *float64   `json:"epss_percentile"`
 	HasExploit     bool       `json:"has_exploit"`
+	// Vendor is a display name: the CNA's first affected vendor as written
+	// (original case), else the first normalized vendor from any source.
+	Vendor *string `json:"vendor"`
+	// SSVCExploitation is CISA's SSVC "Exploitation" decision (none, poc,
+	// active), when CISA has assessed the CVE.
+	SSVCExploitation *string `json:"ssvc_exploitation"`
 }
+
+// Display columns computed for the page's rows only (see ListCVEs).
+const vendorNameExpr = `COALESCE(
+	CASE WHEN lower(trim(cve.raw_cvelist #>> '{containers,cna,affected,0,vendor}'))
+	          NOT IN ('', 'n/a', 'na', '-', 'unknown', 'unspecified')
+	     THEN trim(cve.raw_cvelist #>> '{containers,cna,affected,0,vendor}') END,
+	(SELECT a.vendor FROM cve_affected a WHERE a.cve_id = cve.id AND a.vendor <> ''
+	 ORDER BY a.source = 'cna' DESC, a.id LIMIT 1))`
+
+const ssvcExploitationExpr = `jsonb_path_query_first(cve.raw_cvelist,
+	'$.containers.adp[*].metrics[*].other ? (@.type == "ssvc").content.options[*].Exploitation') #>> '{}'`
 
 // hasExploitExpr is the "has public exploit" definition (ARCHITECTURE.md §6).
 // It needs the kev join from listFrom.
@@ -90,13 +116,13 @@ func (s *Store) ListCVEs(ctx context.Context, p ListCVEParams) ([]CVESummary, in
 	if p.State != "" {
 		where = append(where, "state = "+arg(p.State))
 	}
-	if p.Vendor != "" || p.Product != "" {
+	if len(p.Vendors) > 0 || len(p.Products) > 0 {
 		cond := "a.cve_id = cve.id"
-		if p.Vendor != "" {
-			cond += " AND a.vendor = " + arg(p.Vendor)
+		if len(p.Vendors) > 0 {
+			cond += " AND a.vendor = ANY(" + arg(p.Vendors) + ")"
 		}
-		if p.Product != "" {
-			cond += " AND a.product = " + arg(p.Product)
+		if len(p.Products) > 0 {
+			cond += " AND a.product = ANY(" + arg(p.Products) + ")"
 		}
 		where = append(where, "EXISTS (SELECT 1 FROM cve_affected a WHERE "+cond+")")
 	}
@@ -125,6 +151,22 @@ func (s *Store) ListCVEs(ctx context.Context, p ListCVEParams) ([]CVESummary, in
 	}
 	if p.EPSSMin != nil {
 		where = append(where, "epss.score >= "+arg(*p.EPSSMin))
+	}
+	if p.EPSSMax != nil {
+		where = append(where, "epss.score <= "+arg(*p.EPSSMax))
+	}
+	if p.CVSSMin != nil {
+		where = append(where, "COALESCE(cvss_v4_score, cvss_v3_score, cvss_v2_score) >= "+arg(*p.CVSSMin))
+	}
+	if p.CVSSMax != nil {
+		where = append(where, "COALESCE(cvss_v4_score, cvss_v3_score, cvss_v2_score) <= "+arg(*p.CVSSMax))
+	}
+	if p.Ransomware != nil {
+		if *p.Ransomware {
+			where = append(where, "kev.known_ransomware_use = 'Known'")
+		} else {
+			where = append(where, "kev.known_ransomware_use IS DISTINCT FROM 'Known'")
+		}
 	}
 	whereSQL := ""
 	if len(where) > 0 {
@@ -163,7 +205,7 @@ func (s *Store) ListCVEs(ctx context.Context, p ListCVEParams) ([]CVESummary, in
 	limit, offset := arg(p.Limit), arg(p.Offset)
 	pageIDs := fmt.Sprintf("SELECT cve.id%s%s ORDER BY %s, cve.id DESC LIMIT %s OFFSET %s",
 		listFrom, whereSQL, order, limit, offset)
-	if p.EPSSMin != nil || (p.KEV != nil && *p.KEV) {
+	if p.EPSSMin != nil || (p.KEV != nil && *p.KEV) || (p.Ransomware != nil && *p.Ransomware) {
 		// These filters keep few rows, and those rows (older, exploited
 		// CVEs) sit far along the date and CVSS indexes, so walking an index
 		// until a page fills scans most of the table. A materialized CTE
@@ -182,13 +224,14 @@ func (s *Store) ListCVEs(ctx context.Context, p ListCVEParams) ([]CVESummary, in
 	rows, err := s.pool.Query(ctx, fmt.Sprintf(`
 		SELECT cve.id, state, assigner, title, left(description, %d), severity, severity_source,
 		       cvss_v4_score, cvss_v3_score, cvss_v2_score, date_published, date_updated,
-		       kev.cve_id IS NOT NULL, kev.date_added, epss.score, epss.percentile, %s
+		       kev.cve_id IS NOT NULL, kev.date_added, kev.known_ransomware_use IS NOT DISTINCT FROM 'Known',
+		       epss.score, epss.percentile, %s, %s, %s
 		FROM unnest(ARRAY(%s)) WITH ORDINALITY AS page(id, ord)
 		JOIN cve ON cve.id = page.id
 		LEFT JOIN kev ON kev.cve_id = cve.id
 		LEFT JOIN epss ON epss.cve_id = cve.id
 		ORDER BY page.ord`,
-		summaryDescriptionLength, hasExploitExpr, pageIDs), args...)
+		summaryDescriptionLength, hasExploitExpr, vendorNameExpr, ssvcExploitationExpr, pageIDs), args...)
 	if err != nil {
 		return nil, 0, err
 	}

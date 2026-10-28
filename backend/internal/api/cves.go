@@ -20,7 +20,7 @@ import (
 
 const (
 	defaultPageSize = 25
-	maxPageSize     = 100
+	maxPageSize     = 250
 	// maxOffset bounds deep pagination, which gets slow with OFFSET.
 	maxOffset = 10000
 )
@@ -79,8 +79,8 @@ func parseListParams(q url.Values) (db.ListCVEParams, int, error) {
 		}
 		p.State = v
 	}
-	p.Vendor = strings.ToLower(strings.TrimSpace(q.Get("vendor")))
-	p.Product = strings.ToLower(strings.TrimSpace(q.Get("product")))
+	p.Vendors = listParam(q.Get("vendor"))
+	p.Products = listParam(q.Get("product"))
 	if v := strings.ToUpper(q.Get("cwe")); v != "" {
 		if !cweParam.MatchString(v) {
 			return p, 0, errors.New("cwe must look like CWE-79")
@@ -105,7 +105,7 @@ func parseListParams(q url.Values) (db.ListCVEParams, int, error) {
 	for _, b := range []struct {
 		name string
 		dst  **bool
-	}{{"kev", &p.KEV}, {"exploit", &p.Exploit}} {
+	}{{"kev", &p.KEV}, {"exploit", &p.Exploit}, {"ransomware", &p.Ransomware}} {
 		if v := q.Get(b.name); v != "" {
 			parsed, err := strconv.ParseBool(v)
 			if err != nil {
@@ -114,12 +114,21 @@ func parseListParams(q url.Values) (db.ListCVEParams, int, error) {
 			*b.dst = &parsed
 		}
 	}
-	if v := q.Get("epss_min"); v != "" {
-		f, err := strconv.ParseFloat(v, 64)
-		if err != nil || f < 0 || f > 1 {
-			return p, 0, errors.New("epss_min must be a number between 0 and 1")
+	for _, r := range []struct {
+		name     string
+		dst      **float64
+		min, max float64
+	}{
+		{"epss_min", &p.EPSSMin, 0, 1}, {"epss_max", &p.EPSSMax, 0, 1},
+		{"cvss_min", &p.CVSSMin, 0, 10}, {"cvss_max", &p.CVSSMax, 0, 10},
+	} {
+		if v := q.Get(r.name); v != "" {
+			f, err := strconv.ParseFloat(v, 64)
+			if err != nil || f < r.min || f > r.max {
+				return p, 0, fmt.Errorf("%s must be a number between %g and %g", r.name, r.min, r.max)
+			}
+			*r.dst = &f
 		}
-		p.EPSSMin = &f
 	}
 
 	p.Sort = q.Get("sort")
@@ -153,6 +162,17 @@ func parseListParams(q url.Values) (db.ListCVEParams, int, error) {
 		return p, 0, fmt.Errorf("results beyond the first %d are not available; narrow the filters", maxOffset)
 	}
 	return p, page, nil
+}
+
+// listParam splits a comma-separated, case-insensitive list, dropping blanks.
+func listParam(v string) []string {
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		if part = strings.ToLower(strings.TrimSpace(part)); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func intParam(q url.Values, name string, fallback int) (int, error) {

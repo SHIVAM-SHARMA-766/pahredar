@@ -6,6 +6,7 @@ import type { CveSummary, Dashboard, SeverityMix } from '../api/types'
 import { DailyVolumeChart } from '../components/charts'
 import { Card, ErrorBox, ExploitTag, KevTag, PageHeader, SeverityBadge, Spinner, Stat } from '../components/ui'
 import { fmtDate, fmtEpss, fmtNumber, relativeTime } from '../lib/format'
+import { explorerLink } from '../lib/query'
 import { bestScore, chartSeries } from '../lib/severity'
 
 // Dates for the list links, as YYYY-MM-DD (UTC) days before today.
@@ -15,19 +16,18 @@ function daysAgo(n: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-const link = 'text-blue-700 hover:underline dark:text-blue-400'
+const link = 'text-cyan-300 hover:text-cyan-200'
 
 export function DashboardPage() {
   const query = useQuery({ queryKey: ['dashboard'], queryFn: api.dashboard, refetchInterval: 5 * 60_000 })
   if (query.isPending) return <Spinner />
   if (query.isError) return <ErrorBox error={query.error} />
   const d = query.data
-  const week = daysAgo(6)
 
   return (
     <div className="space-y-6">
       <PageHeader title="Dashboard" subtitle={`What changed in the CVE landscape · updated ${relativeTime(d.generated_at)}`} />
-      <Headline d={d} week={week} />
+      <Headline d={d} />
 
       <Card title="Published per day, last 90 days">
         <DailyVolumeChart daily={d.daily} />
@@ -63,13 +63,13 @@ export function DashboardPage() {
         <CveListCard
           title="Newest critical"
           params={{ severity: 'CRITICAL', page_size: '8' }}
-          more={`/cves?severity=CRITICAL`}
+          more={explorerLink('severity:critical')}
           meta={(c) => fmtDate(c.date_published)}
         />
         <CveListCard
           title="Recently added to CISA KEV"
           params={{ kev: 'true', sort: 'kev_added', page_size: '8' }}
-          more="/cves?kev=true&sort=kev_added"
+          more={explorerLink('is:kev', 'kev_added')}
           meta={(c) => fmtDate(c.kev_date_added)}
           metaTitle="Date added to KEV"
         />
@@ -77,7 +77,7 @@ export function DashboardPage() {
           title="Likely exploited, not yet in KEV"
           subtitle="Highest EPSS among CVEs published in the last 90 days"
           params={{ kev: 'false', sort: 'epss', published_from: daysAgo(89), page_size: '8' }}
-          more={`/cves?kev=false&sort=epss&published_from=${daysAgo(89)}`}
+          more={explorerLink('age:<90 -is:kev', 'epss')}
           meta={(c) => fmtEpss(c.epss_score)}
         />
       </div>
@@ -87,22 +87,22 @@ export function DashboardPage() {
   )
 }
 
-function Headline({ d, week }: { d: Dashboard; week: string }) {
+function Headline({ d }: { d: Dashboard }) {
   return (
     <div className="grid gap-6 rounded-lg border border-zinc-200 bg-white p-5 md:grid-cols-[auto_1fr] dark:border-zinc-800 dark:bg-zinc-900">
       <div className="md:border-r md:border-zinc-200 md:pr-8 dark:md:border-zinc-800">
         <div className="text-sm text-zinc-500">Critical CVEs published in the last 7 days</div>
-        <Link to={`/cves?severity=CRITICAL&published_from=${week}`} className="block text-5xl font-semibold hover:underline">
+        <Link to={explorerLink('severity:critical age:<7')} className="block text-5xl font-semibold hover:underline">
           {fmtNumber(d.critical_7d)}
         </Link>
         <div className="mt-1 text-xs text-zinc-500">of {fmtNumber(d.published_7d)} published this week</div>
       </div>
       <div className="grid min-w-0 grid-cols-2 gap-4 sm:grid-cols-5">
-        <TileLink to={`/cves?published_from=${daysAgo(0)}`}><Stat label="Published today" value={fmtNumber(d.published_today)} hint="UTC, so far" /></TileLink>
-        <TileLink to={`/cves?published_from=${week}`}><Stat label="Last 7 days" value={fmtNumber(d.published_7d)} /></TileLink>
-        <TileLink to={`/cves?published_from=${daysAgo(29)}`}><Stat label="Last 30 days" value={fmtNumber(d.published_30d)} /></TileLink>
-        <TileLink to="/cves?kev=true&sort=kev_added"><Stat label="Added to KEV, 30 days" value={fmtNumber(d.kev_added_30d)} hint={`${fmtNumber(d.kev_total)} in catalog`} /></TileLink>
-        <TileLink to="/cves?state=PUBLISHED"><Stat label="Published CVEs tracked" value={fmtNumber(d.total_published)} /></TileLink>
+        <TileLink to={explorerLink('age:<1')}><Stat label="Published today" value={fmtNumber(d.published_today)} hint="UTC, so far" /></TileLink>
+        <TileLink to={explorerLink('age:<7')}><Stat label="Last 7 days" value={fmtNumber(d.published_7d)} /></TileLink>
+        <TileLink to={explorerLink('age:<30')}><Stat label="Last 30 days" value={fmtNumber(d.published_30d)} /></TileLink>
+        <TileLink to={explorerLink('is:kev', 'kev_added')}><Stat label="Added to KEV, 30 days" value={fmtNumber(d.kev_added_30d)} hint={`${fmtNumber(d.kev_total)} in catalog`} /></TileLink>
+        <TileLink to={explorerLink('is:published')}><Stat label="Published CVEs tracked" value={fmtNumber(d.total_published)} /></TileLink>
       </div>
     </div>
   )

@@ -19,9 +19,12 @@ export interface CveSummary {
   date_updated: string | null
   kev: boolean
   kev_date_added: string | null
+  ransomware: boolean
   epss_score: number | null
   epss_percentile: number | null
   has_exploit: boolean
+  vendor: string | null
+  ssvc_exploitation: string | null
 }
 
 export interface CveList {

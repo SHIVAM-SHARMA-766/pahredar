@@ -17,6 +17,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Outlet, useLocation, useNavigate, type Location } from 'react-router'
 import { api } from '../api/client'
 import { relativeTime } from '../lib/format'
+import { explorerLink } from '../lib/query'
 
 const CVE_ID = /^cve-\d{4}-\d{4,}$/i
 const COLLAPSE_KEY = 'pahredar.sidebar.collapsed'
@@ -28,10 +29,12 @@ interface NavItem {
   active: (loc: Location) => boolean
 }
 
-const params = (loc: Location) => new URLSearchParams(loc.search)
-const isKevList = (loc: Location) => loc.pathname === '/cves' && params(loc).get('kev') === 'true'
-const isLikelyList = (loc: Location) =>
-  loc.pathname === '/cves' && params(loc).get('kev') === 'false' && params(loc).get('sort') === 'epss'
+// Saved views are queries in the explorer's query language (lib/query.ts).
+const KEV_QUERY = 'is:kev'
+const LIKELY_QUERY = 'epss:>10 -is:kev'
+const queryOf = (loc: Location) => (loc.pathname === '/cves' ? new URLSearchParams(loc.search).get('query') : null)
+const isKevList = (loc: Location) => queryOf(loc) === KEV_QUERY
+const isLikelyList = (loc: Location) => queryOf(loc) === LIKELY_QUERY
 
 // Sections mirror what Pahredar does; "Known exploited" and "Likely exploited"
 // are saved views of the CVE explorer, so they share its route.
@@ -43,11 +46,11 @@ const SECTIONS: { title: string; dot: string; items: NavItem[] }[] = [
   },
   {
     title: 'Vulnerability intelligence',
-    dot: 'bg-rose-500',
+    dot: 'bg-amber-400',
     items: [
       { to: '/cves', label: 'CVE explorer', icon: Bug, active: (l) => l.pathname.startsWith('/cves') && !isKevList(l) && !isLikelyList(l) },
-      { to: '/cves?kev=true&sort=kev_added', label: 'Known exploited', icon: Flame, active: isKevList },
-      { to: '/cves?kev=false&sort=epss&epss_min=0.1', label: 'Likely exploited', icon: TrendingUp, active: isLikelyList },
+      { to: explorerLink(KEV_QUERY, 'kev_added'), label: 'Known exploited', icon: Flame, active: isKevList },
+      { to: explorerLink(LIKELY_QUERY, 'epss'), label: 'Likely exploited', icon: TrendingUp, active: isLikelyList },
       { to: '/vendors', label: 'Vendors & products', icon: Building2, active: (l) => l.pathname.startsWith('/vendors') },
     ],
   },
@@ -115,10 +118,10 @@ export function Layout() {
 function Brand({ compact }: { compact: boolean }) {
   return (
     <Link to="/" className="flex items-center gap-2.5" title="Pahredar">
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-rose-500/15 ring-1 ring-rose-500/30">
+      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-cyan-500/10 ring-1 ring-cyan-400/25">
         <svg viewBox="0 0 32 32" className="h-5 w-5" aria-hidden>
-          <path d="M16 2 4 7v8c0 7.5 5.1 13.6 12 15 6.9-1.4 12-7.5 12-15V7z" fill="#f43f5e" />
-          <path d="m11 16 3.5 3.5L21 13" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M16 2 4 7v8c0 7.5 5.1 13.6 12 15 6.9-1.4 12-7.5 12-15V7z" fill="#22d3ee" />
+          <path d="m11 16 3.5 3.5L21 13" fill="none" stroke="#0e0f11" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </span>
       {!compact && (
@@ -199,10 +202,10 @@ function NavRow({ item, active, collapsed }: { item: NavItem; active: boolean; c
       aria-current={active ? 'page' : undefined}
       className={`relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors
         ${collapsed ? 'justify-center' : ''}
-        ${active ? 'bg-rose-500/10 text-rose-300 ring-1 ring-rose-500/25' : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'}`}
+        ${active ? 'bg-white/[0.04] text-white ring-1 ring-white/10' : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'}`}
     >
-      {active && <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r bg-rose-500" />}
-      <Icon className={`h-[18px] w-[18px] shrink-0 ${active ? 'text-rose-400' : 'text-zinc-400'}`} />
+      {active && <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r bg-cyan-400" />}
+      <Icon className={`h-[18px] w-[18px] shrink-0 ${active ? 'text-cyan-300' : 'text-zinc-400'}`} />
       {!collapsed && <span className="truncate">{item.label}</span>}
     </Link>
   )
@@ -217,7 +220,7 @@ function SearchBox({ collapsed }: { collapsed: boolean }) {
     e.preventDefault()
     const term = q.trim()
     if (!term) return
-    navigate(CVE_ID.test(term) ? `/cves/${term.toUpperCase()}` : `/cves?${new URLSearchParams({ q: term })}`)
+    navigate(CVE_ID.test(term) ? `/cves/${term.toUpperCase()}` : explorerLink(term))
     setQ('')
   }
   if (collapsed) {
@@ -234,7 +237,7 @@ function SearchBox({ collapsed }: { collapsed: boolean }) {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="CVE ID or keywords…"
-        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 py-2 pr-3 pl-9 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-rose-500/50 focus:ring-1 focus:ring-rose-500/30 focus:outline-none"
+        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 py-2 pr-3 pl-9 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/25 focus:outline-none"
       />
     </form>
   )
@@ -248,7 +251,7 @@ function SyncCard({ collapsed }: { collapsed: boolean }) {
   const latest = new Map<string, string>()
   for (const r of data?.recent_runs ?? []) if (!latest.has(r.source)) latest.set(r.source, r.status)
   const failing = [...latest.values()].includes('failed')
-  const dot = !data ? 'bg-zinc-500' : failing ? 'bg-rose-500' : 'bg-emerald-400'
+  const dot = !data ? 'bg-zinc-500' : failing ? 'bg-cyan-400' : 'bg-emerald-400'
 
   if (collapsed) {
     return (

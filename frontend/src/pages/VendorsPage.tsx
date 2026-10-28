@@ -52,11 +52,11 @@ export function VendorsPage() {
               {query.data.items.map((v) => (
                 <tr key={v.vendor} className="border-b border-zinc-100 hover:bg-zinc-50 dark:border-zinc-800/60 dark:hover:bg-zinc-900">
                   <td className="py-1.5 pr-3">
-                    <Link className="text-blue-700 hover:underline dark:text-blue-400" to={vendorPath(v.vendor)}>{v.vendor}</Link>
+                    <Link className="text-cyan-300 hover:text-cyan-200" to={vendorPath(v.vendor)}>{v.vendor}</Link>
                   </td>
                   <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNumber(v.cves)}</td>
                   <td className="py-1.5 pr-3"><SeverityBar counts={v} /></td>
-                  <td className="py-1.5 pr-3 text-right tabular-nums">{v.kev > 0 ? <span className="text-red-600">{v.kev}</span> : '—'}</td>
+                  <td className="py-1.5 pr-3 text-right tabular-nums">{v.kev > 0 ? <span className="text-red-300">{v.kev}</span> : '—'}</td>
                   <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNumber(v.products)}</td>
                   <td className="py-1.5 text-zinc-500">{fmtDate(v.latest_published)}</td>
                 </tr>

@@ -6,18 +6,20 @@ import { fmtNumber } from '../lib/format'
 
 export function SeverityBadge({ severity, score }: { severity: Severity; score?: number | null }) {
   return (
-    <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold whitespace-nowrap ${severityBadge[severity]}`}>
+    <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap ring-1 ring-inset ${severityBadge[severity]}`}>
       {severityLabel(severity)}
       {score != null && <span className="font-mono">{score.toFixed(1)}</span>}
     </span>
   )
 }
 
-export function Tag({ children, tone = 'zinc', title }: { children: ReactNode; tone?: 'red' | 'violet' | 'zinc'; title?: string }) {
+export function Tag({ children, tone = 'zinc', title }: { children: ReactNode; tone?: 'red' | 'violet' | 'amber' | 'cyan' | 'zinc'; title?: string }) {
   const tones = {
-    red: 'bg-red-100 text-red-800 ring-red-300 dark:bg-red-950 dark:text-red-200 dark:ring-red-800',
-    violet: 'bg-violet-100 text-violet-800 ring-violet-300 dark:bg-violet-950 dark:text-violet-200 dark:ring-violet-800',
-    zinc: 'bg-zinc-100 text-zinc-700 ring-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-zinc-700',
+    red: 'bg-red-500/10 text-red-300 ring-red-400/25',
+    violet: 'bg-violet-500/10 text-violet-300 ring-violet-400/25',
+    amber: 'bg-amber-500/10 text-amber-200 ring-amber-400/25',
+    cyan: 'bg-cyan-500/10 text-cyan-300 ring-cyan-400/25',
+    zinc: 'bg-zinc-800 text-zinc-300 ring-zinc-700',
   }
   return (
     <span title={title} className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset whitespace-nowrap ${tones[tone]}`}>
@@ -28,6 +30,10 @@ export function Tag({ children, tone = 'zinc', title }: { children: ReactNode; t
 
 export function KevTag() {
   return <Tag tone="red" title="Listed in CISA Known Exploited Vulnerabilities">KEV</Tag>
+}
+
+export function RansomwareTag() {
+  return <Tag tone="amber" title="CISA: known use in ransomware campaigns">Ransomware</Tag>
 }
 
 export function ExploitTag() {
@@ -57,7 +63,7 @@ export function Spinner({ label = 'Loading…' }: { label?: string }) {
 export function ErrorBox({ error }: { error: unknown }) {
   const msg = error instanceof ApiError ? `${error.message} (HTTP ${error.status})` : String(error)
   return (
-    <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+    <div className="rounded-lg border border-red-400/25 bg-red-500/10 p-4 text-sm text-red-200">
       {msg}
     </div>
   )

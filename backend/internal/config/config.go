@@ -32,6 +32,9 @@ type Intervals struct {
 	KEV      time.Duration
 	EPSS     time.Duration
 	Exploits time.Duration
+	// Stats is a fallback; stats also refresh after cvelist, NVD, or KEV
+	// runs that changed data.
+	Stats time.Duration
 }
 
 func Load() (Config, error) {
@@ -62,6 +65,7 @@ func Load() (Config, error) {
 		{"KEV_SYNC_INTERVAL", &cfg.Intervals.KEV, 6 * time.Hour},
 		{"EPSS_SYNC_INTERVAL", &cfg.Intervals.EPSS, 6 * time.Hour},
 		{"EXPLOITS_SYNC_INTERVAL", &cfg.Intervals.Exploits, 24 * time.Hour},
+		{"STATS_REFRESH_INTERVAL", &cfg.Intervals.Stats, 6 * time.Hour},
 	} {
 		if *d.dst, err = duration(d.key, d.fallback); err != nil {
 			return Config{}, err

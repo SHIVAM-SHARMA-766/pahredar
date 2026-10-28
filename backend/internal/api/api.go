@@ -27,6 +27,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.HandleFunc("GET /api/v1/cves", s.listCVEs)
 	mux.HandleFunc("GET /api/v1/cves/{id}", s.getCVE)
+	mux.HandleFunc("GET /api/v1/vendors", s.listVendors)
+	mux.HandleFunc("GET /api/v1/vendors/{vendor}", s.getVendor)
+	mux.HandleFunc("GET /api/v1/vendors/{vendor}/products/{product}", s.getProduct)
 	mux.HandleFunc("GET /api/v1/sync/status", s.syncStatus)
 	mux.HandleFunc("POST /api/v1/sync/{source}", s.triggerSync)
 	return mux

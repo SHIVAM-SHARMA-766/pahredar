@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -31,7 +32,7 @@ commands:
   serve                           apply migrations, run the HTTP API and the sync scheduler
   migrate                         apply pending migrations and exit
   sync <source> [--bootstrap]     run one sync in the foreground and exit
-                                  sources: cvelist, nvd, kev, epss, exploitdb, metasploit, nuclei
+                                  sources: cvelist, nvd, kev, epss, exploitdb, metasploit, nuclei, stats
                                   --bootstrap (cvelist, nvd) re-imports everything
   healthcheck                     exit 0 if the local API reports healthy (for container health checks)
 `
@@ -90,9 +91,10 @@ func openStore(ctx context.Context, cfg config.Config) (*db.Store, func(), error
 	return db.NewStore(pool), pool.Close, nil
 }
 
-// syncTasks builds every source's task. bootstrap forces a full re-import
-// for the sources that support it; serve always passes false.
-func syncTasks(cfg config.Config, store *db.Store, bootstrap bool) []syncer.Task {
+// syncTasks builds every source's task and the runner they share. bootstrap
+// forces a full re-import for the sources that support it; serve always
+// passes false.
+func syncTasks(cfg config.Config, store *db.Store, bootstrap bool) ([]syncer.Task, *syncer.Runner) {
 	runner := syncer.NewRunner(store)
 	list := syncer.NewCVEList(cvelist.New(cfg.GitHubToken, cfg.DataDir), store, runner)
 	nvdJob := syncer.NewNVD(nvd.New(cfg.NVDAPIKey), store, runner)
@@ -108,7 +110,8 @@ func syncTasks(cfg config.Config, store *db.Store, bootstrap bool) []syncer.Task
 		tasks = append(tasks, syncer.Task{Name: src, Interval: cfg.Intervals.Exploits,
 			Fn: func(ctx context.Context) error { return enrich.SyncExploits(ctx, src) }})
 	}
-	return tasks
+	tasks = append(tasks, syncer.Task{Name: syncer.SourceStats, Interval: cfg.Intervals.Stats, Fn: enrich.RefreshStats})
+	return tasks, runner
 }
 
 func syncOnce(ctx context.Context, cfg config.Config, args []string) error {
@@ -128,8 +131,9 @@ func syncOnce(ctx context.Context, cfg config.Config, args []string) error {
 		return err
 	}
 	defer closeStore()
+	tasks, _ := syncTasks(cfg, store, *bootstrap)
 	var names []string
-	for _, t := range syncTasks(cfg, store, *bootstrap) {
+	for _, t := range tasks {
 		if t.Name == args[0] {
 			return t.Fn(ctx)
 		}
@@ -152,7 +156,13 @@ func serve(ctx context.Context, cfg config.Config) error {
 		if cfg.NVDAPIKey == "" {
 			slog.Warn("NVD_API_KEY is not set; NVD sync will be about 10x slower")
 		}
-		sched = syncer.NewScheduler(syncTasks(cfg, store, false)...)
+		tasks, runner := syncTasks(cfg, store, false)
+		sched = syncer.NewScheduler(tasks...)
+		runner.OnChange(func(source string) {
+			if slices.Contains(syncer.StatsInputs, source) {
+				sched.Trigger(syncer.SourceStats)
+			}
+		})
 		go func() {
 			defer close(syncDone)
 			sched.Run(syncCtx)

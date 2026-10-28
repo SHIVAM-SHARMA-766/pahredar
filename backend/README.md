@@ -15,10 +15,10 @@ Go module for the Pahredar backend: one binary that applies database migrations,
 | `internal/sources/fetch/` | Shared HTTP client and `Get` (User-Agent, non-200 → `StatusError`). |
 
 Source packages know nothing about the database.
-| `internal/db/` | Connection pool, embedded goose migrations, and every SQL query: `WriteCVEBatch` (locked, staged `COPY` upsert of `cve` and `cve_affected`), `ReplaceKEV` / `ReplaceExploits` (generic staged snapshot replace with a shrink guard), `ReplaceEPSS` (history diff + truncate/load), `ListCVEs` / `GetCVE`, sync cursor and run bookkeeping, advisory locks. |
+| `internal/db/` | Connection pool, embedded goose migrations, and every SQL query: `WriteCVEBatch` (locked, staged `COPY` upsert of `cve` and `cve_affected`), `ReplaceKEV` / `ReplaceExploits` (generic staged snapshot replace with a shrink guard), `ReplaceEPSS` (history diff + truncate/load), `ListCVEs` / `GetCVE`, `ListVendors` / `GetVendor` / `GetProduct` and `RefreshStats` (materialized views), sync cursor and run bookkeeping, advisory locks. |
 | `internal/db/migrations/` | Versioned SQL, `NNNNN_name.sql`, each with `-- +goose Up` and `-- +goose Down`. |
-| `internal/syncer/` | `Runner` (per-source advisory lock, stale-run cleanup, `sync_run` logging), `Scheduler` (per-task interval loop, failure backoff, on-demand `Trigger`), `buildRow` (derived record → `db.CVERow`), and the jobs: `CVEList`, `NVD`, `Enrichment` (KEV, EPSS, exploit sources). |
-| `internal/api/` | HTTP handlers on the stdlib `ServeMux`: parameter validation, JSON response shapes. |
+| `internal/syncer/` | `Runner` (per-source advisory lock, stale-run cleanup, `sync_run` logging, `OnChange` hook), `Scheduler` (per-task interval loop, failure backoff, on-demand `Trigger`), `buildRow` (derived record → `db.CVERow`), and the jobs: `CVEList`, `NVD`, `Enrichment` (KEV, EPSS, exploit sources, stats refresh). `serve` wires `OnChange` so a cvelist/NVD/KEV run that changed rows triggers `stats`. |
+| `internal/api/` | HTTP handlers on the stdlib `ServeMux`: parameter validation, JSON response shapes. `cves.go`, `vendors.go`, `sync.go`. |
 
 Dependency direction: `api` and `syncer` → `db`, `cverecord`; `syncer` → `sources/*`. `cverecord` and `sources/*` depend on nothing internal.
 
@@ -28,7 +28,7 @@ Dependency direction: `api` and `syncer` → `db`, `cverecord`; `syncer` → `so
 |---|---|
 | `pahredar serve` | Applies pending migrations, starts the scheduler (unless `SYNC_ENABLED=false`), listens on `HTTP_ADDR`. Every source runs once at startup; on an empty database that bootstraps everything in the background (~5 min cvelist, ~15 min NVD, seconds for the rest) while the API is already up. |
 | `pahredar migrate` | Applies pending migrations and exits. |
-| `pahredar sync <source> [--bootstrap]` | Runs one sync in the foreground and exits. Sources: `cvelist`, `nvd`, `kev`, `epss`, `exploitdb`, `metasploit`, `nuclei`. `--bootstrap` (cvelist, nvd) re-imports everything even when a cursor exists; use after changing derivation logic. Safe while `serve` is up: the per-source lock makes one of them skip. |
+| `pahredar sync <source> [--bootstrap]` | Runs one sync in the foreground and exits. Sources: `cvelist`, `nvd`, `kev`, `epss`, `exploitdb`, `metasploit`, `nuclei`, `stats`. `--bootstrap` (cvelist, nvd) re-imports everything even when a cursor exists; use after changing derivation logic. Safe while `serve` is up: the per-source lock makes one of them skip. |
 | `pahredar healthcheck` | GETs `http://127.0.0.1:8080/healthz`; exit 0 on HTTP 200. Used by the Compose health check because the distroless image has no curl. Assumes the default port. |
 
 Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
@@ -47,6 +47,7 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `KEV_SYNC_INTERVAL` | no | `6h` | |
 | `EPSS_SYNC_INTERVAL` | no | `6h` | Runs are no-ops until a new score date appears |
 | `EXPLOITS_SYNC_INTERVAL` | no | `24h` | Shared by exploitdb, metasploit, nuclei |
+| `STATS_REFRESH_INTERVAL` | no | `6h` | Fallback; stats also refresh after data-changing cvelist/NVD/KEV runs |
 | `NVD_API_KEY` | strongly recommended | none | Without it requests are spaced 6.5 s apart instead of 0.7 s |
 | `GITHUB_TOKEN` | no | none | Raises the GitHub API limit above 60 requests/hour; not needed at the default interval |
 
@@ -57,6 +58,9 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `GET /healthz` | `200 {"status":"ok","database":"ok"}`, or `503` if Postgres does not answer a ping within 2 s |
 | `GET /api/v1/cves` | Search and filter; parameters in ARCHITECTURE.md §8. Example: `/api/v1/cves?kev=true&sort=epss&page_size=10` |
 | `GET /api/v1/cves/{id}` | Full detail: `cvss`, `metrics`, `ssvc`, `kev`, `epss` (+ `history`), `exploits`, `has_exploit`, `timeline`, `affected`, `references` |
+| `GET /api/v1/vendors` | Vendor ranking/search (`q`, `page_size`) from `vendor_stats` |
+| `GET /api/v1/vendors/{vendor}` | Vendor summary, CVEs per year, top 200 products |
+| `GET /api/v1/vendors/{vendor}/products/{product}` | Product summary and CVEs per year |
 | `GET /api/v1/sync/status` | `scheduler_enabled`, `sources` (cursor, last success), `recent_runs` |
 | `POST /api/v1/sync/{source}` | Queue a run now (202); 404 unknown source; 409 when the scheduler is disabled |
 
@@ -76,6 +80,7 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `00002_affected_adp_cpes.sql` | `cve_affected.source` allows `adp`; single `cpe` column replaced by `cpes text[]` |
 | `00003_sort_indexes.sql` | Sort indexes rebuilt as `DESC NULLS LAST, id DESC` (and a COALESCE CVSS expression index) to match the list API's `ORDER BY` |
 | `00004_enrichment.sql` | `kev.forensic_triage`; `cve.exploit_ref` with a backfill from `refs` (~10 s on the full corpus); `kev (date_added DESC, cve_id)` index |
+| `00005_vendor_stats.sql` | Materialized views `vendor_stats`, `product_stats`, `vendor_year_stats` with unique indexes (required for `REFRESH … CONCURRENTLY`); ~12 s to create on the full corpus |
 
 Applied automatically by `serve`, `migrate`, and `sync`; tracked in `goose_db_version`.
 

@@ -28,7 +28,14 @@ type Run struct {
 }
 
 type Runner struct {
-	store *db.Store
+	store    *db.Store
+	onChange func(source string)
+}
+
+// OnChange registers fn to be called after a successful run that inserted,
+// updated, or deleted rows. Call before any run starts.
+func (r *Runner) OnChange(fn func(source string)) {
+	r.onChange = fn
 }
 
 func NewRunner(store *db.Store) *Runner {
@@ -77,8 +84,11 @@ func (r *Runner) Run(ctx context.Context, source string, plan func(context.Conte
 		"deleted", run.Deleted, "duration", time.Since(start).Round(time.Millisecond)}
 	if runErr != nil {
 		slog.Error("sync failed", append(attrs, "err", runErr)...)
-	} else {
-		slog.Info("sync finished", attrs...)
+		return runErr
 	}
-	return runErr
+	slog.Info("sync finished", attrs...)
+	if r.onChange != nil && run.Inserted+run.Updated+run.Deleted > 0 {
+		r.onChange(source)
+	}
+	return nil
 }

@@ -1,6 +1,6 @@
 # Pahredar — Architecture
 
-> Status: **milestone 3 done** (2026-10-28): all seven sources sync (cvelist, NVD, KEV, EPSS, Exploit-DB, Metasploit, Nuclei); the API serves search, filters, and enriched detail. The frontend is not implemented yet. See §13. This document is the source of truth for the design and is updated in the same change as any code, schema, or decision it describes.
+> Status: **milestone 4 done** (2026-10-28): all seven sources sync, the API serves search, enriched detail, and vendor/product stats, and the web UI runs at `127.0.0.1:3001`. The dashboard is next. See §13. This document is the source of truth for the design and is updated in the same change as any code, schema, or decision it describes.
 
 ## 1. Purpose
 
@@ -54,7 +54,7 @@ One Go binary runs both the scheduler and the HTTP API. Postgres is the only sta
 pahredar/
 ├── README.md               user-facing: what it is, how to run it
 ├── ARCHITECTURE.md         this file
-├── docker-compose.yml      postgres + backend (+ frontend, planned)
+├── docker-compose.yml      postgres + backend + frontend
 ├── .env.example            every config variable, documented
 ├── backend/                Go module (see backend/README.md)
 │   ├── cmd/pahredar/       main; subcommands: serve, migrate, sync <source>, healthcheck
@@ -64,7 +64,7 @@ pahredar/
 │   ├── internal/sources/   one package per upstream feed (fetch + unpack only): cvelist, nvd, kev, epss, exploits; fetch = shared HTTP
 │   ├── internal/syncer/    job runner, scheduler, per-source jobs (named syncer to avoid shadowing stdlib sync)
 │   └── internal/api/       HTTP handlers, request validation, JSON shapes
-└── frontend/               React + Vite + TypeScript app (planned)
+└── frontend/               React + Vite + TypeScript SPA (see frontend/README.md)
 ```
 
 Each important directory gets its own `README.md` once it contains code.
@@ -80,7 +80,7 @@ Each important directory gets its own `README.md` once it contains code.
 | Database | Postgres 17 | Transactions, JSONB, `tsvector` full-text search, `pg_trgm` fuzzy matching. |
 | Frontend | React + Vite + TypeScript | Rich interactive UI (charts, filters). |
 | Frontend data | TanStack Query | Caching, pagination, loading/error states. |
-| Routing (UI) | React Router | Standard. |
+| Routing (UI) | React Router 7 | Standard. Version 8 needs Node ≥ 22.22; the dev machine has Node 20. |
 | Styling | Tailwind CSS | Fast iteration, no component-library lock-in. |
 | Charts | Recharts | Sufficient for dashboard trends and distributions. |
 | Runtime | Docker Compose | One command to run locally; same images move to a VM later. |
@@ -175,6 +175,16 @@ Only `cve_affected` references `cve` (with `ON DELETE CASCADE`). The enrichment 
 
 KEV, EPSS, and each exploit source are full snapshots: a run makes the stored rows equal to the feed. Before replacing, the job refuses (fails the run, keeps the old data) if the feed has fewer than half as many rows as are stored, which catches truncated downloads and silent format changes.
 
+### Vendor and product stats (materialized views, migration 00005)
+
+| View | Key | Contents |
+|---|---|---|
+| `vendor_stats` | `vendor` | products, distinct CVEs, counts per severity, KEV count, latest publish date. Trigram index for search |
+| `product_stats` | `(vendor, product)` | same counts per product |
+| `vendor_year_stats` | `(vendor, year)` | distinct published CVEs per year |
+
+Only published CVEs and non-empty vendors count. Vendor totals are distinct CVEs across products, not sums. Computing these live over `cve_affected` takes 0.4–3.4 s; the views make vendor pages ~2–30 ms. They are refreshed `CONCURRENTLY` (~15 s, readers unaffected) by the `stats` sync source, which runs at startup, every `STATS_REFRESH_INTERVAL` (6 h), and is triggered automatically after any cvelist, NVD, or KEV run that changed rows. A product page's per-year chart is computed live (single product, fast enough).
+
 ### Derived, not stored
 
 - **Timeline** on the detail endpoint, oldest first: `reserved`, `published`, `kev_added`, `kev_due`, one `exploit_published` per dated exploit, `epss_spike` (score up ≥ 0.1 between consecutive history points), `updated`. Assembled per request in `internal/api/cves.go`.
@@ -244,10 +254,10 @@ JSON over REST under `/api/v1`. Read-only except sync triggers.
 | `GET /healthz` | Liveness + DB connectivity |
 | `GET /api/v1/cves` | Search/list. Params: `q`, `severity` (comma list), `state`, `vendor`, `product`, `cwe`, `published_from`, `published_to` (inclusive, `YYYY-MM-DD`), `kev` / `exploit` (`true`/`false`), `epss_min` (0–1), `sort` (`relevance`, `published`, `updated`, `cvss`, `epss`), `order` (`asc`/`desc`, default `desc`), `page`, `page_size` (1–100, default 25). Items carry `kev`, `epss_score`, `epss_percentile`, `has_exploit` |
 | `GET /api/v1/cves/{id}` | Detail: core fields, effective CVSS per version, all per-provider metrics, SSVC, `kev` (or null), `epss` with `history`, `exploits`, `has_exploit`, `timeline`, affected products, references |
-| `GET /api/v1/stats/dashboard` | Counts and series for the dashboard |
-| `GET /api/v1/vendors?q=` | Vendor autocomplete / list with CVE counts |
-| `GET /api/v1/vendors/{vendor}` | Vendor summary + products |
-| `GET /api/v1/vendors/{vendor}/products/{product}` | Product summary (CVE list via `/cves?vendor=&product=`) |
+| `GET /api/v1/stats/dashboard` | Counts and series for the dashboard (milestone 5) |
+| `GET /api/v1/vendors` | `{items}` of vendor summaries by CVE count. `q` = case-insensitive substring (exact match first), `page_size` 1–100 (default 25) |
+| `GET /api/v1/vendors/{vendor}` | Vendor summary, `years` (CVEs per year), `top_products` (top 200 by CVE count). 404 if unknown |
+| `GET /api/v1/vendors/{vendor}/products/{product}` | Product summary and `years`. The CVE list itself is `/cves?vendor=&product=`. Names are lower-case and URL-encoded |
 | `GET /api/v1/sync/status` | Per-source state and the 20 most recent runs (implemented) |
 | `POST /api/v1/sync/{source}` | Queue an immediate run: 202 `{status: queued}`, 404 unknown source, 409 if `SYNC_ENABLED=false`. Repeated triggers while one is pending collapse |
 
@@ -263,15 +273,19 @@ Pagination is offset-based, capped at offset 10,000 (single user; narrow the fil
 
 ## 9. Frontend
 
-| Page | Content |
-|---|---|
-| Dashboard | New CVEs today / 7 d / 30 d, severity distribution, recently KEV-added, highest EPSS movers, newest critical CVEs, publish-volume trend chart |
-| CVE list | Search box, filter sidebar, sortable paginated table (ID, title, severity, CVSS, EPSS, KEV, exploit, published) |
-| CVE detail | Header badges (severity, KEV, exploit), description, CVSS vector breakdown per version with provenance, EPSS score + history chart, KEV block, affected products/versions, CWE, references grouped by tag, exploits, timeline |
-| Vendor / product | CVE counts by severity and year, product list, link into filtered CVE list |
-| Sync status | Per-source last success, cursor, recent runs with counts and errors |
+Implemented in `frontend/` (details, routes, and conventions in `frontend/README.md`).
 
-Filter state lives in the URL query string so every view is linkable.
+| Page | Route | Content |
+|---|---|---|
+| Dashboard (milestone 5) | `/` | New CVEs today / 7 d / 30 d, severity distribution, recently KEV-added, highest EPSS, newest critical CVEs, publish-volume trend. Until then `/` redirects to `/cves` |
+| CVE list | `/cves` | Filter sidebar (keywords, severity, KEV, exploit, min EPSS, vendor, product, CWE, published range, state), sort control, paginated table (ID, severity + score, EPSS, KEV/exploit tags, title + description, published) |
+| CVE detail | `/cves/:id` | Badges; description and CWE links; CVSS per version with vector breakdown and every provider's score; affected products with version ranges and links to vendor/product pages; exploits; references with tags; KEV block; EPSS score and history chart; SSVC; timeline; record metadata with cve.org / NVD links |
+| Vendors | `/vendors` | Vendor search and ranking with severity mix bars |
+| Vendor | `/vendors/:vendor` | Severity counts, CVEs per year chart, top products table |
+| Product | `/vendors/:vendor/products/:product` | Severity counts, CVEs per year, the CVE list fixed to the product |
+| Sync | `/sync` | Each source's last success, latest run, cursor, "Run now"; recent runs with counts and errors |
+
+Filter state lives in the URL query string using the API's parameter names, so every view is linkable. The header search box jumps straight to a CVE when given an ID.
 
 ## 10. Runtime and configuration
 
@@ -281,7 +295,7 @@ Docker Compose services:
 |---|---|---|---|
 | `postgres` | `postgres:17` | `127.0.0.1:${POSTGRES_HOST_PORT:-5433}` | Named volume `pgdata`; published on localhost so the backend can also run outside Docker. 5433 avoids clashing with a host Postgres |
 | `backend` | built from `backend/` (distroless, non-root) | `127.0.0.1:${BACKEND_HOST_PORT:-8080}` | Applies migrations, then serves the API and runs the sync scheduler. Named volume `workdir` at `/var/lib/pahredar` (`DATA_DIR`) holds download scratch. Container health check runs `/pahredar healthcheck` |
-| `frontend` (planned) | built from `frontend/` (nginx) | `127.0.0.1:${FRONTEND_HOST_PORT:-3001}` | Serves static build, proxies `/api` to backend. Default is 3001 because 3000 is commonly taken on the dev machine |
+| `frontend` | built from `frontend/` (Node 22 build, `nginx:1.29-alpine` runtime) | `127.0.0.1:${FRONTEND_HOST_PORT:-3001}` | Serves the static build with SPA fallback, proxies `/api/` and `/healthz` to the backend. Default 3001 because 3000 is commonly taken on the dev machine |
 
 All host ports bind to `127.0.0.1` because there is no authentication. For development, the frontend can run with `npm run dev` (Vite proxy to the backend) instead of the container.
 
@@ -312,6 +326,8 @@ Configuration is environment-only, documented in `.env.example`. Secrets (`NVD_A
 | 2026-10-28 | NVD bootstrap fetches 4 pages concurrently (~14 min for 208 pages with a key, vs ~2 h sequential). |
 | 2026-10-28 | KEV/EPSS/exploit snapshots refuse feeds under half the stored size rather than mirroring a broken download. |
 | 2026-10-28 | Each exploit index is its own sync source (isolated failures) sharing one interval. |
+| 2026-10-28 | Vendor/product aggregates are materialized views refreshed by a `stats` source after data changes, not live queries (seconds → milliseconds). |
+| 2026-10-28 | UI routes lazy-load chart pages (initial JS 327 KB instead of 762 KB). |
 
 ### Corpus after first full sync (2026-10-28)
 
@@ -324,5 +340,5 @@ Configuration is environment-only, documented in `.env.example`. Secrets (`NVD_A
 | 1 | Repo skeleton, Compose (Postgres + backend), schema migration, `/healthz` | ✅ Done 2026-10-28 |
 | 2 | cvelistV5 bootstrap + incremental sync, scheduler, advisory locks, `sync_run` logging, CVE list/detail + sync status API | ✅ Done 2026-10-28 |
 | 3 | NVD, KEV, EPSS, Exploit-DB, Metasploit, Nuclei; NVD CPE affected rows; `kev`/`exploit`/`epss` filters and `sort=epss`; enriched detail + timeline; `POST /sync/{source}` | ✅ Done 2026-10-28 |
-| 4 | Frontend: list, detail, vendor, sync status pages; `frontend` Compose service; vendor API endpoints | Next |
-| 5 | Dashboard stats and charts, polish | Planned |
+| 4 | Frontend: list, detail, vendor, product, sync pages; `frontend` Compose service; vendor API and stats views | ✅ Done 2026-10-28 |
+| 5 | Dashboard (`/api/v1/stats/dashboard` + `/` page), polish | Next |

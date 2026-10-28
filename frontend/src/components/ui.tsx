@@ -1,0 +1,123 @@
+import type { ReactNode } from 'react'
+import { ApiError } from '../api/client'
+import type { SeverityCounts, Severity } from '../api/types'
+import { severityBadge, severityFill, severityLabel } from '../lib/severity'
+import { fmtNumber } from '../lib/format'
+
+export function SeverityBadge({ severity, score }: { severity: Severity; score?: number | null }) {
+  return (
+    <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-semibold whitespace-nowrap ${severityBadge[severity]}`}>
+      {severityLabel(severity)}
+      {score != null && <span className="font-mono">{score.toFixed(1)}</span>}
+    </span>
+  )
+}
+
+export function Tag({ children, tone = 'zinc', title }: { children: ReactNode; tone?: 'red' | 'violet' | 'zinc'; title?: string }) {
+  const tones = {
+    red: 'bg-red-100 text-red-800 ring-red-300 dark:bg-red-950 dark:text-red-200 dark:ring-red-800',
+    violet: 'bg-violet-100 text-violet-800 ring-violet-300 dark:bg-violet-950 dark:text-violet-200 dark:ring-violet-800',
+    zinc: 'bg-zinc-100 text-zinc-700 ring-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-zinc-700',
+  }
+  return (
+    <span title={title} className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset whitespace-nowrap ${tones[tone]}`}>
+      {children}
+    </span>
+  )
+}
+
+export function KevTag() {
+  return <Tag tone="red" title="Listed in CISA Known Exploited Vulnerabilities">KEV</Tag>
+}
+
+export function ExploitTag() {
+  return <Tag tone="violet" title="Public exploit, Metasploit module, Nuclei template, or exploit reference">Exploit</Tag>
+}
+
+export function Card({ title, children, actions }: { title?: ReactNode; children: ReactNode; actions?: ReactNode }) {
+  return (
+    <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      {(title || actions) && (
+        <div className="mb-3 flex items-center justify-between gap-2">
+          {title && <h2 className="text-sm font-semibold tracking-wide text-zinc-500 uppercase dark:text-zinc-400">{title}</h2>}
+          {actions}
+        </div>
+      )}
+      {children}
+    </section>
+  )
+}
+
+export function Spinner({ label = 'Loading…' }: { label?: string }) {
+  return <p className="py-8 text-center text-sm text-zinc-500">{label}</p>
+}
+
+export function ErrorBox({ error }: { error: unknown }) {
+  const msg = error instanceof ApiError ? `${error.message} (HTTP ${error.status})` : String(error)
+  return (
+    <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+      {msg}
+    </div>
+  )
+}
+
+export function Stat({ label, value, tone }: { label: string; value: ReactNode; tone?: string }) {
+  return (
+    <div>
+      <div className="text-xs text-zinc-500 dark:text-zinc-400">{label}</div>
+      <div className={`text-2xl font-semibold tabular-nums ${tone ?? ''}`}>{value}</div>
+    </div>
+  )
+}
+
+// Horizontal stacked bar of severity counts. Unscored CVEs fill the remainder.
+export function SeverityBar({ counts, className = 'h-2' }: { counts: SeverityCounts; className?: string }) {
+  const parts: [Severity, number][] = [
+    ['CRITICAL', counts.critical],
+    ['HIGH', counts.high],
+    ['MEDIUM', counts.medium],
+    ['LOW', counts.low],
+  ]
+  const total = Math.max(counts.cves, 1)
+  return (
+    <div
+      className={`flex w-full overflow-hidden rounded bg-zinc-200 dark:bg-zinc-800 ${className}`}
+      title={parts.map(([s, n]) => `${severityLabel(s)}: ${fmtNumber(n)}`).join(' · ')}
+    >
+      {parts.map(([s, n]) => (
+        <div key={s} style={{ width: `${(n / total) * 100}%`, background: severityFill[s] }} />
+      ))}
+    </div>
+  )
+}
+
+export function SeverityStats({ counts }: { counts: SeverityCounts }) {
+  return (
+    <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">
+      <Stat label="CVEs" value={fmtNumber(counts.cves)} />
+      <Stat label="Critical" value={fmtNumber(counts.critical)} tone="text-red-600" />
+      <Stat label="High" value={fmtNumber(counts.high)} tone="text-orange-500" />
+      <Stat label="Medium" value={fmtNumber(counts.medium)} tone="text-amber-500" />
+      <Stat label="Low" value={fmtNumber(counts.low)} tone="text-sky-500" />
+      <Stat label="In KEV" value={fmtNumber(counts.kev)} tone="text-red-700 dark:text-red-400" />
+    </div>
+  )
+}
+
+export function Pagination({ page, pageSize, total, onPage }: { page: number; pageSize: number; total: number; onPage: (p: number) => void }) {
+  // The API caps offsets at 10,000.
+  const last = Math.max(1, Math.min(Math.ceil(total / pageSize), Math.floor(10000 / pageSize) + 1))
+  const btn = 'rounded border border-zinc-300 px-3 py-1 text-sm disabled:opacity-40 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+  return (
+    <div className="flex items-center justify-between gap-2 text-sm">
+      <span className="text-zinc-500">
+        {fmtNumber(total)} result{total === 1 ? '' : 's'} · page {page} of {fmtNumber(last)}
+      </span>
+      <div className="flex gap-2">
+        <button className={btn} disabled={page <= 1} onClick={() => onPage(1)}>First</button>
+        <button className={btn} disabled={page <= 1} onClick={() => onPage(page - 1)}>Previous</button>
+        <button className={btn} disabled={page >= last} onClick={() => onPage(page + 1)}>Next</button>
+      </div>
+    </div>
+  )
+}

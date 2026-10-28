@@ -15,9 +15,14 @@ import (
 )
 
 const (
-	SourceKEV  = "kev"
-	SourceEPSS = "epss"
+	SourceKEV   = "kev"
+	SourceEPSS  = "epss"
+	SourceStats = "stats"
 )
+
+// StatsInputs are the sources whose changes make the vendor/product stats
+// stale.
+var StatsInputs = []string{SourceCVEList, SourceNVD, SourceKEV}
 
 // Enrichment runs the snapshot sources: each run downloads the whole feed
 // and makes the stored rows equal to it.
@@ -130,5 +135,16 @@ func (e *Enrichment) SyncExploits(ctx context.Context, source string) error {
 			return err
 		}
 		return e.store.SetSyncCursor(ctx, source, time.Now().UTC().Format(time.RFC3339))
+	})
+}
+
+// RefreshStats recomputes the vendor/product aggregates. It is scheduled
+// like a source so it shares locking, run logging, and retries.
+func (e *Enrichment) RefreshStats(ctx context.Context) error {
+	return e.runner.Run(ctx, SourceStats, e.snapshotPlan(SourceStats), func(ctx context.Context, run *Run) error {
+		if err := e.store.RefreshStats(ctx); err != nil {
+			return err
+		}
+		return e.store.SetSyncCursor(ctx, SourceStats, time.Now().UTC().Format(time.RFC3339))
 	})
 }

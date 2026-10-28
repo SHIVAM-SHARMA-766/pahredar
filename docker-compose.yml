@@ -26,6 +26,12 @@ services:
       NVD_API_KEY: ${NVD_API_KEY:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      SYNC_ENABLED: ${SYNC_ENABLED:-true}
+      CVELIST_SYNC_INTERVAL: ${CVELIST_SYNC_INTERVAL:-1h}
+      DATA_DIR: /var/lib/pahredar
+    volumes:
+      # Scratch space for downloads; the bootstrap needs ~700 MB temporarily.
+      - workdir:/var/lib/pahredar
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,3 +46,4 @@ services:
 
 volumes:
   pgdata:
+  workdir:

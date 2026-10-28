@@ -8,27 +8,30 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
 )
 
 type Server struct {
-	pool *pgxpool.Pool
+	store *db.Store
 }
 
-func New(pool *pgxpool.Pool) *Server {
-	return &Server{pool: pool}
+func New(store *db.Store) *Server {
+	return &Server{store: store}
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.healthz)
+	mux.HandleFunc("GET /api/v1/cves", s.listCVEs)
+	mux.HandleFunc("GET /api/v1/cves/{id}", s.getCVE)
+	mux.HandleFunc("GET /api/v1/sync/status", s.syncStatus)
 	return mux
 }
 
 func (s *Server) healthz(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
-	if err := s.pool.Ping(ctx); err != nil {
+	if err := s.store.Ping(ctx); err != nil {
 		slog.Warn("health check failed", "err", err)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unavailable", "database": "unreachable"})
 		return
@@ -42,4 +45,14 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		slog.Error("write response", "err", err)
 	}
+}
+
+func writeError(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// internalError logs err and returns a generic 500.
+func internalError(w http.ResponseWriter, r *http.Request, err error) {
+	slog.Error("request failed", "method", r.Method, "path", r.URL.Path, "err", err)
+	writeError(w, http.StatusInternalServerError, "internal error")
 }

@@ -2,7 +2,7 @@
 
 A personal, self-hosted CVE tracker. Pahredar keeps a local copy of every published CVE, enriches it with CVSS, CISA KEV, EPSS, and public-exploit data, syncs on a schedule, and shows it in a web UI.
 
-> **Status:** milestone 1 of 5. The Compose stack, database schema, and backend health endpoint run; CVE sync, API, and UI are in progress. See [ARCHITECTURE.md](ARCHITECTURE.md) for the design and milestone list.
+> **Status:** milestone 2 of 5. The full CVE corpus imports and syncs hourly from cvelistV5, and the search/detail API works. NVD/KEV/EPSS/exploit enrichment and the UI are next. See [ARCHITECTURE.md](ARCHITECTURE.md) for the design and milestone list.
 
 ## Features (v1, planned)
 
@@ -28,9 +28,14 @@ docker compose up -d --build
 curl http://127.0.0.1:8080/healthz
 ```
 
-All ports bind to `127.0.0.1` only; there is no authentication.
+The first start downloads the full CVE corpus (~615 MB) and imports it in the background; the API answers meanwhile. Follow it with `docker compose logs -f backend` or `curl 127.0.0.1:8080/api/v1/sync/status`. After that, new and changed CVEs arrive hourly.
 
-Once sync and the UI land, the first start will run a full import of all CVEs (this takes a while) and the UI will be at `http://127.0.0.1:3001`.
+```bash
+curl '127.0.0.1:8080/api/v1/cves?q=remote+code+execution&severity=CRITICAL&page_size=5'
+curl  127.0.0.1:8080/api/v1/cves/CVE-2021-44228
+```
+
+All ports bind to `127.0.0.1` only; there is no authentication. The UI (milestone 4) will be at `http://127.0.0.1:3001`.
 
 ## Documentation
 

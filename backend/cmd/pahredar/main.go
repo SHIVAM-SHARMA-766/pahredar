@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -18,16 +19,21 @@ import (
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/config"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/cvelist"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/exploits"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/fetch"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/nvd"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/syncer"
 )
 
 const usage = `usage: pahredar <command>
 
 commands:
-  serve                         apply migrations, run the HTTP API and the sync scheduler
-  migrate                       apply pending migrations and exit
-  sync cvelist [--bootstrap]    run one cvelist sync in the foreground and exit
-  healthcheck                   exit 0 if the local API reports healthy (for container health checks)
+  serve                           apply migrations, run the HTTP API and the sync scheduler
+  migrate                         apply pending migrations and exit
+  sync <source> [--bootstrap]     run one sync in the foreground and exit
+                                  sources: cvelist, nvd, kev, epss, exploitdb, metasploit, nuclei
+                                  --bootstrap (cvelist, nvd) re-imports everything
+  healthcheck                     exit 0 if the local API reports healthy (for container health checks)
 `
 
 func main() {
@@ -84,25 +90,52 @@ func openStore(ctx context.Context, cfg config.Config) (*db.Store, func(), error
 	return db.NewStore(pool), pool.Close, nil
 }
 
-func newCVEListJob(cfg config.Config, store *db.Store) *syncer.CVEList {
-	return syncer.NewCVEList(cvelist.New(cfg.GitHubToken, cfg.DataDir), store, syncer.NewRunner(store))
+// syncTasks builds every source's task. bootstrap forces a full re-import
+// for the sources that support it; serve always passes false.
+func syncTasks(cfg config.Config, store *db.Store, bootstrap bool) []syncer.Task {
+	runner := syncer.NewRunner(store)
+	list := syncer.NewCVEList(cvelist.New(cfg.GitHubToken, cfg.DataDir), store, runner)
+	nvdJob := syncer.NewNVD(nvd.New(cfg.NVDAPIKey), store, runner)
+	enrich := syncer.NewEnrichment(fetch.NewClient(), store, runner)
+
+	tasks := []syncer.Task{
+		{Name: syncer.SourceCVEList, Interval: cfg.Intervals.CVEList, Fn: func(ctx context.Context) error { return list.Sync(ctx, bootstrap) }},
+		{Name: syncer.SourceNVD, Interval: cfg.Intervals.NVD, Fn: func(ctx context.Context) error { return nvdJob.Sync(ctx, bootstrap) }},
+		{Name: syncer.SourceKEV, Interval: cfg.Intervals.KEV, Fn: enrich.SyncKEV},
+		{Name: syncer.SourceEPSS, Interval: cfg.Intervals.EPSS, Fn: enrich.SyncEPSS},
+	}
+	for _, src := range []string{exploits.SourceExploitDB, exploits.SourceMetasploit, exploits.SourceNuclei} {
+		tasks = append(tasks, syncer.Task{Name: src, Interval: cfg.Intervals.Exploits,
+			Fn: func(ctx context.Context) error { return enrich.SyncExploits(ctx, src) }})
+	}
+	return tasks
 }
 
 func syncOnce(ctx context.Context, cfg config.Config, args []string) error {
-	if len(args) == 0 || args[0] != syncer.SourceCVEList {
-		return fmt.Errorf("unknown or missing source; available: %s", syncer.SourceCVEList)
+	if len(args) == 0 {
+		return errors.New("missing source; see usage")
 	}
 	fs := flag.NewFlagSet("sync "+args[0], flag.ContinueOnError)
-	bootstrap := fs.Bool("bootstrap", false, "re-import the full baseline even if a cursor exists")
+	bootstrap := fs.Bool("bootstrap", false, "re-import everything even if a cursor exists (cvelist, nvd)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
+	}
+	if cfg.NVDAPIKey == "" && args[0] == syncer.SourceNVD {
+		slog.Warn("NVD_API_KEY is not set; NVD sync will be about 10x slower")
 	}
 	store, closeStore, err := openStore(ctx, cfg)
 	if err != nil {
 		return err
 	}
 	defer closeStore()
-	return newCVEListJob(cfg, store).Sync(ctx, *bootstrap)
+	var names []string
+	for _, t := range syncTasks(cfg, store, *bootstrap) {
+		if t.Name == args[0] {
+			return t.Fn(ctx)
+		}
+		names = append(names, t.Name)
+	}
+	return fmt.Errorf("unknown source %q; available: %s", args[0], strings.Join(names, ", "))
 }
 
 func serve(ctx context.Context, cfg config.Config) error {
@@ -114,15 +147,15 @@ func serve(ctx context.Context, cfg config.Config) error {
 
 	syncCtx, stopSync := context.WithCancel(ctx)
 	syncDone := make(chan struct{})
+	var sched *syncer.Scheduler
 	if cfg.SyncEnabled {
-		job := newCVEListJob(cfg, store)
+		if cfg.NVDAPIKey == "" {
+			slog.Warn("NVD_API_KEY is not set; NVD sync will be about 10x slower")
+		}
+		sched = syncer.NewScheduler(syncTasks(cfg, store, false)...)
 		go func() {
 			defer close(syncDone)
-			syncer.Schedule(syncCtx, syncer.Task{
-				Name:     syncer.SourceCVEList,
-				Interval: cfg.CVEListSyncInterval,
-				Fn:       func(ctx context.Context) error { return job.Sync(ctx, false) },
-			})
+			sched.Run(syncCtx)
 		}()
 	} else {
 		slog.Info("sync scheduler disabled")
@@ -131,7 +164,7 @@ func serve(ctx context.Context, cfg config.Config) error {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           api.New(store).Handler(),
+		Handler:           api.New(store, sched).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,

@@ -20,9 +20,18 @@ type Config struct {
 	GitHubToken string
 	// DataDir holds temporary download artifacts (the extracted cvelist
 	// baseline needs ~700 MB during a bootstrap).
-	DataDir             string
-	SyncEnabled         bool
-	CVEListSyncInterval time.Duration
+	DataDir     string
+	SyncEnabled bool
+	Intervals   Intervals
+}
+
+// Intervals is how often each sync source runs.
+type Intervals struct {
+	CVEList  time.Duration
+	NVD      time.Duration
+	KEV      time.Duration
+	EPSS     time.Duration
+	Exploits time.Duration
 }
 
 func Load() (Config, error) {
@@ -43,8 +52,20 @@ func Load() (Config, error) {
 	if cfg.SyncEnabled, err = strconv.ParseBool(getenv("SYNC_ENABLED", "true")); err != nil {
 		return Config{}, errors.New("SYNC_ENABLED must be true or false")
 	}
-	if cfg.CVEListSyncInterval, err = duration("CVELIST_SYNC_INTERVAL", time.Hour); err != nil {
-		return Config{}, err
+	for _, d := range []struct {
+		key      string
+		dst      *time.Duration
+		fallback time.Duration
+	}{
+		{"CVELIST_SYNC_INTERVAL", &cfg.Intervals.CVEList, time.Hour},
+		{"NVD_SYNC_INTERVAL", &cfg.Intervals.NVD, 2 * time.Hour},
+		{"KEV_SYNC_INTERVAL", &cfg.Intervals.KEV, 6 * time.Hour},
+		{"EPSS_SYNC_INTERVAL", &cfg.Intervals.EPSS, 6 * time.Hour},
+		{"EXPLOITS_SYNC_INTERVAL", &cfg.Intervals.Exploits, 24 * time.Hour},
+	} {
+		if *d.dst, err = duration(d.key, d.fallback); err != nil {
+			return Config{}, err
+		}
 	}
 	return cfg, nil
 }

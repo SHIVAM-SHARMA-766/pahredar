@@ -28,6 +28,10 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SYNC_ENABLED: ${SYNC_ENABLED:-true}
       CVELIST_SYNC_INTERVAL: ${CVELIST_SYNC_INTERVAL:-1h}
+      NVD_SYNC_INTERVAL: ${NVD_SYNC_INTERVAL:-2h}
+      KEV_SYNC_INTERVAL: ${KEV_SYNC_INTERVAL:-6h}
+      EPSS_SYNC_INTERVAL: ${EPSS_SYNC_INTERVAL:-6h}
+      EXPLOITS_SYNC_INTERVAL: ${EXPLOITS_SYNC_INTERVAL:-24h}
       DATA_DIR: /var/lib/pahredar
     volumes:
       # Scratch space for downloads; the bootstrap needs ~700 MB temporarily.

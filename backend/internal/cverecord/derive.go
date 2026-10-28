@@ -190,7 +190,9 @@ type Derived struct {
 	Severity       string
 	SeveritySource string
 	References     []Reference
-	Affected       []AffectedRow
+	// ExploitRef is true when any reference is tagged as an exploit.
+	ExploitRef bool
+	Affected   []AffectedRow
 	// SearchText is the vendor and product names, for the full-text index.
 	SearchText string
 }
@@ -261,6 +263,13 @@ func Derive(rec *Record, nvd *NVD) Derived {
 	sort.Strings(d.CWEs)
 
 	d.References = mergeReferences(rec, nvd)
+	for _, ref := range d.References {
+		for _, t := range ref.Tags {
+			if strings.EqualFold(t, "exploit") {
+				d.ExploitRef = true
+			}
+		}
+	}
 
 	names := map[string]bool{}
 	var nameList []string
@@ -287,8 +296,54 @@ func Derive(rec *Record, nvd *NVD) Derived {
 	for _, adp := range rec.Containers.ADP {
 		addAffected(ProviderADP, adp.Affected)
 	}
+	if nvd != nil {
+		addAffected(ProviderNVD, nvdAffected(nvd))
+	}
 	d.SearchText = strings.Join(nameList, " ")
 	return d
+}
+
+// nvdAffected groups an NVD record's vulnerable CPE criteria by vendor and
+// product. Versions holds the CPEMatch objects (criteria plus version bounds),
+// a different shape from the CNA/ADP version entries.
+func nvdAffected(nvd *NVD) []Affected {
+	type group struct {
+		vendor, product string
+		cpes            []string
+		matches         []CPEMatch
+	}
+	var groups []*group
+	index := map[string]*group{}
+	for _, cfg := range nvd.Configurations {
+		for _, node := range cfg.Nodes {
+			for _, m := range node.CPEMatch {
+				if !m.Vulnerable {
+					continue
+				}
+				vendor, product, ok := cpeVendorProduct(m.Criteria)
+				if !ok {
+					continue
+				}
+				key := vendor + "\x00" + product
+				g, ok := index[key]
+				if !ok {
+					g = &group{vendor: vendor, product: product}
+					index[key] = g
+					groups = append(groups, g)
+				}
+				if !slices.Contains(g.cpes, m.Criteria) {
+					g.cpes = append(g.cpes, m.Criteria)
+				}
+				g.matches = append(g.matches, m)
+			}
+		}
+	}
+	out := make([]Affected, 0, len(groups))
+	for _, g := range groups {
+		versions, _ := json.Marshal(g.matches)
+		out = append(out, Affected{Vendor: g.vendor, Product: g.product, CPEs: g.cpes, Versions: versions})
+	}
+	return out
 }
 
 // normalizeName lower-cases a vendor or product and maps placeholders to "".

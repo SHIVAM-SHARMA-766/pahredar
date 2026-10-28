@@ -11,9 +11,10 @@ import (
 
 // ExistingCVE is the stored state a writer needs to merge an incoming record.
 type ExistingCVE struct {
-	DateUpdated *time.Time
-	RawCvelist  []byte
-	RawNVD      []byte
+	DateUpdated     *time.Time
+	NVDLastModified *time.Time
+	RawCvelist      []byte
+	RawNVD          []byte
 }
 
 // CVERow is a fully derived cve row plus its affected products.
@@ -38,6 +39,7 @@ type CVERow struct {
 	NVDStatus       *string
 	NVDLastModified *time.Time
 	Refs            []byte
+	ExploitRef      bool
 	RawCvelist      []byte
 	RawNVD          []byte
 	// SearchText is extra text for the full-text index (vendor/product names).
@@ -58,7 +60,7 @@ var cveColumns = []string{
 	"title", "description", "cwe_ids",
 	"cvss_v4_score", "cvss_v4_vector", "cvss_v3_score", "cvss_v3_vector", "cvss_v2_score", "cvss_v2_vector",
 	"severity", "severity_source", "nvd_status", "nvd_last_modified",
-	"refs", "raw_cvelist", "raw_nvd",
+	"refs", "exploit_ref", "raw_cvelist", "raw_nvd",
 }
 
 const searchExpr = `setweight(to_tsvector('simple', id), 'A') ||
@@ -82,14 +84,14 @@ func (s *Store) WriteCVEBatch(ctx context.Context, ids []string, build func(map[
 	}
 
 	existing := make(map[string]ExistingCVE, len(ids))
-	rows, err := tx.Query(ctx, `SELECT id, date_updated, raw_cvelist, raw_nvd FROM cve WHERE id = ANY($1) FOR UPDATE`, ids)
+	rows, err := tx.Query(ctx, `SELECT id, date_updated, nvd_last_modified, raw_cvelist, raw_nvd FROM cve WHERE id = ANY($1) FOR UPDATE`, ids)
 	if err != nil {
 		return 0, 0, err
 	}
 	for rows.Next() {
 		var id string
 		var e ExistingCVE
-		if err := rows.Scan(&id, &e.DateUpdated, &e.RawCvelist, &e.RawNVD); err != nil {
+		if err := rows.Scan(&id, &e.DateUpdated, &e.NVDLastModified, &e.RawCvelist, &e.RawNVD); err != nil {
 			rows.Close()
 			return 0, 0, err
 		}
@@ -122,7 +124,7 @@ func (s *Store) WriteCVEBatch(ctx context.Context, ids []string, build func(map[
 			r.Title, r.Description, r.CWEIDs,
 			r.CVSSv4Score, r.CVSSv4Vector, r.CVSSv3Score, r.CVSSv3Vector, r.CVSSv2Score, r.CVSSv2Vector,
 			r.Severity, r.SeveritySource, r.NVDStatus, r.NVDLastModified,
-			string(r.Refs), nullJSON(r.RawCvelist), nullJSON(r.RawNVD), r.SearchText,
+			string(r.Refs), r.ExploitRef, nullJSON(r.RawCvelist), nullJSON(r.RawNVD), r.SearchText,
 		}, nil
 	})); err != nil {
 		return 0, 0, fmt.Errorf("copy stage rows: %w", err)

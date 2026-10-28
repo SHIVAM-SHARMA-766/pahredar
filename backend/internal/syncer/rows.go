@@ -9,7 +9,7 @@ import (
 
 // buildRow derives a complete cve row from whichever raw records exist.
 // rec or nvd may be nil, but not both.
-func buildRow(rec *cverecord.Record, nvd *cverecord.NVD, rawNVD []byte) (db.CVERow, error) {
+func buildRow(rec *cverecord.Record, nvd *cverecord.NVD) (db.CVERow, error) {
 	d := cverecord.Derive(rec, nvd)
 	refs, err := json.Marshal(d.References)
 	if err != nil {
@@ -22,7 +22,7 @@ func buildRow(rec *cverecord.Record, nvd *cverecord.NVD, rawNVD []byte) (db.CVER
 		Severity:       d.Severity,
 		SeveritySource: strPtr(d.SeveritySource),
 		Refs:           refs,
-		RawNVD:         rawNVD,
+		ExploitRef:     d.ExploitRef,
 		SearchText:     d.SearchText,
 	}
 	if rec != nil {
@@ -36,6 +36,7 @@ func buildRow(rec *cverecord.Record, nvd *cverecord.NVD, rawNVD []byte) (db.CVER
 		row.RawCvelist = rec.Raw
 	}
 	if nvd != nil {
+		row.RawNVD = nvd.Raw
 		row.NVDStatus = strPtr(nvd.VulnStatus)
 		row.NVDLastModified = nvd.LastModified.Ptr()
 		if rec == nil {

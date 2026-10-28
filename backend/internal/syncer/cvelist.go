@@ -257,7 +257,7 @@ func (w *batchWriter) flush(ctx context.Context) error {
 					nvd = nil
 				}
 			}
-			row, err := buildRow(rec, nvd, ex.RawNVD)
+			row, err := buildRow(rec, nvd)
 			if err != nil {
 				return nil, err
 			}

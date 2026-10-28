@@ -119,3 +119,56 @@ func TestParseStripsNUL(t *testing.T) {
 		t.Fatalf("description = %q", d.Description)
 	}
 }
+
+func TestCPEVendorProduct(t *testing.T) {
+	cases := []struct {
+		cpe, vendor, product string
+		ok                   bool
+	}{
+		{"cpe:2.3:a:apache:log4j:2.0:*:*:*:*:*:*:*", "apache", "log4j", true},
+		{`cpe:2.3:a:acme\:corp:big\\tool:*:*:*:*:*:*:*:*`, "acme:corp", `big\tool`, true},
+		{"cpe:2.3:o:*:linux:*:*:*:*:*:*:*:*", "", "", false},
+		{"cpe:2.3:a:vendor", "", "", false},
+		{"cpe:/a:apache:log4j", "", "", false},
+	}
+	for _, c := range cases {
+		v, p, ok := cpeVendorProduct(c.cpe)
+		if ok != c.ok || v != c.vendor || p != c.product {
+			t.Errorf("%s: got (%q, %q, %v)", c.cpe, v, p, ok)
+		}
+	}
+}
+
+func TestDeriveNVDAffectedAndExploitRef(t *testing.T) {
+	nvd, err := ParseNVD([]byte(`{
+		"id": "CVE-2025-60475",
+		"configurations": [{"nodes": [{"cpeMatch": [
+			{"vulnerable": true, "criteria": "cpe:2.3:a:acme:widget:*:*:*:*:*:*:*:*", "versionEndExcluding": "2.0"},
+			{"vulnerable": true, "criteria": "cpe:2.3:a:acme:widget:3.0:*:*:*:*:*:*:*"},
+			{"vulnerable": false, "criteria": "cpe:2.3:o:acme:os:-:*:*:*:*:*:*:*"}
+		]}]}],
+		"references": [{"url": "https://example.com/poc", "tags": ["Exploit", "Third Party Advisory"]}]
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := Derive(mustParse(t, "testdata/CVE-2025-60475.json"), nvd)
+	var nvdRows []AffectedRow
+	for _, a := range d.Affected {
+		if a.Source == ProviderNVD {
+			nvdRows = append(nvdRows, a)
+		}
+	}
+	if len(nvdRows) != 1 || nvdRows[0].Vendor != "acme" || nvdRows[0].Product != "widget" || len(nvdRows[0].CPEs) != 2 {
+		t.Fatalf("nvd affected = %+v", nvdRows)
+	}
+	if !d.ExploitRef {
+		t.Fatal("ExploitRef not set from NVD Exploit tag")
+	}
+	if Derive(mustParse(t, "testdata/CVE-2025-60475.json"), nil).ExploitRef {
+		t.Fatal("ExploitRef set without an exploit tag")
+	}
+	if !Derive(mustParse(t, "testdata/CVE-2014-125136.json"), nil).ExploitRef {
+		t.Fatal("ExploitRef not set from CNA exploit tag")
+	}
+}

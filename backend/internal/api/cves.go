@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -26,7 +27,7 @@ const (
 
 var (
 	severities = []string{"CRITICAL", "HIGH", "MEDIUM", "LOW", "NONE", "UNKNOWN"}
-	sorts      = []string{"relevance", "published", "updated", "cvss"}
+	sorts      = []string{"relevance", "published", "updated", "cvss", "epss"}
 	cweParam   = regexp.MustCompile(`^CWE-\d+$`)
 )
 
@@ -101,6 +102,26 @@ func parseListParams(q url.Values) (db.ListCVEParams, int, error) {
 		}
 	}
 
+	for _, b := range []struct {
+		name string
+		dst  **bool
+	}{{"kev", &p.KEV}, {"exploit", &p.Exploit}} {
+		if v := q.Get(b.name); v != "" {
+			parsed, err := strconv.ParseBool(v)
+			if err != nil {
+				return p, 0, fmt.Errorf("%s must be true or false", b.name)
+			}
+			*b.dst = &parsed
+		}
+	}
+	if v := q.Get("epss_min"); v != "" {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil || f < 0 || f > 1 {
+			return p, 0, errors.New("epss_min must be a number between 0 and 1")
+		}
+		p.EPSSMin = &f
+	}
+
 	p.Sort = q.Get("sort")
 	if p.Sort == "" {
 		p.Sort = "published"
@@ -159,8 +180,19 @@ type cveDetailResponse struct {
 	SSVC            *cverecord.SSVC    `json:"ssvc"`
 	NVDStatus       *string            `json:"nvd_status"`
 	NVDLastModified *time.Time         `json:"nvd_last_modified"`
+	HasExploit      bool               `json:"has_exploit"`
+	KEV             *db.KEVOut         `json:"kev"`
+	EPSS            *db.EPSSOut        `json:"epss"`
+	Exploits        []db.ExploitOut    `json:"exploits"`
+	Timeline        []timelineEvent    `json:"timeline"`
 	References      json.RawMessage    `json:"references"`
 	Affected        []db.AffectedOut   `json:"affected"`
+}
+
+type timelineEvent struct {
+	Date   time.Time `json:"date"`
+	Type   string    `json:"type"`
+	Detail string    `json:"detail,omitempty"`
 }
 
 type effectiveCVSS struct {
@@ -207,6 +239,9 @@ func (s *Server) getCVE(w http.ResponseWriter, r *http.Request) {
 	if d.Affected == nil {
 		d.Affected = []db.AffectedOut{}
 	}
+	if d.Exploits == nil {
+		d.Exploits = []db.ExploitOut{}
+	}
 
 	writeJSON(w, http.StatusOK, cveDetailResponse{
 		ID: d.ID, State: d.State, Assigner: d.Assigner,
@@ -217,7 +252,56 @@ func (s *Server) getCVE(w http.ResponseWriter, r *http.Request) {
 		Metrics:   metrics,
 		SSVC:      cverecord.CISASSVC(rec),
 		NVDStatus: d.NVDStatus, NVDLastModified: d.NVDLastModified,
+		HasExploit: d.ExploitRef || d.KEV != nil || len(d.Exploits) > 0,
+		KEV:        d.KEV,
+		EPSS:       d.EPSS,
+		Exploits:   d.Exploits,
+		Timeline:   timeline(d),
 		References: d.Refs,
 		Affected:   d.Affected,
 	})
+}
+
+// epssSpike is the score jump between consecutive history points that the
+// timeline reports.
+const epssSpike = 0.1
+
+// timeline assembles the dated events for a CVE, oldest first.
+func timeline(d *db.CVEDetail) []timelineEvent {
+	var ev []timelineEvent
+	add := func(t *time.Time, typ, detail string) {
+		if t != nil {
+			ev = append(ev, timelineEvent{Date: *t, Type: typ, Detail: detail})
+		}
+	}
+	add(d.DateReserved, "reserved", "")
+	add(d.DatePublished, "published", "")
+	if d.KEV != nil {
+		add(&d.KEV.DateAdded, "kev_added", "added to CISA KEV")
+		add(d.KEV.DueDate, "kev_due", "CISA remediation due date")
+	}
+	for _, e := range d.Exploits {
+		add(e.PublishedAt, "exploit_published", e.Source+": "+deref(e.Title))
+	}
+	if d.EPSS != nil {
+		for i := 1; i < len(d.EPSS.History); i++ {
+			prev, cur := d.EPSS.History[i-1], d.EPSS.History[i]
+			if cur.Score-prev.Score >= epssSpike {
+				add(&cur.ScoreDate, "epss_spike", fmt.Sprintf("EPSS %.3f -> %.3f", prev.Score, cur.Score))
+			}
+		}
+	}
+	add(d.DateUpdated, "updated", "CVE record last updated")
+	sort.SliceStable(ev, func(i, j int) bool { return ev[i].Date.Before(ev[j].Date) })
+	if ev == nil {
+		ev = []timelineEvent{}
+	}
+	return ev
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

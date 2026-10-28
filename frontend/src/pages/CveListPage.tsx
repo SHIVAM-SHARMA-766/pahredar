@@ -3,19 +3,35 @@ import { useSearchParams } from 'react-router'
 import { api } from '../api/client'
 import { CveFilters, SortControl } from '../components/CveFilters'
 import { CveTable } from '../components/CveTable'
-import { Card, ErrorBox, Pagination, Spinner } from '../components/ui'
+import { Card, ErrorBox, PageHeader, Pagination, Spinner } from '../components/ui'
+
+// The sidebar's saved views are filter presets; name the page after the one
+// in use so the header matches the highlighted nav item.
+function viewTitle(params: URLSearchParams): [string, string] {
+  if (params.get('kev') === 'true') {
+    return ['Known exploited', 'CVEs in the CISA Known Exploited Vulnerabilities catalog — attackers are using these now.']
+  }
+  if (params.get('kev') === 'false' && params.get('sort') === 'epss') {
+    return ['Likely exploited', 'Not yet in KEV, ranked by EPSS: the probability of exploitation activity in the next 30 days.']
+  }
+  return ['CVE explorer', 'Search and filter every CVE in the CVE List, enriched with NVD, KEV, EPSS and public exploits.']
+}
 
 export function CveListPage() {
   const [params, setParams] = useSearchParams()
+  const [title, subtitle] = viewTitle(params)
   return (
+    <>
+    <PageHeader title={title} subtitle={subtitle} />
     <div className="grid gap-6 lg:grid-cols-[16rem_1fr]">
       <aside>
         <Card title="Filters" actions={params.size > 0 && <button className="text-xs text-blue-700 hover:underline dark:text-blue-400" onClick={() => setParams({})}>Clear</button>}>
           <CveFilters params={params} onChange={setParams} />
         </Card>
       </aside>
-      <CveResults params={params} onChange={setParams} />
+      <CveResults params={params} onChange={setParams} title="Results" />
     </div>
+    </>
   )
 }
 

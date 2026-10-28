@@ -2,7 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useDeferredValue } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { api } from '../api/client'
-import { Card, ErrorBox, SeverityBar, Spinner } from '../components/ui'
+import { Card, ErrorBox, PageHeader, SeverityBar, Spinner } from '../components/ui'
 import { fmtDate, fmtNumber, vendorPath } from '../lib/format'
 
 export function VendorsPage() {
@@ -16,6 +16,8 @@ export function VendorsPage() {
   })
 
   return (
+    <>
+    <PageHeader title="Vendors & products" subtitle="Who ships the most vulnerabilities, and how severe they are. Names come from CNA records and NVD CPEs, so one vendor can appear under two spellings." />
     <Card
       title={deferred ? `Vendors matching “${deferred}”` : 'Vendors by CVE count'}
       actions={
@@ -64,5 +66,6 @@ export function VendorsPage() {
         </div>
       )}
     </Card>
+    </>
   )
 }

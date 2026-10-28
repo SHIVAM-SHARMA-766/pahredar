@@ -4,7 +4,7 @@ import { Link } from 'react-router'
 import { api } from '../api/client'
 import type { CveSummary, Dashboard, SeverityMix } from '../api/types'
 import { DailyVolumeChart } from '../components/charts'
-import { Card, ErrorBox, ExploitTag, KevTag, SeverityBadge, Spinner, Stat } from '../components/ui'
+import { Card, ErrorBox, ExploitTag, KevTag, PageHeader, SeverityBadge, Spinner, Stat } from '../components/ui'
 import { fmtDate, fmtEpss, fmtNumber, relativeTime } from '../lib/format'
 import { bestScore, chartSeries } from '../lib/severity'
 
@@ -26,6 +26,7 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <PageHeader title="Dashboard" subtitle={`What changed in the CVE landscape · updated ${relativeTime(d.generated_at)}`} />
       <Headline d={d} week={week} />
 
       <Card title="Published per day, last 90 days">
@@ -81,7 +82,7 @@ export function DashboardPage() {
         />
       </div>
 
-      <p className="text-right text-xs text-zinc-500">Updated {relativeTime(d.generated_at)} · counts use UTC days</p>
+      <p className="text-right text-xs text-zinc-500">Counts use UTC days</p>
     </div>
   )
 }

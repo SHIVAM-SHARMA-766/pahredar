@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import type { SyncRun } from '../api/types'
-import { Card, ErrorBox, Spinner, Tag } from '../components/ui'
+import { Card, ErrorBox, PageHeader, Spinner, Tag } from '../components/ui'
 import { duration, fmtDateTime, fmtNumber, relativeTime } from '../lib/format'
 
 // Every source the backend schedules, in display order, with what it feeds.
@@ -31,6 +31,7 @@ export function SyncPage() {
 
   return (
     <div className="space-y-6">
+      <PageHeader title="Data sync" subtitle="Where Pahredar's data comes from, when each source last updated, and every recent run." />
       {!scheduler_enabled && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           The scheduler is disabled (SYNC_ENABLED=false). Run syncs with <code>pahredar sync &lt;source&gt;</code>.

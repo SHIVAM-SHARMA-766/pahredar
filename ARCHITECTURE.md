@@ -273,7 +273,7 @@ Pagination is offset-based, capped at offset 10,000 (single user; narrow the fil
 
 ## 9. Frontend
 
-Implemented in `frontend/` (details, routes, and conventions in `frontend/README.md`).
+Implemented in `frontend/` (details, routes, and conventions in `frontend/README.md`). The shell is a SOCRadar-style collapsible left sidebar: brand, CVE search, sections *Overview* (Dashboard), *Vulnerability intelligence* (CVE explorer, Known exploited, Likely exploited, Vendors & products) and *System* (Data sync), and a sync-health card. The theme is dark only: navy neutrals with a rose accent.
 
 | Page | Route | Content |
 |---|---|---|
@@ -287,7 +287,7 @@ Implemented in `frontend/` (details, routes, and conventions in `frontend/README
 
 Filter state lives in the URL query string using the API's parameter names, so every view is linkable. The header search box jumps straight to a CVE when given an ID.
 
-**Chart colour.** Severity is ordinal, so charts and severity bars use one red ramp with monotone lightness rather than the conventional red/orange/yellow/blue, which failed a colour-vision check (orange vs red ΔE 14.9 for normal vision; yellow outside the lightness band). The ramp passes the dataviz validator in `--ordinal` mode for both schemes; dark mode flips the anchor so the most severe step is the brightest. Colours are CSS variables in `frontend/src/index.css`. Text badges keep the conventional hues because they always carry a label.
+**Chart colour.** Severity is ordinal, so charts and severity bars use one red ramp with monotone lightness rather than the conventional red/orange/yellow/blue, which failed a colour-vision check (orange vs red ΔE 14.9 for normal vision; yellow outside the lightness band). The ramp passes the dataviz validator in `--ordinal` mode against the navy card surface `#161a24`; the most severe step is the brightest. Colours are CSS variables in `frontend/src/index.css`. Text badges keep the conventional hues because they always carry a label.
 
 ## 10. Runtime and configuration
 
@@ -332,6 +332,7 @@ Configuration is environment-only, documented in `.env.example`. Secrets (`NVD_A
 | 2026-10-28 | UI routes lazy-load chart pages (initial JS 327 KB instead of 762 KB). |
 | 2026-10-28 | Severity in charts is an ordinal one-hue ramp, validated per colour scheme; badges keep conventional colours. |
 | 2026-10-28 | EPSS 7-day change is precomputed at load (`score_7d_ago`, `delta_7d`): dashboard 3 s → 0.24 s. |
+| 2026-10-28 | UI moved to a left sidebar and a dark-only navy theme (user request, SOCRadar as reference); light mode dropped. |
 
 ### Corpus after first full sync (2026-10-28)
 

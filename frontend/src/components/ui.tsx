@@ -132,3 +132,16 @@ export function Pagination({ page, pageSize, total, onPage }: { page: number; pa
     </div>
   )
 }
+
+// Page title block shown above each top-level page's content.
+export function PageHeader({ title, subtitle, actions }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
+  return (
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-white">{title}</h1>
+        {subtitle && <p className="mt-1 text-sm text-zinc-400">{subtitle}</p>}
+      </div>
+      {actions}
+    </div>
+  )
+}

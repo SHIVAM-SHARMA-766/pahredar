@@ -23,6 +23,7 @@ import (
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/exploits"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/fetch"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/nvd"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/reports"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/syncer"
 )
 
@@ -194,7 +195,7 @@ func serve(ctx context.Context, cfg config.Config) error {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           api.New(store, sched).Handler(),
+		Handler:           api.New(store, sched, reports.New(fetch.NewClient())).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,

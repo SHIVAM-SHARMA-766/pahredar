@@ -12,6 +12,7 @@ Go module for the Pahredar backend: one binary that applies database migrations,
 | `internal/sources/cvelist/` | GitHub client for CVEProject/cvelistV5 releases: release lookup (latest, by tag, recent) and record iteration over the baseline (streamed, nested zip) and delta zips. |
 | `internal/sources/nvd/` | NVD CVE API 2.0 pager: request spacing for the rate limit, concurrent page fetches, retry with backoff on 403/429/5xx/network errors. |
 | `internal/sources/kev/`, `epss/`, `exploits/`, `cwe/` | Single-file feeds: CISA KEV JSON, EPSS gzip CSV, the Exploit-DB / Metasploit / Nuclei / PoC-in-GitHub indexes (each mapped to `(CVE, source_ref)` entries), and MITRE's CWE CSV. |
+| `internal/sources/reports/` | On-demand per-CVE fetchers for OSV (CVE plus GHSA/PYSEC/GO/… aliases, at most 4), Red Hat Security Data, and the Ubuntu CVE tracker, each normalized into Pahredar's own shape. Not a sync source |
 | `internal/sources/fetch/` | Shared HTTP client and `Get` (User-Agent, non-200 → `StatusError`). |
 
 Source packages know nothing about the database.
@@ -60,6 +61,8 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `GET /healthz` | `200 {"status":"ok","database":"ok"}`, or `503` if Postgres does not answer a ping within 2 s |
 | `GET /api/v1/cves` | Search and filter; parameters in ARCHITECTURE.md §8. Example: `/api/v1/cves?vendor=cisco,citrix&kev=true&sort=kev_added&page_size=10` |
 | `GET /api/v1/cves/{id}` | Full detail: `cvss`, `metrics`, `ssvc`, `kev`, `epss` (+ `history`), `exploits`, `has_exploit`, `timeline`, `affected`, `references` |
+| `GET /api/v1/cves/{id}/reports` | OSV / Red Hat / Ubuntu write-ups, fetched on demand and cached (`internal/api/reports.go`) |
+| `GET /api/v1/stats/series` | Daily metric series (`published`, `kev_added`, `exploits`) for the dashboard chart (`internal/db/series_read.go`) |
 | `GET /api/v1/stats/dashboard` | Landing-page aggregates (`internal/db/dashboard_read.go`; field list in ARCHITECTURE.md §8) |
 | `GET /api/v1/vendors` | Vendor ranking/search (`q`, `page_size`) from `vendor_stats` |
 | `GET /api/v1/products` | Product ranking/search across vendors (`q`, `page_size`) from `product_stats` |
@@ -85,6 +88,7 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `00003_sort_indexes.sql` | Sort indexes rebuilt as `DESC NULLS LAST, id DESC` (and a COALESCE CVSS expression index) to match the list API's `ORDER BY` |
 | `00004_enrichment.sql` | `kev.forensic_triage`; `cve.exploit_ref` with a backfill from `refs` (~10 s on the full corpus); `kev (date_added DESC, cve_id)` index |
 | `00005_vendor_stats.sql` | Materialized views `vendor_stats`, `product_stats`, `vendor_year_stats` with unique indexes (required for `REFRESH … CONCURRENTLY`); ~12 s to create on the full corpus |
+| `00008_external_report.sql` | `external_report` cache for on-demand OSV / Red Hat / Ubuntu reports |
 | `00007_labels_cwe_github.sql` | `exploit.source` allows `github`; `cwe` table; `cve_affected.vendor_label` / `product_label`; stats views recreated with a `label` column and a product trigram index. Run `pahredar rederive` afterwards so existing rows get canonical names and real labels |
 | `00006_epss_delta.sql` | `epss.score_7d_ago` and generated, indexed `epss.delta_7d` for the dashboard's EPSS movers |
 

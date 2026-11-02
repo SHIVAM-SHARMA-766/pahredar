@@ -19,7 +19,9 @@ React Router 8 needs Node ≥ 22.22 and the dev machine has Node 20, so the app 
 | `src/components/ui.tsx` | Small shared pieces: page header, severity badge, KEV/exploit tags, card, stats, severity bar, pagination, loading and error states. |
 | `src/components/QueryBar.tsx` | Explorer search bar: applies on Enter, example chips, error line, syntax panel. |
 | `src/components/CveTable.tsx` | Compact CVE table with sortable headers (`SortKey`: published, kev_added, epss, cvss). |
-| `src/components/charts.tsx` | Daily stacked volume chart (with legend and table view), year bar chart, EPSS history line chart, shared tooltip and tick formatting. |
+| `src/components/MetricWidget.tsx` | CloudWatch-style dashboard chart: metric, time range, period, graph type, legend toggles with sums, crosshair, drag-to-zoom, table. State in the URL. Buckets daily points from `/stats/series` into weeks or calendar months in the browser |
+| `src/components/ReportsCard.tsx` | In-depth reports on the CVE page: one tab per source that has a record (OSV, Red Hat, Ubuntu); advisory text is shown as plain text, never as HTML |
+| `src/components/charts.tsx` | Year bar chart and EPSS history line chart. |
 | `src/components/Layout.tsx` | App shell: collapsible left sidebar (brand, search box that jumps to a CVE when given an ID, sectioned navigation, sync-health card), mobile top bar with a slide-in drawer, and the page frame. |
 | `src/pages/` | One component per route (below). |
 
@@ -27,7 +29,7 @@ React Router 8 needs Node ≥ 22.22 and the dev machine has Node 20, so the app 
 
 | Path | Page |
 |---|---|
-| `/` | Dashboard: tile strip with period deltas, publish-volume chart (`?range=90d` switches from 30 daily bars to 13 weekly ones; `volumeSeries` in `charts.tsx`), severity mix, EPSS movers (or highest EPSS this week until history exists), and three CVE lists (`pages/DashboardPage.tsx`) |
+| `/` | Dashboard: tile strip with period deltas, metric widget (`?metric=&range=&period=&chart=&from=&to=`), severity mix, EPSS movers (or highest EPSS this week until history exists), and three CVE lists (`pages/DashboardPage.tsx`) |
 | `/cves` | CVE explorer: `?query=` in the query language, plus `sort`, `order`, `page`, `page_size`. The sidebar's "Known exploited" (`query=is:kev`, sorted by KEV date) and "Likely exploited" (`query=epss:>10 -is:kev`, sorted by EPSS) are links with a query; the page title and highlighted nav item follow them |
 | `/cves/:id` | CVE detail: assessment banner, key facts, remediation, CVSS breakdown, affected products, exploits and GitHub PoCs, CNA advisory details, grouped references, related CVEs, CWE names, KEV, EPSS chart, SSVC, timeline |
 | `/vendors` | Vendors and products tabs (`?tab=products`) with search (`?q=`), ranked by CVE count. Names show the display label; links use the canonical key |

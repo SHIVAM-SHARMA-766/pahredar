@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { api } from '../api/client'
 import type { CveSummary, DailyCount, Dashboard, SeverityMix } from '../api/types'
-import { DailyVolumeChart, type VolumeRange } from '../components/charts'
+import { MetricWidget } from '../components/MetricWidget'
 import { Card, ErrorBox, ExploitTag, KevTag, PageHeader, RansomwareTag, SeverityBadge, Spinner } from '../components/ui'
 import { fmtDate, fmtEpss, fmtNumber, relativeTime } from '../lib/format'
 import { explorerLink } from '../lib/query'
@@ -14,10 +14,8 @@ const link = 'text-cyan-300 hover:text-cyan-200'
 
 export function DashboardPage() {
   const query = useQuery({ queryKey: ['dashboard'], queryFn: api.dashboard, refetchInterval: 5 * 60_000 })
-  // The chart range lives in the URL (?range=90d) so the view is linkable.
+  // The metric widget keeps its settings in the URL so a view is linkable.
   const [params, setParams] = useSearchParams()
-  const range: VolumeRange = params.get('range') === '90d' ? '90d' : '30d'
-  const setRange = (r: VolumeRange) => setParams(r === '30d' ? {} : { range: r }, { replace: true })
   if (query.isPending) return <Spinner />
   if (query.isError) return <ErrorBox error={query.error} />
   const d = query.data
@@ -27,12 +25,7 @@ export function DashboardPage() {
       <PageHeader title="Dashboard" subtitle={`What changed in the CVE landscape · updated ${relativeTime(d.generated_at)} · counts use UTC days`} />
       <Headline d={d} />
 
-      <Card
-        title={range === '30d' ? 'CVEs published per day' : 'CVEs published per week'}
-        actions={<RangeToggle value={range} onChange={setRange} />}
-      >
-        <DailyVolumeChart daily={d.daily} range={range} />
-      </Card>
+      <MetricWidget params={params} setParams={(p) => setParams(p, { replace: true })} />
 
       <div className="grid items-stretch gap-6 lg:grid-cols-5">
         <div className="lg:col-span-2">
@@ -76,22 +69,6 @@ function daysAgo(n: number): string {
   const d = new Date()
   d.setUTCDate(d.getUTCDate() - n)
   return d.toISOString().slice(0, 10)
-}
-
-function RangeToggle({ value, onChange }: { value: VolumeRange; onChange: (v: VolumeRange) => void }) {
-  return (
-    <div className="flex rounded-md border border-zinc-800 p-0.5">
-      {(['30d', '90d'] as const).map((r) => (
-        <button
-          key={r}
-          onClick={() => onChange(r)}
-          className={`rounded px-2.5 py-0.5 text-xs ${r === value ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
-        >
-          {r === '30d' ? '30 days' : '90 days'}
-        </button>
-      ))}
-    </div>
-  )
 }
 
 // Sums a field over the n days ending `back` days before the last day.

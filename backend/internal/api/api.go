@@ -9,17 +9,19 @@ import (
 	"time"
 
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/reports"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/syncer"
 )
 
 type Server struct {
 	store *db.Store
 	// sched is nil when the scheduler is disabled.
-	sched *syncer.Scheduler
+	sched   *syncer.Scheduler
+	reports *reports.Client
 }
 
-func New(store *db.Store, sched *syncer.Scheduler) *Server {
-	return &Server{store: store, sched: sched}
+func New(store *db.Store, sched *syncer.Scheduler, rc *reports.Client) *Server {
+	return &Server{store: store, sched: sched, reports: rc}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -27,7 +29,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.HandleFunc("GET /api/v1/cves", s.listCVEs)
 	mux.HandleFunc("GET /api/v1/cves/{id}", s.getCVE)
+	mux.HandleFunc("GET /api/v1/cves/{id}/reports", s.cveReports)
 	mux.HandleFunc("GET /api/v1/stats/dashboard", s.dashboard)
+	mux.HandleFunc("GET /api/v1/stats/series", s.series)
 	mux.HandleFunc("GET /api/v1/vendors", s.listVendors)
 	mux.HandleFunc("GET /api/v1/products", s.listProducts)
 	mux.HandleFunc("GET /api/v1/vendors/{vendor}", s.getVendor)

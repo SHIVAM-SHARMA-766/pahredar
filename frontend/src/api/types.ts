@@ -266,3 +266,61 @@ export interface Dashboard {
   daily: DailyCount[]
   epss_movers: EpssMover[]
 }
+
+export interface Series {
+  metric: string
+  label: string
+  // Stacking order, bottom first.
+  keys: { key: string; label: string }[]
+  // One point per UTC day, every key present.
+  points: { date: string; values: Record<string, number> }[]
+}
+
+export interface ReportStatus {
+  source: 'osv' | 'redhat' | 'ubuntu'
+  status: 'ok' | 'not_found' | 'error'
+  fetched_at: string | null
+  error?: string
+}
+
+export interface OsvAdvisory {
+  id: string
+  summary?: string
+  details?: string
+  published?: string
+  modified?: string
+  affected: { ecosystem: string; package: string; introduced: string[]; fixed: string[]; last_affected: string[] }[]
+  references: { type?: string; url: string }[]
+  url: string
+}
+
+export interface RedHatReport {
+  threat_severity?: string
+  public_date?: string
+  statement?: string
+  mitigation?: string
+  summary?: string
+  bugzilla_url?: string
+  details: string[]
+  cvss3_score?: string
+  cvss3_vector?: string
+  cwe?: string
+  fixed_in: { product: string; package?: string; advisory?: string; release_date?: string }[]
+  states: { product: string; package: string; fix_state: string }[]
+  url: string
+}
+
+export interface UbuntuReport {
+  priority?: string
+  description?: string
+  ubuntu_description?: string
+  mitigation?: string
+  notes: { author: string; note: string }[]
+  packages: { name: string; statuses: { release: string; status: string; description?: string }[] }[]
+  url: string
+}
+
+export interface CveReports {
+  sources: ReportStatus[]
+  reports: { osv?: OsvAdvisory[]; redhat?: RedHatReport; ubuntu?: UbuntuReport }
+}

@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router'
 import { api } from '../api/client'
 import type { Affected, CveDetail, Metric, Reference } from '../api/types'
 import { EpssChart } from '../components/charts'
+import { ReportsCard } from '../components/ReportsCard'
 import { Card, ErrorBox, ExploitTag, KevTag, RansomwareTag, SeverityBadge, Spinner, Tag } from '../components/ui'
 import { parseVector } from '../lib/cvss'
 import { fmtDate, fmtEpss, fmtPercentile, productPath, vendorPath } from '../lib/format'
@@ -31,6 +32,7 @@ export function CveDetailPage() {
           <Card title="Description">
             <p className="leading-relaxed whitespace-pre-line text-zinc-200">{c.description ?? 'No description.'}</p>
           </Card>
+          <ReportsCard id={c.id} />
           <RemediationCard c={c} />
           <CvssCard c={c} />
           <AffectedCard affected={c.affected} />

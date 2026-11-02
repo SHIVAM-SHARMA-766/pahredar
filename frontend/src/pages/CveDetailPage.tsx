@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, ExternalLink, ShieldAlert, ShieldCheck, ShieldQuestion } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
-import { Link, useParams } from 'react-router'
+import { useRef, useState, type ReactNode } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router'
 import { api, ApiError } from '../api/client'
 import type { Affected, CveDetail, Metric, Reference } from '../api/types'
 import { EpssChart } from '../components/charts'
@@ -32,76 +32,14 @@ export function CveDetailPage() {
       <Header c={c} />
       {c.state !== 'REJECTED' && <AssessmentBanner c={c} />}
       <KeyFacts c={c} />
-      <SectionNav />
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="min-w-0 space-y-6 lg:col-span-2">
-          <Anchor id="overview">
-            <Card title="Description">
-              <p className="leading-relaxed whitespace-pre-line text-zinc-200">{c.description ?? 'No description.'}</p>
-            </Card>
-            {c.state !== 'REJECTED' && <AtAGlance c={c} />}
-          </Anchor>
-          <Anchor id="detection"><DetectionCard c={c} /></Anchor>
-          <Anchor id="remediation">
-            <RemediationCard c={c} />
-            <VendorAdvisoriesCard id={c.id} />
-          </Anchor>
-          <Anchor id="exploits"><ExploitsCard c={c} /></Anchor>
-          <Anchor id="intel">
-            <ReportsCard id={c.id} />
-            <NewsCard id={c.id} />
-            <RelatedCard id={c.id} />
-          </Anchor>
-          <Anchor id="technical">
-            <CvssCard c={c} />
-            <AffectedCard affected={c.affected} />
-            <AdvisoryCard c={c} />
-          </Anchor>
-          <Anchor id="references"><ReferencesCard refs={c.references} /></Anchor>
-        </div>
-        <div className="min-w-0 space-y-6">
-          <WeaknessCard c={c} />
-          {c.kev && <KevCard c={c} />}
-          <EpssCard c={c} />
-          {c.ssvc && (
-            <Card title="CISA SSVC">
-              <dl className="grid grid-cols-2 gap-y-1 text-sm">
-                <dt className="text-zinc-500">Exploitation</dt>
-                <dd className="font-medium capitalize">{c.ssvc.exploitation ?? '—'}</dd>
-                <dt className="text-zinc-500">Automatable</dt>
-                <dd className="font-medium capitalize">{c.ssvc.automatable ?? '—'}</dd>
-                <dt className="text-zinc-500">Technical impact</dt>
-                <dd className="font-medium capitalize">{c.ssvc.technical_impact ?? '—'}</dd>
-              </dl>
-            </Card>
-          )}
-          <TimelineCard c={c} />
-          <Card title="Record">
-            <dl className="grid grid-cols-2 gap-y-1 text-sm">
-              <dt className="text-zinc-500">Assigner (CNA)</dt>
-              <dd>{c.assigner ?? '—'}</dd>
-              <dt className="text-zinc-500">Reserved</dt>
-              <dd>{fmtDate(c.date_reserved)}</dd>
-              <dt className="text-zinc-500">NVD status</dt>
-              <dd>{c.nvd_status ?? 'not in NVD'}</dd>
-              <dt className="text-zinc-500">NVD modified</dt>
-              <dd>{fmtDate(c.nvd_last_modified)}</dd>
-              <dt className="text-zinc-500">Severity from</dt>
-              <dd className="font-mono text-xs">{c.severity_source ?? '—'}</dd>
-            </dl>
-            <div className="mt-3 flex flex-wrap gap-3 text-sm">
-              <ExtLink href={`https://www.cve.org/CVERecord?id=${c.id}`}>cve.org</ExtLink>
-              <ExtLink href={`https://nvd.nist.gov/vuln/detail/${c.id}`}>NVD</ExtLink>
-              <ExtLink href={`https://github.com/search?q=${c.id}&type=repositories`}>GitHub search</ExtLink>
-            </div>
-          </Card>
-        </div>
-      </div>
+      <CveTabs c={c} />
     </div>
   )
 }
 
-const SECTIONS: [string, string][] = [
+type TabKey = 'overview' | 'detection' | 'remediation' | 'exploits' | 'intel' | 'technical' | 'references'
+
+const TABS: [TabKey, string][] = [
   ['overview', 'Overview'],
   ['detection', 'Detection'],
   ['remediation', 'Remediation'],
@@ -111,38 +49,112 @@ const SECTIONS: [string, string][] = [
   ['references', 'References'],
 ]
 
-// Jump links to each part of the page. Sticky below the mobile top bar.
-function SectionNav() {
+// Overview holds the basics; each other tab covers one area in depth and
+// only loads its data when opened. The tab lives in the URL (?tab=) so a
+// link can open it directly.
+function CveTabs({ c }: { c: CveDetail }) {
+  const [params, setParams] = useSearchParams()
+  const navRef = useRef<HTMLElement>(null)
+  const tab = TABS.find(([k]) => k === params.get('tab'))?.[0] ?? 'overview'
+  const open = (k: TabKey) => {
+    setParams(k === 'overview' ? {} : { tab: k }, { replace: true })
+    const nav = navRef.current
+    if (nav && nav.getBoundingClientRect().top < 0) nav.scrollIntoView({ block: 'start' })
+  }
+  const counts: Partial<Record<TabKey, number>> = { exploits: c.exploits.length, references: c.references.length }
+
   return (
-    <nav className="sticky top-14 z-20 -mx-1 flex gap-1 overflow-x-auto border-b border-zinc-800 bg-zinc-950/95 px-1 py-2 backdrop-blur lg:top-0">
-      {SECTIONS.map(([id, label]) => (
-        <a
-          key={id}
-          href={`#${id}`}
-          onClick={(e) => {
-            e.preventDefault()
-            document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-          }}
-          className="rounded-md px-2.5 py-1 text-sm whitespace-nowrap text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-        >
-          {label}
-        </a>
-      ))}
-    </nav>
+    <>
+      <nav ref={navRef} className="sticky top-14 z-20 -mx-1 flex scroll-mt-14 gap-1 overflow-x-auto border-b border-zinc-800 bg-zinc-950/95 px-1 backdrop-blur lg:top-0 lg:scroll-mt-0">
+        {TABS.map(([k, label]) => (
+          <button
+            key={k}
+            onClick={() => open(k)}
+            className={`-mb-px border-b-2 px-3 py-2.5 text-sm whitespace-nowrap ${tab === k ? 'border-cyan-400 text-zinc-100' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
+          >
+            {label}
+            {counts[k] ? <span className="ml-1.5 text-xs text-zinc-500">{counts[k]}</span> : null}
+          </button>
+        ))}
+      </nav>
+
+      {tab === 'overview' && (
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="min-w-0 space-y-6 lg:col-span-2">
+            <Card title="Description">
+              <p className="leading-relaxed whitespace-pre-line text-zinc-200">{c.description ?? 'No description.'}</p>
+            </Card>
+            {c.state !== 'REJECTED' && <AtAGlance c={c} onOpen={open} />}
+            <TimelineCard c={c} />
+          </div>
+          <div className="min-w-0 space-y-6">
+            <WeaknessCard c={c} />
+            {c.kev && <KevCard c={c} />}
+            <EpssCard c={c} />
+            {c.ssvc && (
+              <Card title="CISA SSVC">
+                <dl className="grid grid-cols-2 gap-y-1 text-sm">
+                  <dt className="text-zinc-500">Exploitation</dt>
+                  <dd className="font-medium capitalize">{c.ssvc.exploitation ?? '—'}</dd>
+                  <dt className="text-zinc-500">Automatable</dt>
+                  <dd className="font-medium capitalize">{c.ssvc.automatable ?? '—'}</dd>
+                  <dt className="text-zinc-500">Technical impact</dt>
+                  <dd className="font-medium capitalize">{c.ssvc.technical_impact ?? '—'}</dd>
+                </dl>
+              </Card>
+            )}
+            <Card title="Record">
+              <dl className="grid grid-cols-2 gap-y-1 text-sm">
+                <dt className="text-zinc-500">Assigner (CNA)</dt>
+                <dd>{c.assigner ?? '—'}</dd>
+                <dt className="text-zinc-500">Reserved</dt>
+                <dd>{fmtDate(c.date_reserved)}</dd>
+                <dt className="text-zinc-500">NVD status</dt>
+                <dd>{c.nvd_status ?? 'not in NVD'}</dd>
+                <dt className="text-zinc-500">NVD modified</dt>
+                <dd>{fmtDate(c.nvd_last_modified)}</dd>
+                <dt className="text-zinc-500">Severity from</dt>
+                <dd className="font-mono text-xs">{c.severity_source ?? '—'}</dd>
+              </dl>
+              <div className="mt-3 flex flex-wrap gap-3 text-sm">
+                <ExtLink href={`https://www.cve.org/CVERecord?id=${c.id}`}>cve.org</ExtLink>
+                <ExtLink href={`https://nvd.nist.gov/vuln/detail/${c.id}`}>NVD</ExtLink>
+                <ExtLink href={`https://github.com/search?q=${c.id}&type=repositories`}>GitHub search</ExtLink>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
+      {tab === 'detection' && <DetectionCard c={c} />}
+      {tab === 'remediation' && (
+        <div className="space-y-6">
+          <RemediationCard c={c} />
+          <VendorAdvisoriesCard id={c.id} />
+        </div>
+      )}
+      {tab === 'exploits' && <ExploitsCard c={c} />}
+      {tab === 'intel' && (
+        <div className="space-y-6">
+          <ReportsCard id={c.id} />
+          <NewsCard id={c.id} />
+          <RelatedCard id={c.id} />
+        </div>
+      )}
+      {tab === 'technical' && (
+        <div className="space-y-6">
+          <CvssCard c={c} />
+          <AffectedCard affected={c.affected} />
+          <AdvisoryCard c={c} />
+        </div>
+      )}
+      {tab === 'references' && (c.references.length ? <ReferencesCard refs={c.references} /> : <Card title="References"><p className="text-sm text-zinc-500">No references.</p></Card>)}
+    </>
   )
 }
 
-function Anchor({ id, children }: { id: string; children: ReactNode }) {
-  return <div id={id} className="scroll-mt-28 space-y-6">{children}</div>
-}
-
-function jump(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-// One line per question an analyst asks first, each linking to the section
-// with the detail.
-function AtAGlance({ c }: { c: CveDetail }) {
+// One line per question an analyst asks first, each opening the tab with
+// the detail.
+function AtAGlance({ c, onOpen }: { c: CveDetail; onOpen: (tab: TabKey) => void }) {
   const det = useDetection(c.id)
   const articles = useArticles(c.id)
   const best = c.cvss.v4 ?? c.cvss.v3 ?? c.cvss.v2
@@ -161,7 +173,7 @@ function AtAGlance({ c }: { c: CveDetail }) {
   const pocs = c.exploits.filter((e) => e.source === 'github').length
   const modules = c.exploits.length - pocs
 
-  const rows: [string, ReactNode, string][] = [
+  const rows: [string, ReactNode, TabKey][] = [
     ['What', <>{c.cwes.length ? c.cwes.map((w) => w.name ?? w.id).join('; ') : 'Weakness not classified'}{how && <div className="text-xs text-zinc-500">{how}</div>}</>, 'technical'],
     ['Affected', products.length ? <>{products.slice(0, 4).join(', ')}{products.length > 4 && <span className="text-zinc-500"> +{products.length - 4} more</span>}<span className="text-zinc-500"> · {vendors.size} vendor{vendors.size === 1 ? '' : 's'}</span></> : 'No products listed', 'technical'],
     ['Exploitation', <>{exploitationLabel[c.assessment.exploitation]}{c.kev && <> · in CISA KEV since {fmtDate(c.kev.date_added)}</>}{c.kev?.known_ransomware_use === 'Known' && <> · used by ransomware</>}{(modules || pocs) ? <span className="text-zinc-500"> · {modules} module{modules === 1 ? '' : 's'}, {pocs} GitHub PoC{pocs === 1 ? '' : 's'}</span> : null}</>, 'exploits'],
@@ -176,7 +188,7 @@ function AtAGlance({ c }: { c: CveDetail }) {
           <div key={label} className="grid grid-cols-[6.5rem_1fr_auto] items-baseline gap-3 py-2 first:pt-0 last:pb-0">
             <dt className="text-xs font-semibold tracking-wider text-zinc-500 uppercase">{label}</dt>
             <dd className="min-w-0 text-zinc-200">{value}</dd>
-            <button className={`text-xs ${link}`} onClick={() => jump(target)}>Details ↓</button>
+            <button className={`text-xs ${link}`} onClick={() => onOpen(target)}>Details →</button>
           </div>
         ))}
       </dl>

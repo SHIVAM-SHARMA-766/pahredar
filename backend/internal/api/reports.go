@@ -23,7 +23,9 @@ const (
 	reportTTL         = 7 * 24 * time.Hour
 	reportNotFoundTTL = 24 * time.Hour
 	newsTTL           = 24 * time.Hour
-	reportTimeout     = 12 * time.Second
+	// NVD history grows whenever NVD touches the record.
+	historyTTL    = 24 * time.Hour
+	reportTimeout = 12 * time.Second
 )
 
 // remediationTags mark references whose pages are vendor guidance; their
@@ -47,6 +49,19 @@ func advisoryURLs(refs json.RawMessage) []string {
 				break
 			}
 		}
+	}
+	return out
+}
+
+// referenceURLs returns every reference URL, in order.
+func referenceURLs(refs json.RawMessage) []string {
+	var list []cverecord.Reference
+	if json.Unmarshal(refs, &list) != nil {
+		return nil
+	}
+	out := make([]string, len(list))
+	for i, r := range list {
+		out[i] = r.URL
 	}
 	return out
 }
@@ -95,7 +110,7 @@ func (s *Server) cveReports(w http.ResponseWriter, r *http.Request) {
 		internalError(w, r, err)
 		return
 	}
-	req := reports.Request{CVEID: id, AdvisoryURLs: advisoryURLs(d.Refs)}
+	req := reports.Request{CVEID: id, AdvisoryURLs: advisoryURLs(d.Refs), CommitURLs: reports.CommitURLs(referenceURLs(d.Refs))}
 	if d.Assigner != nil {
 		req.Assigner = *d.Assigner
 	}
@@ -145,6 +160,9 @@ func fresh(c db.CachedReport) bool {
 	}
 	if c.Source == reports.SourceNews || c.Source == reports.SourceDiscussions {
 		ttl = newsTTL
+	}
+	if c.Source == reports.SourceHistory {
+		ttl = historyTTL
 	}
 	return time.Since(c.FetchedAt) < ttl
 }

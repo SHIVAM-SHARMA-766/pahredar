@@ -212,6 +212,10 @@ type cveDetailResponse struct {
 	Timeline        []timelineEvent    `json:"timeline"`
 	References      json.RawMessage    `json:"references"`
 	Affected        []db.AffectedOut   `json:"affected"`
+	// Aliases are nicknames such as "Log4Shell" (from Metasploit notes).
+	Aliases []string       `json:"aliases"`
+	EUVD    *db.EUVDOut    `json:"euvd"`
+	Debian  []db.DebianOut `json:"debian"`
 }
 
 type cweOut struct {
@@ -248,6 +252,9 @@ func assess(d *db.CVEDetail, best *cverecord.Metric, ssvc *cverecord.SSVC) asses
 	case ssvc != nil && strings.EqualFold(ssvc.Exploitation, "active"):
 		a.Exploitation = "active"
 		a.Reasons = append(a.Reasons, "CISA SSVC exploitation: active")
+	case d.EUVD != nil:
+		a.Exploitation = "active"
+		a.Reasons = append(a.Reasons, "listed in ENISA EUVD as exploited")
 	case len(d.Exploits) > 0 || d.ExploitRef || (ssvc != nil && strings.EqualFold(ssvc.Exploitation, "poc")):
 		a.Exploitation = "poc"
 		switch {
@@ -367,7 +374,7 @@ func (s *Server) getCVE(w http.ResponseWriter, r *http.Request) {
 		Metrics:   metrics,
 		SSVC:      ssvc,
 		NVDStatus: d.NVDStatus, NVDLastModified: d.NVDLastModified,
-		HasExploit: d.ExploitRef || d.KEV != nil || len(d.Exploits) > 0,
+		HasExploit: d.ExploitRef || d.KEV != nil || d.EUVD != nil || len(d.Exploits) > 0,
 		Assessment: assess(d, best, ssvc),
 		Advisory:   cverecord.CNAAdvisory(rec),
 		KEV:        d.KEV,
@@ -376,7 +383,36 @@ func (s *Server) getCVE(w http.ResponseWriter, r *http.Request) {
 		Timeline:   timeline(d),
 		References: d.Refs,
 		Affected:   d.Affected,
+		Aliases:    aliases(d.Exploits),
+		EUVD:       d.EUVD,
+		Debian:     orEmpty(d.Debian),
 	})
+}
+
+// aliases collects the distinct nicknames Metasploit modules give the CVE.
+func aliases(exploits []db.ExploitOut) []string {
+	out := []string{}
+	for _, e := range exploits {
+		var m struct {
+			AKA []string `json:"aka"`
+		}
+		if e.Source != "metasploit" || len(e.Meta) == 0 || json.Unmarshal(e.Meta, &m) != nil {
+			continue
+		}
+		for _, a := range m.AKA {
+			if a = strings.TrimSpace(a); a != "" && !slices.Contains(out, a) {
+				out = append(out, a)
+			}
+		}
+	}
+	return out
+}
+
+func orEmpty[T any](v []T) []T {
+	if v == nil {
+		return []T{}
+	}
+	return v
 }
 
 // epssSpike is the score jump between consecutive history points that the

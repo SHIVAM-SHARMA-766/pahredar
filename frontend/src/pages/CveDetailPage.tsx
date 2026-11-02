@@ -6,6 +6,7 @@ import { api, ApiError } from '../api/client'
 import type { Affected, CveDetail, Metric, Reference } from '../api/types'
 import { EpssChart } from '../components/charts'
 import { NewsCard, RelatedCard, VendorAdvisoriesCard } from '../components/CveIntelCards'
+import { AttackCard, CommitsCard, DebianCard, HistoryCard, useAttack } from '../components/CveContextCards'
 import { DetectionCard, useDetection } from '../components/DetectionCard'
 import { NotYetPublished, useArticles } from '../components/FeedCards'
 import { ReportsCard } from '../components/ReportsCard'
@@ -37,15 +38,17 @@ export function CveDetailPage() {
   )
 }
 
-type TabKey = 'overview' | 'detection' | 'remediation' | 'exploits' | 'intel' | 'technical' | 'references'
+type TabKey = 'overview' | 'detection' | 'attack' | 'remediation' | 'exploits' | 'intel' | 'technical' | 'history' | 'references'
 
 const TABS: [TabKey, string][] = [
   ['overview', 'Overview'],
   ['detection', 'Detection'],
+  ['attack', 'ATT&CK'],
   ['remediation', 'Remediation'],
   ['exploits', 'Exploits'],
   ['intel', 'Reports & news'],
   ['technical', 'CVSS & affected'],
+  ['history', 'History'],
   ['references', 'References'],
 ]
 
@@ -90,6 +93,18 @@ function CveTabs({ c }: { c: CveDetail }) {
           <div className="min-w-0 space-y-6">
             <WeaknessCard c={c} />
             {c.kev && <KevCard c={c} />}
+            {c.euvd && (
+              <Card title="ENISA EUVD">
+                <dl className="grid grid-cols-2 gap-y-1 text-sm">
+                  <dt className="text-zinc-500">Status</dt>
+                  <dd className="font-medium text-red-300">Exploited</dd>
+                  <dt className="text-zinc-500">Exploited since</dt>
+                  <dd>{fmtDate(c.euvd.exploited_since)}</dd>
+                  <dt className="text-zinc-500">EUVD ID</dt>
+                  <dd><a href={`https://euvd.enisa.europa.eu/vulnerability/${c.euvd.euvd_id}`} target="_blank" rel="noreferrer" className={`font-mono text-xs ${link}`}>{c.euvd.euvd_id}</a></dd>
+                </dl>
+              </Card>
+            )}
             <EpssCard c={c} />
             {c.ssvc && (
               <Card title="CISA SSVC">
@@ -126,9 +141,13 @@ function CveTabs({ c }: { c: CveDetail }) {
         </div>
       )}
       {tab === 'detection' && <DetectionCard c={c} />}
+      {tab === 'attack' && <AttackCard c={c} />}
+      {tab === 'history' && <HistoryCard id={c.id} />}
       {tab === 'remediation' && (
         <div className="space-y-6">
           <RemediationCard c={c} />
+          <DebianCard c={c} />
+          <CommitsCard id={c.id} />
           <VendorAdvisoriesCard id={c.id} />
         </div>
       )}
@@ -157,6 +176,16 @@ function CveTabs({ c }: { c: CveDetail }) {
 function AtAGlance({ c, onOpen }: { c: CveDetail; onOpen: (tab: TabKey) => void }) {
   const det = useDetection(c.id)
   const articles = useArticles(c.id)
+  const atk = useAttack(c.id)
+  const exploitTechniques = (atk.data?.mappings ?? []).filter((m) => m.mapping_type === 'exploitation_technique' || m.mapping_type === 'primary_impact')
+  const capecTechniques = [...new Map((atk.data?.capec ?? []).flatMap((p) => p.attack).map((t) => [t.id, t])).values()]
+  const attackSummary: ReactNode = atk.isPending
+    ? 'Loading…'
+    : exploitTechniques.length
+      ? exploitTechniques.slice(0, 3).map((m) => `${m.technique_id} ${m.technique_name}`).join(' · ')
+      : capecTechniques.length
+        ? <>{capecTechniques.slice(0, 3).map((t) => `${t.id} ${t.name}`).join(' · ')}<span className="text-zinc-500"> (via CAPEC)</span></>
+        : 'No mapping'
   const best = c.cvss.v4 ?? c.cvss.v3 ?? c.cvss.v2
   const parts = best ? parseVector(best.version, best.vector) : []
   const val = (k: string) => parts.find((p) => p.key === k)?.label
@@ -171,12 +200,13 @@ function AtAGlance({ c, onOpen }: { c: CveDetail; onOpen: (tab: TabKey) => void 
   const sigma = rules.filter((r) => r.source === 'sigma').length
   const fixes = fixesByProduct(c.affected)
   const pocs = c.exploits.filter((e) => e.source === 'github').length
-  const modules = c.exploits.length - pocs
+  const modules = c.exploits.filter((e) => e.source !== 'github' && e.source !== 'trickest').length
 
   const rows: [string, ReactNode, TabKey][] = [
     ['What', <>{c.cwes.length ? c.cwes.map((w) => w.name ?? w.id).join('; ') : 'Weakness not classified'}{how && <div className="text-xs text-zinc-500">{how}</div>}</>, 'technical'],
     ['Affected', products.length ? <>{products.slice(0, 4).join(', ')}{products.length > 4 && <span className="text-zinc-500"> +{products.length - 4} more</span>}<span className="text-zinc-500"> · {vendors.size} vendor{vendors.size === 1 ? '' : 's'}</span></> : 'No products listed', 'technical'],
-    ['Exploitation', <>{exploitationLabel[c.assessment.exploitation]}{c.kev && <> · in CISA KEV since {fmtDate(c.kev.date_added)}</>}{c.kev?.known_ransomware_use === 'Known' && <> · used by ransomware</>}{(modules || pocs) ? <span className="text-zinc-500"> · {modules} module{modules === 1 ? '' : 's'}, {pocs} GitHub PoC{pocs === 1 ? '' : 's'}</span> : null}</>, 'exploits'],
+    ['Exploitation', <>{exploitationLabel[c.assessment.exploitation]}{c.kev && <> · in CISA KEV since {fmtDate(c.kev.date_added)}</>}{c.euvd && <> · ENISA EUVD exploited{c.euvd.exploited_since && <> since {fmtDate(c.euvd.exploited_since)}</>}</>}{c.kev?.known_ransomware_use === 'Known' && <> · used by ransomware</>}{(modules || pocs) ? <span className="text-zinc-500"> · {modules} module{modules === 1 ? '' : 's'}, {pocs} GitHub PoC{pocs === 1 ? '' : 's'}</span> : null}</>, 'exploits'],
+    ['ATT&CK', attackSummary, 'attack'],
     ['Detect', det.isPending ? 'Loading…' : (scanCount || ids || sigma) ? [scanCount && `${scanCount} active check${scanCount === 1 ? '' : 's'}`, ids && `${ids} Suricata rule${ids === 1 ? '' : 's'}`, sigma && `${sigma} Sigma rule${sigma === 1 ? '' : 's'}`].filter(Boolean).join(' · ') : 'No ready-made rule; version checks and hunting hints available', 'detection'],
     ['Fix', fixes.length ? `Fixed versions listed for ${fixes.length} product${fixes.length === 1 ? '' : 's'}` : c.advisory.solutions.length ? 'Vendor solution published' : c.advisory.workarounds.length ? 'Workaround only' : 'No fix listed in the record; check vendor advisories', 'remediation'],
     ['Coverage', articles.isPending ? 'Loading…' : `${articles.data?.items.length ?? 0} article${articles.data?.items.length === 1 ? '' : 's'} in Pahredar's feeds`, 'intel'],
@@ -214,8 +244,12 @@ function Header({ c }: { c: CveDetail }) {
         {c.state === 'REJECTED' ? <Tag>Rejected</Tag> : <SeverityBadge severity={c.severity} score={best?.score} />}
         {c.kev && <KevTag />}
         {c.kev?.known_ransomware_use === 'Known' && <RansomwareTag />}
+        {c.euvd && !c.kev && <Tag tone="red" title="Listed as exploited in ENISA's EU Vulnerability Database">EUVD exploited</Tag>}
         {c.has_exploit && <ExploitTag />}
       </div>
+      {c.aliases.length > 0 && (
+        <p className="mt-1 text-sm text-zinc-400">Also known as {c.aliases.map((a, i) => <span key={a}>{i > 0 && ', '}<span className="font-medium text-zinc-200">{a}</span></span>)}</p>
+      )}
       {c.title && <p className="mt-1 text-lg text-zinc-100">{c.title}</p>}
       <p className="mt-1 text-sm text-zinc-500">
         Published {fmtDate(c.date_published)} · Updated {fmtDate(c.date_updated)}
@@ -265,7 +299,7 @@ function AssessmentBanner({ c }: { c: CveDetail }) {
 function KeyFacts({ c }: { c: CveDetail }) {
   const best = c.cvss.v4 ?? c.cvss.v3 ?? c.cvss.v2
   const pocs = c.exploits.filter((e) => e.source === 'github').length
-  const modules = c.exploits.length - pocs
+  const modules = c.exploits.filter((e) => e.source !== 'github' && e.source !== 'trickest').length
   const facts: [string, ReactNode][] = [
     ['CVSS', best ? <span className={severityText[c.severity]}>{best.score.toFixed(1)} <span className="text-xs text-zinc-500">v{best.version}</span></span> : '—'],
     ['EPSS', c.epss ? <>{fmtEpss(c.epss.score)} <span className="text-xs text-zinc-500">{fmtPercentile(c.epss.percentile)}</span></> : '—'],
@@ -473,14 +507,16 @@ function AffectedCard({ affected }: { affected: Affected[] }) {
   )
 }
 
-const exploitSource = { exploitdb: 'Exploit-DB', metasploit: 'Metasploit', nuclei: 'Nuclei', github: 'GitHub' }
+const exploitSource = { exploitdb: 'Exploit-DB', metasploit: 'Metasploit', nuclei: 'Nuclei', github: 'GitHub', trickest: 'Reference' }
 
 function ExploitsCard({ c }: { c: CveDetail }) {
   const [showAllPocs, setShowAllPocs] = useState(false)
-  const modules = c.exploits.filter((e) => e.source !== 'github')
+  const [showAllRefs, setShowAllRefs] = useState(false)
+  const modules = c.exploits.filter((e) => e.source !== 'github' && e.source !== 'trickest')
   const pocs = c.exploits.filter((e) => e.source === 'github')
+  const writeups = c.exploits.filter((e) => e.source === 'trickest')
   const statements = c.advisory.exploit_statements
-  if (!modules.length && !pocs.length && !statements.length) {
+  if (!modules.length && !pocs.length && !writeups.length && !statements.length) {
     return (
       <Card title="Exploits and proofs of concept">
         <p className="text-sm text-zinc-500">No public exploit, Metasploit module, Nuclei template, or GitHub proof of concept is indexed for this CVE.</p>
@@ -522,6 +558,21 @@ function ExploitsCard({ c }: { c: CveDetail }) {
             {pocs.length > shownPocs.length && (
               <button className={`mt-2 text-sm ${link}`} onClick={() => setShowAllPocs(true)}>Show all {pocs.length}</button>
             )}
+          </div>
+        )}
+        {writeups.length > 0 && (
+          <div>
+            <div className="mb-1 text-xs font-semibold tracking-wider text-zinc-500 uppercase">Exploit write-ups and PoC links ({writeups.length})</div>
+            <p className="mb-2 text-xs text-zinc-500">From trickest/cve: Packet Storm, Full Disclosure, blogs, and other pages with exploit details. Exploit-DB and GitHub links are listed above.</p>
+            <ul className="space-y-1">
+              {(showAllRefs ? writeups : writeups.slice(0, 10)).map((e) => (
+                <li key={e.source_ref} className="flex gap-3">
+                  <span className="w-40 shrink-0 truncate text-zinc-500">{e.title}</span>
+                  <a href={e.url ?? undefined} target="_blank" rel="noreferrer" className={`min-w-0 truncate ${link}`} title={e.source_ref}>{e.source_ref.replace(/^https?:\/\/(www\.)?/, '')}</a>
+                </li>
+              ))}
+            </ul>
+            {!showAllRefs && writeups.length > 10 && <button className={`mt-2 text-sm ${link}`} onClick={() => setShowAllRefs(true)}>Show all {writeups.length}</button>}
           </div>
         )}
       </div>

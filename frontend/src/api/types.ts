@@ -73,14 +73,14 @@ export interface Epss extends EpssPoint {
 }
 
 export interface Exploit {
-  source: 'exploitdb' | 'metasploit' | 'nuclei' | 'github'
+  source: 'exploitdb' | 'metasploit' | 'nuclei' | 'github' | 'trickest'
   source_ref: string
   title: string | null
   url: string | null
   published_at: string | null
   // Metasploit: module type, non-destructive check, default port, targets.
   // Nuclei: severity and protocol (top-level template folder). Else null.
-  meta: { type?: string; check?: boolean; rport?: string | number; targets?: string[]; post_auth?: boolean; severity?: string; protocol?: string } | null
+  meta: { type?: string; check?: boolean; rport?: string | number; targets?: string[]; post_auth?: boolean; aka?: string[]; severity?: string; protocol?: string } | null
 }
 
 export interface DetectionRule {
@@ -180,6 +180,64 @@ export interface CveDetail {
   timeline: TimelineEvent[]
   references: Reference[]
   affected: Affected[]
+  // Nicknames such as "Log4Shell".
+  aliases: string[]
+  // ENISA EUVD's exploited list.
+  euvd: { euvd_id: string; exploited_since: string | null } | null
+  debian: DebianStatus[]
+}
+
+export interface DebianStatus {
+  package: string
+  release: string
+  status: 'resolved' | 'open' | 'undetermined' | string
+  // "0" means the release was never affected.
+  fixed_version: string | null
+  urgency: string | null
+}
+
+export interface AttackMapping {
+  technique_id: string
+  mapping_type: 'exploitation_technique' | 'primary_impact' | 'secondary_impact' | 'uncategorized' | string
+  technique_name: string
+  capability_group: string | null
+  comments: string | null
+  refs: string[]
+}
+
+export interface CapecPattern {
+  id: string
+  name: string
+  abstraction: string | null
+  likelihood: string | null
+  severity: string | null
+  description: string | null
+  prerequisites: string[]
+  execution_flow: string[]
+  indicators: string[]
+  mitigations: string[]
+  cwes: string[]
+  attack: { id: string; name: string }[]
+}
+
+export interface HistoryChange {
+  event: string
+  created: string
+  source?: string
+  details: { action: string; type: string; old?: string; new?: string }[]
+}
+
+export interface Commit {
+  repo: string
+  sha: string
+  url: string
+  message: string
+  author?: string
+  date?: string
+  additions: number
+  deletions: number
+  files: { name: string; status: string; additions: number; deletions: number; patch?: string; truncated?: boolean }[]
+  more_files?: number
 }
 
 export interface Assessment {
@@ -307,7 +365,7 @@ export interface Series {
   points: { date: string; values: Record<string, number> }[]
 }
 
-export type ReportSource = 'osv' | 'redhat' | 'ubuntu' | 'msrc' | 'advisories' | 'news' | 'discussions'
+export type ReportSource = 'osv' | 'redhat' | 'ubuntu' | 'msrc' | 'advisories' | 'news' | 'discussions' | 'history' | 'commits'
 
 export interface ReportStatus {
   source: ReportSource
@@ -363,6 +421,8 @@ export interface CveReports {
     advisories?: AdvisoryPreview[]
     news?: NewsItem[]
     discussions?: NewsItem[]
+    history?: HistoryChange[]
+    commits?: Commit[]
   }
 }
 

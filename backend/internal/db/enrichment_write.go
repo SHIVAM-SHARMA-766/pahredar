@@ -117,6 +117,12 @@ func (s *Store) replaceSnapshot(ctx context.Context, sn snapshot) (inserted, upd
 	if _, err := tx.CopyFrom(ctx, pgx.Identifier{"stage"}, sn.columns, pgx.CopyFromRows(sn.rows)); err != nil {
 		return 0, 0, 0, fmt.Errorf("copy %s stage: %w", sn.table, err)
 	}
+	// Temp tables get no statistics on their own; without them the planner
+	// may pick a nested-loop anti-join for the stale-row delete below, which
+	// is quadratic on large snapshots (100k+ rows).
+	if _, err := tx.Exec(ctx, "ANALYZE stage"); err != nil {
+		return 0, 0, 0, err
+	}
 
 	var nonKey, sets, old, neu []string
 	for _, c := range sn.columns {

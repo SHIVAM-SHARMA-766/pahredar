@@ -14,6 +14,10 @@
 //     vendor-advisory and patch pages the CVE references (news.go).
 //   - News (Google News RSS search) and discussions (Hacker News, via the
 //     Algolia API) that mention the CVE ID (news.go).
+//   - Change history (NVD CVE History API): every change NVD recorded to
+//     the CVE, such as score, CPE, and reference changes (history.go).
+//   - Fix commits (GitHub API): message, author, and per-file diff of the
+//     GitHub commits the CVE references (commits.go).
 //
 // Coverage is best for open-source and Linux software; closed-source vendor
 // products are usually absent. Fetches happen on demand (see the API's
@@ -41,6 +45,8 @@ const (
 	SourceAdvisories  = "advisories"
 	SourceNews        = "news"
 	SourceDiscussions = "discussions"
+	SourceHistory     = "history"
+	SourceCommits     = "commits"
 
 	osvURL    = "https://api.osv.dev/v1/vulns/"
 	redHatURL = "https://access.redhat.com/hydra/rest/securitydata/cve/"
@@ -52,7 +58,7 @@ const (
 )
 
 // Sources lists every report source in display order.
-var Sources = []string{SourceOSV, SourceRedHat, SourceUbuntu, SourceMSRC, SourceAdvisories, SourceNews, SourceDiscussions}
+var Sources = []string{SourceOSV, SourceRedHat, SourceUbuntu, SourceMSRC, SourceAdvisories, SourceNews, SourceDiscussions, SourceHistory, SourceCommits}
 
 // Request carries what a fetcher may need beyond the CVE ID.
 type Request struct {
@@ -63,6 +69,8 @@ type Request struct {
 	// AdvisoryURLs are references tagged as vendor advisories, patches,
 	// mitigations, or release notes, in reference order.
 	AdvisoryURLs []string
+	// CommitURLs are GitHub commit links among the references.
+	CommitURLs []string
 }
 
 // ErrNotFound means the source has no record for the CVE.
@@ -157,10 +165,13 @@ type Client struct {
 	// pages fetches arbitrary advisory URLs taken from CVE data; it refuses
 	// non-public addresses (see fetch.PublicOnlyClient).
 	pages *http.Client
+	// Optional keys: NVD raises the history API's rate limit, GitHub the
+	// commits API's (60 requests an hour without one).
+	nvdKey, githubToken string
 }
 
-func New(c *http.Client) *Client {
-	return &Client{http: c, pages: fetch.PublicOnlyClient(previewTimeout)}
+func New(c *http.Client, nvdKey, githubToken string) *Client {
+	return &Client{http: c, pages: fetch.PublicOnlyClient(previewTimeout), nvdKey: nvdKey, githubToken: githubToken}
 }
 
 // Fetch returns the normalized report for one source, or ErrNotFound.
@@ -180,12 +191,24 @@ func (c *Client) Fetch(ctx context.Context, source string, req Request) (any, er
 		return c.news(ctx, req.CVEID)
 	case SourceDiscussions:
 		return c.discussions(ctx, req.CVEID)
+	case SourceHistory:
+		return c.history(ctx, req.CVEID)
+	case SourceCommits:
+		return c.commits(ctx, req.CommitURLs)
 	}
 	return nil, fmt.Errorf("unknown report source %q", source)
 }
 
 func (c *Client) getJSON(ctx context.Context, url string, v any) error {
-	resp, err := fetch.Get(ctx, c.http, url, http.Header{"Accept": {"application/json"}})
+	return c.getJSONWithHeader(ctx, url, nil, v)
+}
+
+func (c *Client) getJSONWithHeader(ctx context.Context, url string, extra http.Header, v any) error {
+	h := http.Header{"Accept": {"application/json"}}
+	for k, vals := range extra {
+		h[k] = vals
+	}
+	resp, err := fetch.Get(ctx, c.http, url, h)
 	if err != nil {
 		var se *fetch.StatusError
 		if errors.As(err, &se) && se.Code == http.StatusNotFound {

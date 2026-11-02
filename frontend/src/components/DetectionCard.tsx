@@ -134,7 +134,7 @@ export function DetectionCard({ c }: { c: CveDetail }) {
   const [target, setTarget] = useState('TARGET')
   const rules = det.data?.rules ?? []
 
-  const checks = packageChecks(reports)
+  const checks = packageChecks(reports, c.debian)
   const lookups = cveLookups(c.id, reports, checks)
   const kbs = windowsChecks(reports)
   const scans = activeScans(c.id, c.exploits, rules, target || 'TARGET')

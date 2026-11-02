@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -154,4 +155,34 @@ func (s *Server) cveDetection(w http.ResponseWriter, r *http.Request) {
 		out = []db.DetectionOut{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"rules": out})
+}
+
+// cveAttack places a CVE in an attack: CTID's ATT&CK mappings (KEV CVEs)
+// and the CAPEC attack patterns related to its CWEs.
+func (s *Server) cveAttack(w http.ResponseWriter, r *http.Request) {
+	id := strings.ToUpper(r.PathValue("id"))
+	if !cverecord.IDPattern.MatchString(id) {
+		writeError(w, http.StatusBadRequest, "id must look like CVE-2024-12345")
+		return
+	}
+	d, err := s.store.GetCVE(r.Context(), id)
+	if errors.Is(err, db.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "CVE not found")
+		return
+	}
+	if err != nil {
+		internalError(w, r, err)
+		return
+	}
+	mappings, err := s.store.AttackMappings(r.Context(), id)
+	if err != nil {
+		internalError(w, r, err)
+		return
+	}
+	patterns, err := s.store.CAPECForCWEs(r.Context(), d.CWEIDs, 8)
+	if err != nil {
+		internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"mappings": orEmpty(mappings), "capec": orEmpty(patterns)})
 }

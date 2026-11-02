@@ -86,7 +86,7 @@ const ssvcExploitationExpr = `jsonb_path_query_first(cve.raw_cvelist,
 
 // hasExploitExpr is the "has public exploit" definition (ARCHITECTURE.md §6).
 // It needs the kev join from listFrom.
-const hasExploitExpr = `(cve.exploit_ref OR kev.cve_id IS NOT NULL OR EXISTS (SELECT 1 FROM exploit e WHERE e.cve_id = cve.id))`
+const hasExploitExpr = `(cve.exploit_ref OR kev.cve_id IS NOT NULL OR EXISTS (SELECT 1 FROM exploit e WHERE e.cve_id = cve.id) OR EXISTS (SELECT 1 FROM euvd_exploited u WHERE u.cve_id = cve.id))`
 
 // listFrom joins the one-row-per-CVE enrichment tables. Postgres removes
 // either join when a query does not reference it.
@@ -271,6 +271,8 @@ type CVEDetail struct {
 	Exploits        []ExploitOut
 	// CWENames maps the CVE's CWE IDs to MITRE names where known.
 	CWENames map[string]string
+	EUVD     *EUVDOut
+	Debian   []DebianOut
 }
 
 type KEVOut struct {
@@ -406,6 +408,9 @@ func (s *Store) GetCVE(ctx context.Context, id string) (*CVEDetail, error) {
 		if err := rows.Err(); err != nil {
 			return nil, err
 		}
+	}
+	if err := s.readContext(ctx, &d); err != nil {
+		return nil, err
 	}
 	return &d, nil
 }

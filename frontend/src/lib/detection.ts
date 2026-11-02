@@ -1,7 +1,7 @@
 // Detection commands and hints built from data Pahredar already has: exploit
 // modules (Metasploit, Nuclei), detection rules (Nmap, Suricata, Sigma),
 // affected packages (OSV, Ubuntu, Red Hat), Windows KBs (MSRC), and CWEs.
-import type { CveReports, DetectionRule, Exploit } from '../api/types'
+import type { CveReports, DebianStatus, DetectionRule, Exploit } from '../api/types'
 
 export interface Command {
   label: string
@@ -43,7 +43,7 @@ export interface PackageCheck {
 
 // One version check per distinct command across OSV, Ubuntu, and Red Hat;
 // packages sharing a command (Maven forks with the same jar name) merge.
-export function packageChecks(r: CveReports['reports'] | undefined): PackageCheck[] {
+export function packageChecks(r: CveReports['reports'] | undefined, debian: DebianStatus[] = []): PackageCheck[] {
   const out = new Map<string, PackageCheck>()
   const add = (ecosystem: string, pkg: string, fixed: string[] = []) => {
     const base = ecosystem.split(':')[0]
@@ -59,6 +59,7 @@ export function packageChecks(r: CveReports['reports'] | undefined): PackageChec
     out.set(cmd, { ecosystem: base, pkg, cmd, fixed })
   }
   for (const adv of r?.osv ?? []) for (const a of adv.affected) add(a.ecosystem, a.package, a.fixed)
+  for (const d of debian) add('Debian', d.package, d.status === 'resolved' && d.fixed_version && d.fixed_version !== '0' ? [`${d.fixed_version} (${d.release})`] : [])
   for (const p of r?.ubuntu?.packages ?? []) add('Ubuntu', p.name)
   for (const f of r?.redhat?.fixed_in ?? []) if (f.package) add('Red Hat', f.package.replace(/-\d.*$/, ''))
   return [...out.values()]

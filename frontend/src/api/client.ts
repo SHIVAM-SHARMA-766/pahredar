@@ -1,4 +1,6 @@
 import type {
+  AttackMapping,
+  CapecPattern,
   CveDetail,
   CveList,
   CveReports,
@@ -42,6 +44,7 @@ export const api = {
   getCve: (id: string) => request<CveDetail>(`/api/v1/cves/${enc(id)}`),
   getCveReports: (id: string, sources: string[]) =>
     request<CveReports>(`/api/v1/cves/${enc(id)}/reports?${new URLSearchParams({ sources: sources.join(',') })}`),
+  getAttack: (id: string) => request<{ mappings: AttackMapping[]; capec: CapecPattern[] }>(`/api/v1/cves/${enc(id)}/attack`),
   getDetection: (id: string) => request<{ rules: DetectionRule[] }>(`/api/v1/cves/${enc(id)}/detection`),
   getArticles: (id: string) => request<{ items: FeedArticle[] }>(`/api/v1/cves/${enc(id)}/articles`),
   trending: (days = 7, limit = 10) =>

@@ -112,7 +112,7 @@ func syncTasks(cfg config.Config, store *db.Store, bootstrap bool) ([]syncer.Tas
 		{Name: syncer.SourceKEV, Interval: cfg.Intervals.KEV, Fn: enrich.SyncKEV},
 		{Name: syncer.SourceEPSS, Interval: cfg.Intervals.EPSS, Fn: enrich.SyncEPSS},
 	}
-	for _, src := range []string{exploits.SourceExploitDB, exploits.SourceMetasploit, exploits.SourceNuclei, exploits.SourceGitHub} {
+	for _, src := range []string{exploits.SourceExploitDB, exploits.SourceMetasploit, exploits.SourceNuclei, exploits.SourceGitHub, exploits.SourceTrickest} {
 		tasks = append(tasks, syncer.Task{Name: src, Interval: cfg.Intervals.Exploits,
 			Fn: func(ctx context.Context) error { return enrich.SyncExploits(ctx, src) }})
 	}
@@ -120,6 +120,12 @@ func syncTasks(cfg config.Config, store *db.Store, bootstrap bool) ([]syncer.Tas
 		tasks = append(tasks, syncer.Task{Name: src, Interval: cfg.Intervals.Detection,
 			Fn: func(ctx context.Context) error { return enrich.SyncDetection(ctx, src) }})
 	}
+	tasks = append(tasks,
+		syncer.Task{Name: syncer.SourceEUVD, Interval: cfg.Intervals.Context, Fn: enrich.SyncEUVD},
+		syncer.Task{Name: syncer.SourceDebian, Interval: cfg.Intervals.Context, Fn: enrich.SyncDebian},
+		syncer.Task{Name: syncer.SourceAttack, Interval: 7 * cfg.Intervals.Context, Fn: enrich.SyncAttack},
+		syncer.Task{Name: syncer.SourceCAPEC, Interval: 7 * cfg.Intervals.Context, Fn: enrich.SyncCAPEC},
+	)
 	tasks = append(tasks,
 		syncer.Task{Name: syncer.SourceCWE, Interval: cfg.Intervals.CWE, Fn: enrich.SyncCWE},
 		syncer.Task{Name: syncer.SourceFeeds, Interval: cfg.Intervals.Feeds, Fn: enrich.SyncFeeds},
@@ -201,7 +207,7 @@ func serve(ctx context.Context, cfg config.Config) error {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           api.New(store, sched, reports.New(fetch.NewClient())).Handler(),
+		Handler:           api.New(store, sched, reports.New(fetch.NewClient(), cfg.NVDAPIKey, cfg.GitHubToken)).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,

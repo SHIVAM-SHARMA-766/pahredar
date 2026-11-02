@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -17,11 +18,38 @@ import (
 
 const (
 	// How long cached third-party reports are served before refetching. A
-	// "not found" is retried sooner because sources add CVEs over time.
+	// "not found" is retried sooner because sources add CVEs over time, and
+	// news is refreshed daily.
 	reportTTL         = 7 * 24 * time.Hour
 	reportNotFoundTTL = 24 * time.Hour
-	reportTimeout     = 10 * time.Second
+	newsTTL           = 24 * time.Hour
+	reportTimeout     = 12 * time.Second
 )
+
+// remediationTags mark references whose pages are vendor guidance; their
+// URLs feed the advisory previews and the shared-advisory related search.
+var remediationTags = map[string]bool{
+	"vendor-advisory": true, "vendor advisory": true, "patch": true, "mitigation": true,
+	"release-notes": true, "release notes": true,
+}
+
+// advisoryURLs returns the CVE's vendor-guidance reference URLs, in order.
+func advisoryURLs(refs json.RawMessage) []string {
+	var list []cverecord.Reference
+	if json.Unmarshal(refs, &list) != nil {
+		return nil
+	}
+	var out []string
+	for _, r := range list {
+		for _, t := range r.Tags {
+			if remediationTags[strings.ToLower(t)] {
+				out = append(out, r.URL)
+				break
+			}
+		}
+	}
+	return out
+}
 
 type reportStatus struct {
 	Source    string     `json:"source"`
@@ -35,23 +63,46 @@ type reportsResponse struct {
 	Reports map[string]json.RawMessage `json:"reports"`
 }
 
-// cveReports returns third-party write-ups for a CVE: OSV advisories, Red
-// Hat, and Ubuntu. Fresh cache entries are served as-is; the rest are fetched
-// concurrently and cached. A failing source is reported, not fatal.
+// cveReports returns third-party material for a CVE: write-ups (OSV, Red
+// Hat, Ubuntu), vendor guidance (MSRC, advisory page previews), and coverage
+// (news, discussions). `sources` (comma list) limits which are returned, so
+// the UI can load groups independently. Fresh cache entries are served
+// as-is; the rest are fetched concurrently and cached. A failing source is
+// reported, not fatal.
 func (s *Server) cveReports(w http.ResponseWriter, r *http.Request) {
 	id := strings.ToUpper(r.PathValue("id"))
 	if !cverecord.IDPattern.MatchString(id) {
 		writeError(w, http.StatusBadRequest, "id must look like CVE-2024-12345")
 		return
 	}
-	ok, err := s.store.CVEExists(r.Context(), id)
+	wanted := reports.Sources
+	if v := r.URL.Query().Get("sources"); v != "" {
+		wanted = nil
+		for _, src := range strings.Split(v, ",") {
+			if !slices.Contains(reports.Sources, src) {
+				writeError(w, http.StatusBadRequest, "sources must be a comma list of "+strings.Join(reports.Sources, ", "))
+				return
+			}
+			wanted = append(wanted, src)
+		}
+	}
+	d, err := s.store.GetCVE(r.Context(), id)
+	if errors.Is(err, db.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "CVE not found")
+		return
+	}
 	if err != nil {
 		internalError(w, r, err)
 		return
 	}
-	if !ok {
-		writeError(w, http.StatusNotFound, "CVE not found")
-		return
+	req := reports.Request{CVEID: id, AdvisoryURLs: advisoryURLs(d.Refs)}
+	if d.Assigner != nil {
+		req.Assigner = *d.Assigner
+	}
+	for _, a := range d.Affected {
+		if a.Vendor != "" && !slices.Contains(req.Vendors, a.Vendor) {
+			req.Vendors = append(req.Vendors, a.Vendor)
+		}
 	}
 	cached, err := s.store.CachedReports(r.Context(), id)
 	if err != nil {
@@ -59,10 +110,10 @@ func (s *Server) cveReports(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := reportsResponse{Sources: make([]reportStatus, len(reports.Sources)), Reports: map[string]json.RawMessage{}}
+	resp := reportsResponse{Sources: make([]reportStatus, len(wanted)), Reports: map[string]json.RawMessage{}}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	for i, src := range reports.Sources {
+	for i, src := range wanted {
 		if c, ok := cached[src]; ok && fresh(c) {
 			at := c.FetchedAt
 			resp.Sources[i] = reportStatus{Source: src, Status: c.Status, FetchedAt: &at}
@@ -74,7 +125,7 @@ func (s *Server) cveReports(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			st, payload := s.fetchReport(r.Context(), src, id)
+			st, payload := s.fetchReport(r.Context(), src, req)
 			mu.Lock()
 			defer mu.Unlock()
 			resp.Sources[i] = st
@@ -92,14 +143,18 @@ func fresh(c db.CachedReport) bool {
 	if c.Status == "not_found" {
 		ttl = reportNotFoundTTL
 	}
+	if c.Source == reports.SourceNews || c.Source == reports.SourceDiscussions {
+		ttl = newsTTL
+	}
 	return time.Since(c.FetchedAt) < ttl
 }
 
-func (s *Server) fetchReport(ctx context.Context, source, id string) (reportStatus, json.RawMessage) {
+func (s *Server) fetchReport(ctx context.Context, source string, req reports.Request) (reportStatus, json.RawMessage) {
 	ctx, cancel := context.WithTimeout(ctx, reportTimeout)
 	defer cancel()
 	now := time.Now().UTC()
-	report, err := s.reports.Fetch(ctx, source, id)
+	id := req.CVEID
+	report, err := s.reports.Fetch(ctx, source, req)
 	// Store with a context that survives the client going away mid-fetch.
 	saveCtx, saveCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer saveCancel()

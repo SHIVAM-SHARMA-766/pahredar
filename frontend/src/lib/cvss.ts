@@ -13,6 +13,10 @@ const v3: Dict = {
   C: { name: 'Confidentiality', values: impact3 },
   I: { name: 'Integrity', values: impact3 },
   A: { name: 'Availability', values: impact3 },
+  // Temporal metrics, present in some vectors.
+  E: { name: 'Exploit code maturity', values: { X: 'Not defined', U: 'Unproven', P: 'Proof of concept', F: 'Functional', H: 'High' } },
+  RL: { name: 'Remediation level', values: { X: 'Not defined', O: 'Official fix', T: 'Temporary fix', W: 'Workaround', U: 'Unavailable' } },
+  RC: { name: 'Report confidence', values: { X: 'Not defined', U: 'Unknown', R: 'Reasonable', C: 'Confirmed' } },
 }
 
 const v4: Dict = {

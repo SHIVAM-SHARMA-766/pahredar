@@ -5,6 +5,7 @@ import type {
   Dashboard,
   ProductDetail,
   ProductSummary,
+  RelatedGroup,
   Series,
   SyncStatus,
   VendorDetail,
@@ -35,7 +36,9 @@ export const api = {
   dashboard: () => request<Dashboard>('/api/v1/stats/dashboard'),
   listCves: (params: URLSearchParams) => request<CveList>(`/api/v1/cves?${params}`),
   getCve: (id: string) => request<CveDetail>(`/api/v1/cves/${enc(id)}`),
-  getCveReports: (id: string) => request<CveReports>(`/api/v1/cves/${enc(id)}/reports`),
+  getCveReports: (id: string, sources: string[]) =>
+    request<CveReports>(`/api/v1/cves/${enc(id)}/reports?${new URLSearchParams({ sources: sources.join(',') })}`),
+  getRelated: (id: string) => request<{ groups: RelatedGroup[] }>(`/api/v1/cves/${enc(id)}/related`),
   series: (metric: string, from: string, to: string) =>
     request<Series>(`/api/v1/stats/series?${new URLSearchParams({ metric, from, to })}`),
   listVendors: (q: string, pageSize = 50) =>

@@ -9,7 +9,7 @@ import { Card, Spinner, Tag } from './ui'
 // /cves/{id}/reports) and cached for a week. Coverage is best for
 // open-source and Linux software.
 
-const SOURCE_LABEL: Record<ReportStatus['source'], string> = {
+const SOURCE_LABEL: Partial<Record<ReportStatus['source'], string>> = {
   osv: 'OSV / GitHub advisories',
   redhat: 'Red Hat',
   ubuntu: 'Ubuntu',
@@ -18,7 +18,7 @@ const SOURCE_LABEL: Record<ReportStatus['source'], string> = {
 const link = 'text-cyan-300 hover:text-cyan-200'
 
 export function ReportsCard({ id }: { id: string }) {
-  const query = useQuery({ queryKey: ['reports', id], queryFn: () => api.getCveReports(id), staleTime: 10 * 60_000 })
+  const query = useQuery({ queryKey: ['reports', id, 'writeups'], queryFn: () => api.getCveReports(id, ['osv', 'redhat', 'ubuntu']), staleTime: 10 * 60_000 })
   const [picked, setPicked] = useState<ReportStatus['source'] | null>(null)
 
   if (query.isPending) {

@@ -15,11 +15,12 @@ React Router 8 needs Node ≥ 22.22 and the dev machine has Node 20, so the app 
 | `src/main.tsx` | Router, query client defaults (60 s stale time, no retry on 400/404), lazy loading of chart-heavy pages. |
 | `src/api/types.ts` | TypeScript mirror of the backend's JSON responses. Update together with the Go structs. |
 | `src/api/client.ts` | `api.*` fetch functions; non-2xx responses throw `ApiError` with the backend's `error` message. |
-| `src/lib/` | Pure helpers: the explorer query language (`query.ts`: `parseQuery`, `FIELDS`, `EXAMPLES`, `explorerLink`), date/number/EPSS formatting (`format.ts`), severity colours and labels (`severity.ts`), CVSS vector breakdown for v2/v3.x/v4.0 (`cvss.ts`), affected-version range strings for CNA and NVD shapes (`versions.ts`). |
+| `src/lib/` | Pure helpers: fixed-version extraction (`fixedVersions` in `versions.ts`), the explorer query language (`query.ts`: `parseQuery`, `FIELDS`, `EXAMPLES`, `explorerLink`), date/number/EPSS formatting (`format.ts`), severity colours and labels (`severity.ts`), CVSS vector breakdown for v2/v3.x/v4.0 (`cvss.ts`), affected-version range strings for CNA and NVD shapes (`versions.ts`). |
 | `src/components/ui.tsx` | Small shared pieces: page header, severity badge, KEV/exploit tags, card, stats, severity bar, pagination, loading and error states. |
 | `src/components/QueryBar.tsx` | Explorer search bar: applies on Enter, example chips, error line, syntax panel. |
 | `src/components/CveTable.tsx` | Compact CVE table with sortable headers (`SortKey`: published, kev_added, epss, cvss). |
 | `src/components/MetricWidget.tsx` | CloudWatch-style dashboard chart: metric, time range, period, graph type, legend toggles with sums, crosshair, drag-to-zoom, table. State in the URL. Buckets daily points from `/stats/series` into weeks or calendar months in the browser |
+| `src/components/CveIntelCards.tsx` | CVE page cards loaded on demand: `VendorAdvisoriesCard` (MSRC KB/fixed-build table, advisory page previews), `NewsCard` (Google News articles, Hacker News discussions), `RelatedCard` (same advisory, same product ±30 days) |
 | `src/components/ReportsCard.tsx` | In-depth reports on the CVE page: one tab per source that has a record (OSV, Red Hat, Ubuntu); advisory text is shown as plain text, never as HTML |
 | `src/components/charts.tsx` | Year bar chart and EPSS history line chart. |
 | `src/components/Layout.tsx` | App shell: collapsible left sidebar (brand, search box that jumps to a CVE when given an ID, sectioned navigation, sync-health card), mobile top bar with a slide-in drawer, and the page frame. |

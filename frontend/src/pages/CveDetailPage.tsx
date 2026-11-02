@@ -5,12 +5,13 @@ import { Link, useParams } from 'react-router'
 import { api } from '../api/client'
 import type { Affected, CveDetail, Metric, Reference } from '../api/types'
 import { EpssChart } from '../components/charts'
+import { NewsCard, RelatedCard, VendorAdvisoriesCard } from '../components/CveIntelCards'
 import { ReportsCard } from '../components/ReportsCard'
 import { Card, ErrorBox, ExploitTag, KevTag, RansomwareTag, SeverityBadge, Spinner, Tag } from '../components/ui'
 import { parseVector } from '../lib/cvss'
 import { fmtDate, fmtEpss, fmtPercentile, productPath, vendorPath } from '../lib/format'
-import { bestScore, severityText } from '../lib/severity'
-import { describeVersions } from '../lib/versions'
+import { severityText } from '../lib/severity'
+import { describeVersions, fixedVersions } from '../lib/versions'
 
 const link = 'text-cyan-300 hover:text-cyan-200'
 
@@ -32,14 +33,16 @@ export function CveDetailPage() {
           <Card title="Description">
             <p className="leading-relaxed whitespace-pre-line text-zinc-200">{c.description ?? 'No description.'}</p>
           </Card>
-          <ReportsCard id={c.id} />
           <RemediationCard c={c} />
+          <VendorAdvisoriesCard id={c.id} />
+          <ReportsCard id={c.id} />
+          <RelatedCard id={c.id} />
+          <NewsCard id={c.id} />
           <CvssCard c={c} />
           <AffectedCard affected={c.affected} />
           <ExploitsCard c={c} />
           <AdvisoryCard c={c} />
           <ReferencesCard refs={c.references} />
-          <RelatedCard c={c} />
         </div>
         <div className="min-w-0 space-y-6">
           <WeaknessCard c={c} />
@@ -177,10 +180,26 @@ function KeyFacts({ c }: { c: CveDetail }) {
 const REMEDIATION_TAGS = ['patch', 'vendor-advisory', 'vendor advisory', 'mitigation', 'release-notes', 'release notes']
 const isRemediation = (r: Reference) => (r.tags ?? []).some((t) => REMEDIATION_TAGS.includes(t.toLowerCase()))
 
+// Fixed versions per affected product, from the CVE record and NVD. Products
+// with no fixed version listed are left out.
+function fixesByProduct(affected: Affected[]): { product: string; vendor: string; versions: string[] }[] {
+  const byKey = new Map<string, { product: string; vendor: string; versions: Set<string> }>()
+  for (const a of affected) {
+    const fixed = fixedVersions(a)
+    if (!fixed.length) continue
+    const key = `${a.vendor}/${a.product}`
+    const entry = byKey.get(key) ?? { product: a.product_label || a.product, vendor: a.vendor_label || a.vendor, versions: new Set<string>() }
+    fixed.forEach((v) => entry.versions.add(v))
+    byKey.set(key, entry)
+  }
+  return [...byKey.values()].map((e) => ({ ...e, versions: [...e.versions] }))
+}
+
 function RemediationCard({ c }: { c: CveDetail }) {
   const refs = c.references.filter(isRemediation)
   const { solutions, workarounds } = c.advisory
-  if (!solutions.length && !workarounds.length && !refs.length && !c.kev?.required_action) {
+  const fixes = fixesByProduct(c.affected)
+  if (!solutions.length && !workarounds.length && !refs.length && !c.kev?.required_action && !fixes.length) {
     return (
       <Card title="Remediation">
         <p className="text-sm text-zinc-500">No fix, workaround, or vendor advisory has been published in the CVE record or NVD references.</p>
@@ -190,6 +209,23 @@ function RemediationCard({ c }: { c: CveDetail }) {
   return (
     <Card title="Remediation">
       <div className="space-y-4 text-sm">
+        {fixes.length > 0 && (
+          <div>
+            <div className="mb-1 text-xs font-semibold tracking-wider text-zinc-500 uppercase">Fixed versions</div>
+            <ul className="space-y-1">
+              {fixes.slice(0, 12).map((f) => (
+                <li key={f.vendor + f.product} className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="text-zinc-300">{f.product}</span>
+                  <span className="text-xs text-zinc-500">{f.vendor}</span>
+                  <span className="text-zinc-500">→ upgrade to</span>
+                  <span className="font-mono text-xs text-emerald-300">{f.versions.slice(0, 8).join(', ')}{f.versions.length > 8 ? ` +${f.versions.length - 8} more` : ''}</span>
+                </li>
+              ))}
+            </ul>
+            {fixes.length > 12 && <p className="mt-1 text-xs text-zinc-500">+ {fixes.length - 12} more products; see Affected products.</p>}
+            <p className="mt-1 text-xs text-zinc-500">The first version outside each affected range, per branch. Check the vendor advisory for the build that applies to you.</p>
+          </div>
+        )}
         {solutions.length > 0 && <TextBlock label="Solution (from the CNA)" items={solutions} />}
         {workarounds.length > 0 && <TextBlock label="Workaround" items={workarounds} />}
         {c.kev?.required_action && <TextBlock label="CISA required action" items={[c.kev.required_action]} />}
@@ -289,12 +325,14 @@ function AffectedCard({ affected }: { affected: Affected[] }) {
               <th className="py-1.5 pr-3">Source</th>
               <th className="py-1.5 pr-3">Vendor</th>
               <th className="py-1.5 pr-3">Product</th>
-              <th className="py-1.5">Versions</th>
+              <th className="py-1.5 pr-3">Affected versions</th>
+              <th className="py-1.5">Fixed in</th>
             </tr>
           </thead>
           <tbody>
             {shown.map((a, i) => {
               const versions = describeVersions(a)
+              const fixed = fixedVersions(a)
               return (
                 <tr key={i} className="border-b border-zinc-800/60 align-top">
                   <td className="py-1.5 pr-3 text-zinc-500">{providerLabel[a.source]}</td>
@@ -304,9 +342,13 @@ function AffectedCard({ affected }: { affected: Affected[] }) {
                   <td className="py-1.5 pr-3">
                     {a.vendor ? <Link className={link} to={productPath(a.vendor, a.product)}>{a.product_label || a.product}</Link> : a.product_label || a.product}
                   </td>
-                  <td className="py-1.5 font-mono text-xs text-zinc-300">
+                  <td className="py-1.5 pr-3 font-mono text-xs text-zinc-300">
                     {versions.slice(0, 6).join(', ') || '—'}
                     {versions.length > 6 && <span className="text-zinc-500"> +{versions.length - 6} more</span>}
+                  </td>
+                  <td className="py-1.5 font-mono text-xs text-emerald-300">
+                    {fixed.slice(0, 4).join(', ') || <span className="text-zinc-600">not listed</span>}
+                    {fixed.length > 4 && <span className="text-zinc-500"> +{fixed.length - 4}</span>}
                   </td>
                 </tr>
               )
@@ -452,40 +494,6 @@ function ReferencesCard({ refs }: { refs: Reference[] }) {
           </details>
         ))}
       </div>
-    </Card>
-  )
-}
-
-// Other CVEs for the first affected product (CNA data preferred).
-function RelatedCard({ c }: { c: CveDetail }) {
-  const target = c.affected.find((a) => a.vendor && a.source !== 'nvd') ?? c.affected.find((a) => a.vendor)
-  const params = new URLSearchParams({ page_size: '7' })
-  if (target) {
-    params.set('vendor', target.vendor)
-    params.set('product', target.product)
-  }
-  const query = useQuery({ queryKey: ['cves', params.toString()], queryFn: () => api.listCves(params), enabled: !!target })
-  if (!target) return null
-  const items = (query.data?.items ?? []).filter((x) => x.id !== c.id).slice(0, 6)
-  return (
-    <Card
-      title={`Other CVEs in ${target.product_label || target.product}`}
-      actions={<Link to={productPath(target.vendor, target.product)} className={`text-xs ${link}`}>All for this product →</Link>}
-    >
-      {query.isPending ? <Spinner /> : items.length === 0 ? (
-        <p className="text-sm text-zinc-500">No other CVEs for this product.</p>
-      ) : (
-        <ul className="divide-y divide-zinc-800 text-sm">
-          {items.map((x) => (
-            <li key={x.id} className="flex items-center gap-3 py-1.5">
-              <Link to={`/cves/${x.id}`} className={`font-mono text-[13px] font-semibold whitespace-nowrap ${link}`}>{x.id}</Link>
-              <span className="min-w-0 flex-1 truncate text-zinc-300">{x.title ?? x.description}</span>
-              {x.kev && <KevTag />}
-              <span className={`w-8 text-right font-semibold tabular-nums ${severityText[x.severity]}`}>{bestScore(x)?.toFixed(1) ?? '—'}</span>
-            </li>
-          ))}
-        </ul>
-      )}
     </Card>
   )
 }

@@ -16,6 +16,8 @@ var ErrNotFound = errors.New("not found")
 
 // ListCVEParams are validated filters for ListCVEs. Zero values mean "no filter".
 type ListCVEParams struct {
+	// IDs restricts results to these CVE IDs (used by "related CVEs").
+	IDs        []string
 	ExactID    string
 	Text       string
 	Severities []string
@@ -104,6 +106,9 @@ func (s *Store) ListCVEs(ctx context.Context, p ListCVEParams) ([]CVESummary, in
 	rank := ""
 	if p.ExactID != "" {
 		where = append(where, "cve.id = "+arg(p.ExactID))
+	}
+	if p.IDs != nil {
+		where = append(where, "cve.id = ANY("+arg(p.IDs)+")")
 	}
 	if p.Text != "" {
 		q := "websearch_to_tsquery('english', " + arg(p.Text) + ")"

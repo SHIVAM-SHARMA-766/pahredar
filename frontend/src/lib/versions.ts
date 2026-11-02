@@ -33,3 +33,23 @@ function describeCpeMatch(m: CpeMatch): string {
   if (version === '-') return 'n/a'
   return update && update !== '*' && update !== '-' ? `${version}-${update}` : version
 }
+
+// Version strings that look like a release (contain a digit, no wildcard).
+const isVersion = (v?: string) => !!v && /\d/.test(v) && !v.includes('*')
+
+// Versions in which the product is fixed. CNA/ADP: the `lessThan` bound of an
+// affected range, and versions marked "unaffected" (other than the "0"
+// placeholder). NVD: `versionEndExcluding`. Empty when the record names no
+// fix (e.g. only "≤ x" ranges, or an end-of-life product).
+export function fixedVersions(a: Affected): string[] {
+  const out: string[] = []
+  if (a.source === 'nvd') {
+    for (const m of a.versions as CpeMatch[]) if (isVersion(m.versionEndExcluding)) out.push(m.versionEndExcluding!)
+  } else {
+    for (const v of a.versions as CnaVersion[]) {
+      if ((v.status ?? 'affected') === 'affected' && isVersion(v.lessThan)) out.push(v.lessThan!)
+      if (v.status === 'unaffected' && v.version !== '0' && isVersion(v.version)) out.push(v.version!)
+    }
+  }
+  return [...new Set(out)]
+}

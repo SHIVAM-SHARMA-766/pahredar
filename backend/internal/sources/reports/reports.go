@@ -7,6 +7,13 @@
 //   - Red Hat Security Data API: Red Hat's statement, mitigation, Bugzilla
 //     summary, and fix status per product.
 //   - Ubuntu CVE tracker: priority, notes, and fix status per release.
+//   - Microsoft Security Response Center: exploitation flags and, per
+//     product, the KB article, fixed build, and download link (Microsoft
+//     CVEs only).
+//   - Vendor advisory previews: title, summary, and date read from the
+//     vendor-advisory and patch pages the CVE references (news.go).
+//   - News (Google News RSS search) and discussions (Hacker News, via the
+//     Algolia API) that mention the CVE ID (news.go).
 //
 // Coverage is best for open-source and Linux software; closed-source vendor
 // products are usually absent. Fetches happen on demand (see the API's
@@ -27,9 +34,13 @@ import (
 )
 
 const (
-	SourceOSV    = "osv"
-	SourceRedHat = "redhat"
-	SourceUbuntu = "ubuntu"
+	SourceOSV         = "osv"
+	SourceRedHat      = "redhat"
+	SourceUbuntu      = "ubuntu"
+	SourceMSRC        = "msrc"
+	SourceAdvisories  = "advisories"
+	SourceNews        = "news"
+	SourceDiscussions = "discussions"
 
 	osvURL    = "https://api.osv.dev/v1/vulns/"
 	redHatURL = "https://access.redhat.com/hydra/rest/securitydata/cve/"
@@ -41,7 +52,18 @@ const (
 )
 
 // Sources lists every report source in display order.
-var Sources = []string{SourceOSV, SourceRedHat, SourceUbuntu}
+var Sources = []string{SourceOSV, SourceRedHat, SourceUbuntu, SourceMSRC, SourceAdvisories, SourceNews, SourceDiscussions}
+
+// Request carries what a fetcher may need beyond the CVE ID.
+type Request struct {
+	CVEID    string
+	Assigner string
+	// Vendors are canonical affected-vendor keys.
+	Vendors []string
+	// AdvisoryURLs are references tagged as vendor advisories, patches,
+	// mitigations, or release notes, in reference order.
+	AdvisoryURLs []string
+}
 
 // ErrNotFound means the source has no record for the CVE.
 var ErrNotFound = errors.New("no record")
@@ -132,21 +154,32 @@ type UbuntuStatus struct {
 
 type Client struct {
 	http *http.Client
+	// pages fetches arbitrary advisory URLs taken from CVE data; it refuses
+	// non-public addresses (see safeClient).
+	pages *http.Client
 }
 
 func New(c *http.Client) *Client {
-	return &Client{http: c}
+	return &Client{http: c, pages: safeClient()}
 }
 
 // Fetch returns the normalized report for one source, or ErrNotFound.
-func (c *Client) Fetch(ctx context.Context, source, cveID string) (any, error) {
+func (c *Client) Fetch(ctx context.Context, source string, req Request) (any, error) {
 	switch source {
 	case SourceOSV:
-		return c.osv(ctx, cveID)
+		return c.osv(ctx, req.CVEID)
 	case SourceRedHat:
-		return c.redHat(ctx, cveID)
+		return c.redHat(ctx, req.CVEID)
 	case SourceUbuntu:
-		return c.ubuntu(ctx, cveID)
+		return c.ubuntu(ctx, req.CVEID)
+	case SourceMSRC:
+		return c.msrc(ctx, req)
+	case SourceAdvisories:
+		return c.advisoryPreviews(ctx, req.AdvisoryURLs)
+	case SourceNews:
+		return c.news(ctx, req.CVEID)
+	case SourceDiscussions:
+		return c.discussions(ctx, req.CVEID)
 	}
 	return nil, fmt.Errorf("unknown report source %q", source)
 }

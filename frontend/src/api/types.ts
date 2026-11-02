@@ -276,8 +276,10 @@ export interface Series {
   points: { date: string; values: Record<string, number> }[]
 }
 
+export type ReportSource = 'osv' | 'redhat' | 'ubuntu' | 'msrc' | 'advisories' | 'news' | 'discussions'
+
 export interface ReportStatus {
-  source: 'osv' | 'redhat' | 'ubuntu'
+  source: ReportSource
   status: 'ok' | 'not_found' | 'error'
   fetched_at: string | null
   error?: string
@@ -322,5 +324,60 @@ export interface UbuntuReport {
 
 export interface CveReports {
   sources: ReportStatus[]
-  reports: { osv?: OsvAdvisory[]; redhat?: RedHatReport; ubuntu?: UbuntuReport }
+  reports: {
+    osv?: OsvAdvisory[]
+    redhat?: RedHatReport
+    ubuntu?: UbuntuReport
+    msrc?: MsrcReport
+    advisories?: AdvisoryPreview[]
+    news?: NewsItem[]
+    discussions?: NewsItem[]
+  }
+}
+
+export interface MsrcReport {
+  title: string
+  release_date?: string
+  severity?: string
+  impact?: string
+  exploited?: string
+  publicly_disclosed?: string
+  products: {
+    family?: string
+    product: string
+    severity?: string
+    action_required: boolean
+    kb: { article: string; url?: string; fixed_build?: string; download_url?: string; download?: string }[]
+  }[]
+  url: string
+}
+
+export interface AdvisoryPreview {
+  url: string
+  host: string
+  title?: string
+  description?: string
+  site_name?: string
+  published?: string
+  error?: string
+}
+
+export interface NewsItem {
+  title: string
+  url: string
+  source?: string
+  published?: string
+  discussion_url?: string
+  points?: number
+  comments?: number
+}
+
+export interface RelatedGroup {
+  kind: 'advisory' | 'product'
+  label: string
+  url?: string
+  vendor?: string
+  product?: string
+  total: number
+  items: CveSummary[]
 }

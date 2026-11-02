@@ -40,11 +40,11 @@ export function ExploitTag() {
   return <Tag tone="violet" title="Public exploit, Metasploit module, Nuclei template, or exploit reference">Exploit</Tag>
 }
 
-export function Card({ title, children, actions }: { title?: ReactNode; children: ReactNode; actions?: ReactNode }) {
+export function Card({ title, children, actions, className = '' }: { title?: ReactNode; children: ReactNode; actions?: ReactNode; className?: string }) {
   return (
     // min-w-0: as a grid/flex item a card must be allowed to shrink below its
     // content's width, or wide rows (and charts measuring them) overflow.
-    <section className="min-w-0 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+    <section className={`min-w-0 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 ${className}`}>
       {(title || actions) && (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           {title && <h2 className="text-sm font-semibold tracking-wide text-zinc-500 uppercase dark:text-zinc-400">{title}</h2>}

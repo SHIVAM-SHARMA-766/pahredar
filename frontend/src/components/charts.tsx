@@ -59,7 +59,7 @@ export function YearChart({ years }: { years: YearCount[] }) {
             active && payload?.length ? <TooltipBox title={String(label)} rows={[{ label: 'CVEs', value: fmtNumber(Number(payload[0].value)) }]} /> : null
           }
         />
-        <Bar dataKey="cves" fill="var(--sev-medium)" maxBarSize={MAX_BAR} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+        <Bar dataKey="cves" fill="var(--chart-accent)" maxBarSize={MAX_BAR} radius={[4, 4, 0, 0]} isAnimationActive={false} />
       </BarChart>
     </ResponsiveContainer></div>
   )
@@ -81,7 +81,7 @@ export function EpssChart({ history }: { history: EpssPoint[] }) {
             active && payload?.length ? <TooltipBox title={shortDate(String(label))} rows={[{ label: 'EPSS', value: fmtEpss(Number(payload[0].value)) }]} /> : null
           }
         />
-        <Line type="stepAfter" dataKey="score" stroke="var(--sev-medium)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" dot={false} isAnimationActive={false} />
+        <Line type="stepAfter" dataKey="score" stroke="var(--chart-accent)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" dot={false} isAnimationActive={false} />
       </LineChart>
     </ResponsiveContainer></div>
   )
@@ -121,24 +121,42 @@ export function Legend() {
 
 const total = (d: DailyCount) => stackKeys.reduce((a, k) => a + d[k], 0)
 
-export function DailyVolumeChart({ daily }: { daily: DailyCount[] }) {
+export type VolumeRange = '30d' | '90d'
+
+// Daily bars for 30 days; for 90 days, 7-day buckets ending today, so the
+// bars stay readable. Each bucket is dated by its first day.
+export function volumeSeries(daily: DailyCount[], range: VolumeRange): DailyCount[] {
+  if (range === '30d') return daily.slice(-30)
+  const out: DailyCount[] = []
+  for (let end = daily.length; end > 0; end -= 7) {
+    const chunk = daily.slice(Math.max(0, end - 7), end)
+    const sum = { ...chunk[0] }
+    for (const k of stackKeys) sum[k] = chunk.reduce((a, d) => a + d[k], 0)
+    out.unshift(sum)
+  }
+  return out
+}
+
+export function DailyVolumeChart({ daily, range = '30d' }: { daily: DailyCount[]; range?: VolumeRange }) {
+  const data = volumeSeries(daily, range)
+  const label = (iso: string) => (range === '90d' ? `Week of ${shortDate(iso)}` : shortDate(iso))
   return (
     <div className="space-y-3">
       <Legend />
       <div className="overflow-hidden">
       <ResponsiveContainer width="100%" height={260}>
-        <BarChart data={daily} margin={{ top: 4, right: 8, bottom: 0, left: 0 }} barCategoryGap="20%">
+        <BarChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }} barCategoryGap="20%">
           {grid}
           <XAxis dataKey="date" tick={axisTick} tickFormatter={shortDate} tickLine={false} axisLine={{ stroke: 'var(--grid)' }} minTickGap={32} />
           <YAxis tick={axisTick} width={44} allowDecimals={false} tickFormatter={compact} axisLine={false} tickLine={false} />
           <Tooltip
             cursor={{ fill: 'var(--grid)', opacity: 0.5 }}
-            content={({ active, payload, label }) => {
+            content={({ active, payload }) => {
               if (!active || !payload?.length) return null
               const d = payload[0].payload as DailyCount
               return (
                 <TooltipBox
-                  title={`${shortDate(String(label))} · ${fmtNumber(total(d))} CVEs`}
+                  title={`${label(String(d.date))} · ${fmtNumber(total(d))} CVEs`}
                   rows={chartSeries.map((s) => ({ label: s.label, value: fmtNumber(d[s.key]), swatch: s.fill }))}
                 />
               )
@@ -162,9 +180,9 @@ export function DailyVolumeChart({ daily }: { daily: DailyCount[] }) {
               </tr>
             </thead>
             <tbody>
-              {[...daily].reverse().map((d) => (
+              {[...data].reverse().map((d) => (
                 <tr key={d.date} className="border-t border-zinc-100 dark:border-zinc-800">
-                  <td className="py-0.5 text-left">{d.date.slice(0, 10)}</td>
+                  <td className="py-0.5 text-left">{range === '90d' ? `week of ${d.date.slice(0, 10)}` : d.date.slice(0, 10)}</td>
                   {chartSeries.map((s) => <td key={s.key} className="py-0.5">{fmtNumber(d[s.key])}</td>)}
                   <td className="py-0.5 font-medium">{fmtNumber(total(d))}</td>
                 </tr>

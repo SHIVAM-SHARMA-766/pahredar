@@ -27,19 +27,21 @@
   color-scheme: dark;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
-  /* Chart tokens. Severity is ordinal: one desaturated red ramp, lighter =
-     more severe on the dark surface. Validated with the dataviz skill's
-     validator (--mode dark --ordinal --surface #151619); re-run it if these
-     change. */
+  /* Chart tokens. Severity uses emphasis: the two levels that drive action
+     (critical, high) carry hue, the rest are graded grays, so the eye goes to
+     what matters. Critical/high pass the dataviz validator against #151619
+     (dark, categorical checks); the grays pass its --ordinal checks. Re-run
+     the validator if these change. */
   --surface: #151619;
   --grid: #24262b;
   --axis-text: #8e939c;
   --track: #24262b;
-  --sev-critical: #eda99f;
-  --sev-high: #cd776d;
-  --sev-medium: #a5514b;
-  --sev-low: #7a3c39;
-  --sev-other: #4b4f57;
+  --chart-accent: #22b8cf;
+  --sev-critical: #d13d43;
+  --sev-high: #b98d2e;
+  --sev-medium: #7c818b;
+  --sev-low: #4b4f57;
+  --sev-other: #2f3237;
 }
 
 body {

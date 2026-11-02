@@ -51,6 +51,7 @@ type ExploitRow struct {
 	Title       string
 	URL         string
 	PublishedAt *time.Time
+	Meta        map[string]any
 }
 
 // ReplaceExploits makes the exploit rows for one source equal to rows.
@@ -64,11 +65,15 @@ func (s *Store) ReplaceExploits(ctx context.Context, source string, rows []Explo
 			continue
 		}
 		seen[k] = true
-		data = append(data, []any{source, r.SourceRef, r.CVEID, r.Title, r.URL, r.PublishedAt})
+		var meta any
+		if r.Meta != nil {
+			meta = r.Meta
+		}
+		data = append(data, []any{source, r.SourceRef, r.CVEID, r.Title, r.URL, r.PublishedAt, meta})
 	}
 	return s.replaceSnapshot(ctx, snapshot{
 		table:   "exploit",
-		columns: []string{"source", "source_ref", "cve_id", "title", "url", "published_at"},
+		columns: []string{"source", "source_ref", "cve_id", "title", "url", "published_at", "meta"},
 		key:     []string{"source", "source_ref", "cve_id"},
 		scope:   "source", scopeValue: source,
 		rows: data,

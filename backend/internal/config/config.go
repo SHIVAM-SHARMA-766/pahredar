@@ -34,9 +34,10 @@ type Intervals struct {
 	Exploits time.Duration
 	// Stats is a fallback; stats also refresh after cvelist, NVD, or KEV
 	// runs that changed data.
-	Stats time.Duration
-	CWE   time.Duration
-	Feeds time.Duration
+	Stats     time.Duration
+	CWE       time.Duration
+	Feeds     time.Duration
+	Detection time.Duration
 }
 
 func Load() (Config, error) {
@@ -70,6 +71,7 @@ func Load() (Config, error) {
 		{"STATS_REFRESH_INTERVAL", &cfg.Intervals.Stats, 6 * time.Hour},
 		{"CWE_SYNC_INTERVAL", &cfg.Intervals.CWE, 7 * 24 * time.Hour},
 		{"FEEDS_SYNC_INTERVAL", &cfg.Intervals.Feeds, time.Hour},
+		{"DETECTION_SYNC_INTERVAL", &cfg.Intervals.Detection, 24 * time.Hour},
 	} {
 		if *d.dst, err = duration(d.key, d.fallback); err != nil {
 			return Config{}, err

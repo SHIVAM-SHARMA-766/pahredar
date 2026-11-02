@@ -6,7 +6,8 @@ import { api, ApiError } from '../api/client'
 import type { Affected, CveDetail, Metric, Reference } from '../api/types'
 import { EpssChart } from '../components/charts'
 import { NewsCard, RelatedCard, VendorAdvisoriesCard } from '../components/CveIntelCards'
-import { NotYetPublished } from '../components/FeedCards'
+import { DetectionCard, useDetection } from '../components/DetectionCard'
+import { NotYetPublished, useArticles } from '../components/FeedCards'
 import { ReportsCard } from '../components/ReportsCard'
 import { Card, ErrorBox, ExploitTag, KevTag, RansomwareTag, SeverityBadge, Spinner, Tag } from '../components/ui'
 import { parseVector } from '../lib/cvss'
@@ -31,21 +32,32 @@ export function CveDetailPage() {
       <Header c={c} />
       {c.state !== 'REJECTED' && <AssessmentBanner c={c} />}
       <KeyFacts c={c} />
+      <SectionNav />
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="min-w-0 space-y-6 lg:col-span-2">
-          <Card title="Description">
-            <p className="leading-relaxed whitespace-pre-line text-zinc-200">{c.description ?? 'No description.'}</p>
-          </Card>
-          <RemediationCard c={c} />
-          <VendorAdvisoriesCard id={c.id} />
-          <ReportsCard id={c.id} />
-          <RelatedCard id={c.id} />
-          <NewsCard id={c.id} />
-          <CvssCard c={c} />
-          <AffectedCard affected={c.affected} />
-          <ExploitsCard c={c} />
-          <AdvisoryCard c={c} />
-          <ReferencesCard refs={c.references} />
+          <Anchor id="overview">
+            <Card title="Description">
+              <p className="leading-relaxed whitespace-pre-line text-zinc-200">{c.description ?? 'No description.'}</p>
+            </Card>
+            {c.state !== 'REJECTED' && <AtAGlance c={c} />}
+          </Anchor>
+          <Anchor id="detection"><DetectionCard c={c} /></Anchor>
+          <Anchor id="remediation">
+            <RemediationCard c={c} />
+            <VendorAdvisoriesCard id={c.id} />
+          </Anchor>
+          <Anchor id="exploits"><ExploitsCard c={c} /></Anchor>
+          <Anchor id="intel">
+            <ReportsCard id={c.id} />
+            <NewsCard id={c.id} />
+            <RelatedCard id={c.id} />
+          </Anchor>
+          <Anchor id="technical">
+            <CvssCard c={c} />
+            <AffectedCard affected={c.affected} />
+            <AdvisoryCard c={c} />
+          </Anchor>
+          <Anchor id="references"><ReferencesCard refs={c.references} /></Anchor>
         </div>
         <div className="min-w-0 space-y-6">
           <WeaknessCard c={c} />
@@ -86,6 +98,89 @@ export function CveDetailPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+const SECTIONS: [string, string][] = [
+  ['overview', 'Overview'],
+  ['detection', 'Detection'],
+  ['remediation', 'Remediation'],
+  ['exploits', 'Exploits'],
+  ['intel', 'Reports & news'],
+  ['technical', 'CVSS & affected'],
+  ['references', 'References'],
+]
+
+// Jump links to each part of the page. Sticky below the mobile top bar.
+function SectionNav() {
+  return (
+    <nav className="sticky top-14 z-20 -mx-1 flex gap-1 overflow-x-auto border-b border-zinc-800 bg-zinc-950/95 px-1 py-2 backdrop-blur lg:top-0">
+      {SECTIONS.map(([id, label]) => (
+        <a
+          key={id}
+          href={`#${id}`}
+          onClick={(e) => {
+            e.preventDefault()
+            document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }}
+          className="rounded-md px-2.5 py-1 text-sm whitespace-nowrap text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+        >
+          {label}
+        </a>
+      ))}
+    </nav>
+  )
+}
+
+function Anchor({ id, children }: { id: string; children: ReactNode }) {
+  return <div id={id} className="scroll-mt-28 space-y-6">{children}</div>
+}
+
+function jump(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+// One line per question an analyst asks first, each linking to the section
+// with the detail.
+function AtAGlance({ c }: { c: CveDetail }) {
+  const det = useDetection(c.id)
+  const articles = useArticles(c.id)
+  const best = c.cvss.v4 ?? c.cvss.v3 ?? c.cvss.v2
+  const parts = best ? parseVector(best.version, best.vector) : []
+  const val = (k: string) => parts.find((p) => p.key === k)?.label
+  const how = best
+    ? [val('AV') && `${val('AV')} attack`, val('PR') && `${val('PR') === 'None' ? 'no' : val('PR')?.toLowerCase()} privileges`, val('UI') && `user interaction ${val('UI')?.toLowerCase()}`, val('AC') && `${val('AC')?.toLowerCase()} complexity`].filter(Boolean).join(' · ')
+    : null
+  const vendors = new Set(c.affected.map((a) => a.vendor_label || a.vendor).filter(Boolean))
+  const products = [...new Set(c.affected.map((a) => a.product_label || a.product).filter(Boolean))]
+  const rules = det.data?.rules ?? []
+  const scanCount = c.exploits.filter((e) => e.source === 'nuclei' || (e.source === 'metasploit' && (e.meta?.check || e.source_ref.includes('/scanner/')))).length + rules.filter((r) => r.source === 'nmap').length
+  const ids = rules.filter((r) => r.source === 'suricata').length
+  const sigma = rules.filter((r) => r.source === 'sigma').length
+  const fixes = fixesByProduct(c.affected)
+  const pocs = c.exploits.filter((e) => e.source === 'github').length
+  const modules = c.exploits.length - pocs
+
+  const rows: [string, ReactNode, string][] = [
+    ['What', <>{c.cwes.length ? c.cwes.map((w) => w.name ?? w.id).join('; ') : 'Weakness not classified'}{how && <div className="text-xs text-zinc-500">{how}</div>}</>, 'technical'],
+    ['Affected', products.length ? <>{products.slice(0, 4).join(', ')}{products.length > 4 && <span className="text-zinc-500"> +{products.length - 4} more</span>}<span className="text-zinc-500"> · {vendors.size} vendor{vendors.size === 1 ? '' : 's'}</span></> : 'No products listed', 'technical'],
+    ['Exploitation', <>{exploitationLabel[c.assessment.exploitation]}{c.kev && <> · in CISA KEV since {fmtDate(c.kev.date_added)}</>}{c.kev?.known_ransomware_use === 'Known' && <> · used by ransomware</>}{(modules || pocs) ? <span className="text-zinc-500"> · {modules} module{modules === 1 ? '' : 's'}, {pocs} GitHub PoC{pocs === 1 ? '' : 's'}</span> : null}</>, 'exploits'],
+    ['Detect', det.isPending ? 'Loading…' : (scanCount || ids || sigma) ? [scanCount && `${scanCount} active check${scanCount === 1 ? '' : 's'}`, ids && `${ids} Suricata rule${ids === 1 ? '' : 's'}`, sigma && `${sigma} Sigma rule${sigma === 1 ? '' : 's'}`].filter(Boolean).join(' · ') : 'No ready-made rule; version checks and hunting hints available', 'detection'],
+    ['Fix', fixes.length ? `Fixed versions listed for ${fixes.length} product${fixes.length === 1 ? '' : 's'}` : c.advisory.solutions.length ? 'Vendor solution published' : c.advisory.workarounds.length ? 'Workaround only' : 'No fix listed in the record; check vendor advisories', 'remediation'],
+    ['Coverage', articles.isPending ? 'Loading…' : `${articles.data?.items.length ?? 0} article${articles.data?.items.length === 1 ? '' : 's'} in Pahredar's feeds`, 'intel'],
+  ]
+  return (
+    <Card title="At a glance">
+      <dl className="divide-y divide-zinc-800/70 text-sm">
+        {rows.map(([label, value, target]) => (
+          <div key={label} className="grid grid-cols-[6.5rem_1fr_auto] items-baseline gap-3 py-2 first:pt-0 last:pb-0">
+            <dt className="text-xs font-semibold tracking-wider text-zinc-500 uppercase">{label}</dt>
+            <dd className="min-w-0 text-zinc-200">{value}</dd>
+            <button className={`text-xs ${link}`} onClick={() => jump(target)}>Details ↓</button>
+          </div>
+        ))}
+      </dl>
+    </Card>
   )
 }
 
@@ -393,6 +488,8 @@ function ExploitsCard({ c }: { c: CveDetail }) {
                 <li key={e.source + e.source_ref} className="flex gap-3">
                   <span className="w-24 shrink-0 text-zinc-500">{exploitSource[e.source]}</span>
                   <a href={e.url ?? undefined} target="_blank" rel="noreferrer" className={`min-w-0 ${link}`}>{e.title ?? e.source_ref}</a>
+                  {e.meta?.check && <Tag tone="cyan" title="Has a check method that tests without exploiting">check</Tag>}
+                  {e.source === 'metasploit' && e.meta?.type && e.meta.type !== 'exploit' && <Tag>{e.meta.type}</Tag>}
                   {e.published_at && <span className="ml-auto shrink-0 text-zinc-500 tabular-nums">{fmtDate(e.published_at)}</span>}
                 </li>
               ))}

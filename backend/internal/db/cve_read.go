@@ -305,6 +305,9 @@ type ExploitOut struct {
 	Title       *string    `json:"title"`
 	URL         *string    `json:"url"`
 	PublishedAt *time.Time `json:"published_at"`
+	// Meta is source-specific (Metasploit module type/check/port, Nuclei
+	// severity/protocol); null for the other sources.
+	Meta json.RawMessage `json:"meta"`
 }
 
 type AffectedOut struct {
@@ -377,7 +380,7 @@ func (s *Store) GetCVE(ctx context.Context, id string) (*CVEDetail, error) {
 	}
 
 	rows, err = s.pool.Query(ctx, `
-		SELECT source, source_ref, title, url, published_at FROM exploit
+		SELECT source, source_ref, title, url, published_at, meta FROM exploit
 		WHERE cve_id = $1 ORDER BY (source = 'github'), published_at NULLS LAST, source, source_ref`, id)
 	if err != nil {
 		return nil, err

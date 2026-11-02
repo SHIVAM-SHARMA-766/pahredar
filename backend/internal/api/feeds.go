@@ -135,3 +135,23 @@ func (s *Server) feedList(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": out})
 }
+
+// cveDetection lists the Sigma, Suricata, and Nmap rules naming a CVE. Scan
+// commands built from exploit modules and affected packages are assembled
+// by the frontend from data it already has.
+func (s *Server) cveDetection(w http.ResponseWriter, r *http.Request) {
+	id := strings.ToUpper(r.PathValue("id"))
+	if !cverecord.IDPattern.MatchString(id) {
+		writeError(w, http.StatusBadRequest, "id must look like CVE-2024-12345")
+		return
+	}
+	out, err := s.store.DetectionForCVE(r.Context(), id, 200)
+	if err != nil {
+		internalError(w, r, err)
+		return
+	}
+	if out == nil {
+		out = []db.DetectionOut{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rules": out})
+}

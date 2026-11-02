@@ -78,6 +78,37 @@ export interface Exploit {
   title: string | null
   url: string | null
   published_at: string | null
+  // Metasploit: module type, non-destructive check, default port, targets.
+  // Nuclei: severity and protocol (top-level template folder). Else null.
+  meta: { type?: string; check?: boolean; rport?: string | number; targets?: string[]; post_auth?: boolean; severity?: string; protocol?: string } | null
+}
+
+export interface DetectionRule {
+  source: 'sigma' | 'suricata' | 'nmap'
+  rule_id: string
+  title: string
+  url: string | null
+  // Sigma: the rule YAML. Suricata: the rule line. Nmap: the script file name.
+  body: string
+  meta: {
+    // Sigma
+    level?: string
+    status?: string
+    author?: string
+    date?: string
+    logsource?: { product?: string; service?: string; category?: string }
+    attack?: string[]
+    // Suricata
+    enabled?: boolean
+    classtype?: string
+    signature_severity?: string
+    confidence?: string
+    created_at?: string
+    updated_at?: string
+    // Nmap
+    categories?: string[]
+  }
+  cve_ids: string[]
 }
 
 export interface TimelineEvent {

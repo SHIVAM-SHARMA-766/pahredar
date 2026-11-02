@@ -130,7 +130,7 @@ func (e *Enrichment) SyncExploits(ctx context.Context, source string) error {
 		}
 		rows := make([]db.ExploitRow, len(entries))
 		for i, en := range entries {
-			rows[i] = db.ExploitRow{CVEID: en.CVEID, SourceRef: en.SourceRef, Title: en.Title, URL: en.URL, PublishedAt: en.PublishedAt}
+			rows[i] = db.ExploitRow{CVEID: en.CVEID, SourceRef: en.SourceRef, Title: en.Title, URL: en.URL, PublishedAt: en.PublishedAt, Meta: en.Meta}
 		}
 		run.Inserted, run.Updated, run.Deleted, err = e.store.ReplaceExploits(ctx, source, rows)
 		if err != nil {

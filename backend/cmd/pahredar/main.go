@@ -20,6 +20,7 @@ import (
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/config"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/cvelist"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/detection"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/exploits"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/fetch"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/nvd"
@@ -114,6 +115,10 @@ func syncTasks(cfg config.Config, store *db.Store, bootstrap bool) ([]syncer.Tas
 	for _, src := range []string{exploits.SourceExploitDB, exploits.SourceMetasploit, exploits.SourceNuclei, exploits.SourceGitHub} {
 		tasks = append(tasks, syncer.Task{Name: src, Interval: cfg.Intervals.Exploits,
 			Fn: func(ctx context.Context) error { return enrich.SyncExploits(ctx, src) }})
+	}
+	for _, src := range []string{detection.SourceSigma, detection.SourceSuricata, detection.SourceNmap} {
+		tasks = append(tasks, syncer.Task{Name: src, Interval: cfg.Intervals.Detection,
+			Fn: func(ctx context.Context) error { return enrich.SyncDetection(ctx, src) }})
 	}
 	tasks = append(tasks,
 		syncer.Task{Name: syncer.SourceCWE, Interval: cfg.Intervals.CWE, Fn: enrich.SyncCWE},

@@ -2,10 +2,11 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, ExternalLink, ShieldAlert, ShieldCheck, ShieldQuestion } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router'
-import { api } from '../api/client'
+import { api, ApiError } from '../api/client'
 import type { Affected, CveDetail, Metric, Reference } from '../api/types'
 import { EpssChart } from '../components/charts'
 import { NewsCard, RelatedCard, VendorAdvisoriesCard } from '../components/CveIntelCards'
+import { NotYetPublished } from '../components/FeedCards'
 import { ReportsCard } from '../components/ReportsCard'
 import { Card, ErrorBox, ExploitTag, KevTag, RansomwareTag, SeverityBadge, Spinner, Tag } from '../components/ui'
 import { parseVector } from '../lib/cvss'
@@ -20,7 +21,9 @@ export function CveDetailPage() {
   const query = useQuery({ queryKey: ['cve', id], queryFn: () => api.getCve(id) })
 
   if (query.isPending) return <Spinner />
-  if (query.isError) return <ErrorBox error={query.error} />
+  if (query.isError) {
+    return query.error instanceof ApiError && query.error.status === 404 ? <NotYetPublished id={id.toUpperCase()} /> : <ErrorBox error={query.error} />
+  }
   const c = query.data
 
   return (

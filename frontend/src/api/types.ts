@@ -381,3 +381,37 @@ export interface RelatedGroup {
   total: number
   items: CveSummary[]
 }
+
+export type FeedKind = 'vendor' | 'government' | 'research' | 'news'
+
+export interface FeedArticle {
+  feed: string
+  feed_name: string
+  feed_kind: FeedKind | ''
+  url: string
+  title: string
+  summary: string | null
+  published: string
+  cve_ids: string[]
+}
+
+export interface TrendingItem {
+  id: string
+  sources: number
+  articles: number
+  latest: string
+  headline: string
+  url: string
+  // Null when the CVE is not in the CVE List yet.
+  cve: CveSummary | null
+}
+
+export interface FeedInfo {
+  key: string
+  name: string
+  kind: FeedKind
+  url: string
+  articles: number
+  with_cve: number
+  latest: string | null
+}

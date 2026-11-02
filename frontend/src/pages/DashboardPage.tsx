@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { api } from '../api/client'
 import type { CveSummary, DailyCount, Dashboard, SeverityMix } from '../api/types'
+import { LatestAdvisoriesCard, TrendingCard } from '../components/FeedCards'
 import { MetricWidget } from '../components/MetricWidget'
 import { Card, ErrorBox, ExploitTag, KevTag, PageHeader, RansomwareTag, SeverityBadge, Spinner } from '../components/ui'
 import { fmtDate, fmtEpss, fmtNumber, relativeTime } from '../lib/format'
@@ -28,12 +29,21 @@ export function DashboardPage() {
       <MetricWidget params={params} setParams={(p) => setParams(p, { replace: true })} />
 
       <div className="grid items-stretch gap-6 lg:grid-cols-5">
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:col-span-3">
+          <TrendingCard />
+        </div>
+        <div className="min-w-0 lg:col-span-2">
           <Card title="Severity mix · last 30 days" className="h-full">
             <SeverityRows mix={d.severity_30d} />
           </Card>
         </div>
-        <div className="lg:col-span-3">
+      </div>
+
+      <div className="grid items-stretch gap-6 lg:grid-cols-5">
+        <div className="min-w-0 lg:col-span-3">
+          <LatestAdvisoriesCard />
+        </div>
+        <div className="min-w-0 lg:col-span-2">
           <EpssCard d={d} />
         </div>
       </div>

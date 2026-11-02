@@ -2,11 +2,14 @@ import type {
   CveDetail,
   CveList,
   CveReports,
+  FeedArticle,
+  FeedInfo,
   Dashboard,
   ProductDetail,
   ProductSummary,
   RelatedGroup,
   Series,
+  TrendingItem,
   SyncStatus,
   VendorDetail,
   VendorSummary,
@@ -38,6 +41,11 @@ export const api = {
   getCve: (id: string) => request<CveDetail>(`/api/v1/cves/${enc(id)}`),
   getCveReports: (id: string, sources: string[]) =>
     request<CveReports>(`/api/v1/cves/${enc(id)}/reports?${new URLSearchParams({ sources: sources.join(',') })}`),
+  getArticles: (id: string) => request<{ items: FeedArticle[] }>(`/api/v1/cves/${enc(id)}/articles`),
+  trending: (days = 7, limit = 10) =>
+    request<{ days: number; items: TrendingItem[] }>(`/api/v1/stats/trending?${new URLSearchParams({ days: String(days), limit: String(limit) })}`),
+  latestAdvisories: (limit = 10) => request<{ items: FeedArticle[] }>(`/api/v1/feeds/advisories?limit=${limit}`),
+  feeds: () => request<{ items: FeedInfo[] }>('/api/v1/feeds'),
   getRelated: (id: string) => request<{ groups: RelatedGroup[] }>(`/api/v1/cves/${enc(id)}/related`),
   series: (metric: string, from: string, to: string) =>
     request<Series>(`/api/v1/stats/series?${new URLSearchParams({ metric, from, to })}`),

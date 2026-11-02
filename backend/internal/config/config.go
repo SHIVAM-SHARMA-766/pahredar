@@ -36,6 +36,7 @@ type Intervals struct {
 	// runs that changed data.
 	Stats time.Duration
 	CWE   time.Duration
+	Feeds time.Duration
 }
 
 func Load() (Config, error) {
@@ -68,6 +69,7 @@ func Load() (Config, error) {
 		{"EXPLOITS_SYNC_INTERVAL", &cfg.Intervals.Exploits, 24 * time.Hour},
 		{"STATS_REFRESH_INTERVAL", &cfg.Intervals.Stats, 6 * time.Hour},
 		{"CWE_SYNC_INTERVAL", &cfg.Intervals.CWE, 7 * 24 * time.Hour},
+		{"FEEDS_SYNC_INTERVAL", &cfg.Intervals.Feeds, time.Hour},
 	} {
 		if *d.dst, err = duration(d.key, d.fallback); err != nil {
 			return Config{}, err

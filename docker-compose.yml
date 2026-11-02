@@ -34,6 +34,7 @@ services:
       EXPLOITS_SYNC_INTERVAL: ${EXPLOITS_SYNC_INTERVAL:-24h}
       STATS_REFRESH_INTERVAL: ${STATS_REFRESH_INTERVAL:-6h}
       CWE_SYNC_INTERVAL: ${CWE_SYNC_INTERVAL:-168h}
+      FEEDS_SYNC_INTERVAL: ${FEEDS_SYNC_INTERVAL:-1h}
       DATA_DIR: /var/lib/pahredar
     volumes:
       # Scratch space for downloads; the bootstrap needs ~700 MB temporarily.

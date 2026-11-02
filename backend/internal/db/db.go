@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" database/sql driver for goose
@@ -17,9 +18,22 @@ import (
 //go:embed migrations/*.sql
 var migrationFiles embed.FS
 
+// minPoolConns is the pool size used unless DATABASE_URL sets
+// pool_max_conns. Each running sync job holds one connection for its
+// advisory lock and needs at least one more to work; with a dozen sources
+// starting together, pgx's default (the CPU count) starved them.
+const minPoolConns = 32
+
 // Open creates a connection pool and verifies the database is reachable.
 func Open(ctx context.Context, url string) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, url)
+	cfg, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		return nil, fmt.Errorf("parse DATABASE_URL: %w", err)
+	}
+	if !strings.Contains(url, "pool_max_conns") && cfg.MaxConns < minPoolConns {
+		cfg.MaxConns = minPoolConns
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create pool: %w", err)
 	}

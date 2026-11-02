@@ -7,14 +7,12 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"regexp"
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/fetch"
@@ -149,58 +147,6 @@ type AdvisoryPreview struct {
 	Published   string `json:"published,omitempty"`
 	// Error is set when the page could not be read; the link is still shown.
 	Error string `json:"error,omitempty"`
-}
-
-// safeClient fetches pages named by CVE data. Those URLs are untrusted, so
-// it only connects to public unicast addresses (checked after DNS
-// resolution, on every connection including redirects), follows at most
-// three redirects, and never uses a proxy.
-func safeClient() *http.Client {
-	dialer := &net.Dialer{
-		Timeout: 5 * time.Second,
-		Control: func(_, address string, _ syscall.RawConn) error {
-			host, _, err := net.SplitHostPort(address)
-			if err != nil {
-				return err
-			}
-			ip := net.ParseIP(host)
-			if ip == nil || !isPublic(ip) {
-				return fmt.Errorf("refusing to connect to non-public address %s", host)
-			}
-			return nil
-		},
-	}
-	return &http.Client{
-		Transport: &http.Transport{
-			Proxy:                  nil,
-			DialContext:            dialer.DialContext,
-			ResponseHeaderTimeout:  previewTimeout,
-			MaxResponseHeaderBytes: 64 << 10,
-		},
-		CheckRedirect: func(r *http.Request, via []*http.Request) error {
-			if len(via) >= 3 {
-				return errors.New("too many redirects")
-			}
-			if r.URL.Scheme != "http" && r.URL.Scheme != "https" {
-				return errors.New("redirect to a non-HTTP URL")
-			}
-			return nil
-		},
-	}
-}
-
-func isPublic(ip net.IP) bool {
-	return ip.IsGlobalUnicast() && !ip.IsPrivate() && !ip.IsLoopback() && !ip.IsLinkLocalUnicast() &&
-		!ip.IsUnspecified() && !ip.IsMulticast() && !isSharedOrReserved(ip)
-}
-
-// isSharedOrReserved covers ranges Go's helpers miss: carrier-grade NAT
-// (100.64.0.0/10) and 0.0.0.0/8.
-func isSharedOrReserved(ip net.IP) bool {
-	if v4 := ip.To4(); v4 != nil {
-		return v4[0] == 0 || (v4[0] == 100 && v4[1]&0xc0 == 64)
-	}
-	return false
 }
 
 var (

@@ -155,12 +155,12 @@ type UbuntuStatus struct {
 type Client struct {
 	http *http.Client
 	// pages fetches arbitrary advisory URLs taken from CVE data; it refuses
-	// non-public addresses (see safeClient).
+	// non-public addresses (see fetch.PublicOnlyClient).
 	pages *http.Client
 }
 
 func New(c *http.Client) *Client {
-	return &Client{http: c, pages: safeClient()}
+	return &Client{http: c, pages: fetch.PublicOnlyClient(previewTimeout)}
 }
 
 // Fetch returns the normalized report for one source, or ErrNotFound.

@@ -20,6 +20,7 @@ React Router 8 needs Node ≥ 22.22 and the dev machine has Node 20, so the app 
 | `src/components/QueryBar.tsx` | Explorer search bar: applies on Enter, example chips, error line, syntax panel. |
 | `src/components/CveTable.tsx` | Compact CVE table with sortable headers (`SortKey`: published, kev_added, epss, cvss). |
 | `src/components/MetricWidget.tsx` | CloudWatch-style dashboard chart: metric, time range, period, graph type, legend toggles with sums, crosshair, drag-to-zoom, table. State in the URL. Buckets daily points from `/stats/series` into weeks or calendar months in the browser |
+| `src/components/FeedCards.tsx` | Feed-backed pieces: `TrendingCard` and `LatestAdvisoriesCard` (dashboard), `FeedArticleList` and `NotYetPublished` (CVE page; the latter replaces the 404 for IDs not yet in the CVE List), `KindTag` |
 | `src/components/CveIntelCards.tsx` | CVE page cards loaded on demand: `VendorAdvisoriesCard` (MSRC KB/fixed-build table, advisory page previews), `NewsCard` (Google News articles, Hacker News discussions), `RelatedCard` (same advisory, same product ±30 days) |
 | `src/components/ReportsCard.tsx` | In-depth reports on the CVE page: one tab per source that has a record (OSV, Red Hat, Ubuntu); advisory text is shown as plain text, never as HTML |
 | `src/components/charts.tsx` | Year bar chart and EPSS history line chart. |

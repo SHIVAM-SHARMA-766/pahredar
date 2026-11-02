@@ -7,6 +7,7 @@ import type { MsrcReport, NewsItem, RelatedGroup } from '../api/types'
 import { fmtDate, fmtNumber, productPath } from '../lib/format'
 import { explorerLink } from '../lib/query'
 import { bestScore, severityText } from '../lib/severity'
+import { FeedArticleList, useArticles } from './FeedCards'
 import { Card, ExploitTag, KevTag, Spinner, Tag } from './ui'
 
 // Cards on the CVE page that load from the backend's on-demand endpoints
@@ -116,31 +117,40 @@ function Msrc({ r }: { r: MsrcReport }) {
 
 // --- News and discussions ----------------------------------------------------
 
+// Three tabs: articles from Pahredar's own feeds (vendor, government,
+// research, news; ingested hourly), Google News search, and Hacker News.
 export function NewsCard({ id }: { id: string }) {
   const q = useQuery({ queryKey: ['reports', id, 'news'], queryFn: () => api.getCveReports(id, ['news', 'discussions']), staleTime: 10 * 60_000 })
-  const [tab, setTab] = useState<'news' | 'discussions'>('news')
-  if (q.isPending) return <Card title="News & research"><Spinner label="Searching news and discussions…" /></Card>
-  if (q.isError) return <Card title="News & research"><p className="text-sm text-zinc-500">News is unavailable right now.</p></Card>
-  const news = q.data.reports.news ?? []
-  const disc = q.data.reports.discussions ?? []
-  if (!news.length && !disc.length) {
-    return <Card title="News & research"><p className="text-sm text-zinc-500">No news articles or discussions mention this CVE ID yet.</p></Card>
+  const own = useArticles(id)
+  const [tab, setTab] = useState<'feeds' | 'news' | 'discussions' | null>(null)
+  if (q.isPending && own.isPending) return <Card title="News & research"><Spinner label="Searching news and discussions…" /></Card>
+  const feedItems = own.data?.items ?? []
+  const news = q.data?.reports.news ?? []
+  const disc = q.data?.reports.discussions ?? []
+  if (!feedItems.length && !news.length && !disc.length) {
+    return <Card title="News & research"><p className="text-sm text-zinc-500">{q.isError ? 'News is unavailable right now.' : 'No articles or discussions mention this CVE ID yet.'}</p></Card>
   }
-  const active = tab === 'news' && news.length ? 'news' : disc.length ? 'discussions' : 'news'
+  const counts = { feeds: feedItems.length, news: news.length, discussions: disc.length }
+  const active = tab && counts[tab] ? tab : feedItems.length ? 'feeds' : news.length ? 'news' : 'discussions'
   const btn = (on: boolean) => `rounded-md px-3 py-1 text-sm ${on ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200'}`
   return (
     <Card
       title="News & research"
       actions={
         <div className="flex rounded-lg border border-zinc-800 p-0.5">
-          <button className={btn(active === 'news')} onClick={() => setTab('news')} disabled={!news.length}>Articles ({news.length})</button>
+          <button className={btn(active === 'feeds')} onClick={() => setTab('feeds')} disabled={!feedItems.length}>Security feeds ({feedItems.length})</button>
+          <button className={btn(active === 'news')} onClick={() => setTab('news')} disabled={!news.length}>Google News ({news.length})</button>
           <button className={btn(active === 'discussions')} onClick={() => setTab('discussions')} disabled={!disc.length}>Hacker News ({disc.length})</button>
         </div>
       }
     >
-      {active === 'news' ? <NewsList items={news} /> : <DiscussionList items={disc} />}
+      {active === 'feeds' ? <FeedArticleList items={feedItems} current={id} /> : active === 'news' ? <NewsList items={news} /> : <DiscussionList items={disc} />}
       <p className="mt-3 text-xs text-zinc-500">
-        {active === 'news' ? 'Google News results for the exact CVE ID: vendor blogs, research write-ups, and press.' : 'Hacker News stories mentioning the CVE ID, by points.'} Refreshed daily.
+        {active === 'feeds'
+          ? 'Vendor PSIRT, CISA and CERT/CC, research blogs, and security news that Pahredar reads hourly.'
+          : active === 'news'
+            ? 'Google News results for the exact CVE ID, refreshed daily.'
+            : 'Hacker News stories mentioning the CVE ID, by points, refreshed daily.'}
       </p>
     </Card>
   )

@@ -33,7 +33,7 @@ commands:
   serve                           apply migrations, run the HTTP API and the sync scheduler
   migrate                         apply pending migrations and exit
   sync <source> [--bootstrap]     run one sync in the foreground and exit
-                                  sources: cvelist, nvd, kev, epss, exploitdb, metasploit, nuclei, github, cwe, stats
+                                  sources: cvelist, nvd, kev, epss, exploitdb, metasploit, nuclei, github, cwe, feeds, stats
                                   --bootstrap (cvelist, nvd) re-imports everything
   rederive                        rewrite every CVE's derived fields from stored raw records, then refresh stats
                                   (run after changing derivation logic; downloads nothing)
@@ -117,6 +117,7 @@ func syncTasks(cfg config.Config, store *db.Store, bootstrap bool) ([]syncer.Tas
 	}
 	tasks = append(tasks,
 		syncer.Task{Name: syncer.SourceCWE, Interval: cfg.Intervals.CWE, Fn: enrich.SyncCWE},
+		syncer.Task{Name: syncer.SourceFeeds, Interval: cfg.Intervals.Feeds, Fn: enrich.SyncFeeds},
 		syncer.Task{Name: syncer.SourceStats, Interval: cfg.Intervals.Stats, Fn: enrich.RefreshStats},
 	)
 	return tasks, runner

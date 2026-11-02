@@ -12,23 +12,31 @@ import { parseQuery } from '../lib/query'
 const PAGE_SIZES = [50, 100, 250]
 const DEFAULT_PAGE_SIZE = 50
 
-// The sidebar's saved views are queries; name the page after the one in use
-// so the header matches the highlighted nav item.
-function viewTitle(query: string): [string, string] {
-  if (query === 'is:kev') {
-    return ['Known exploited', 'CVEs in the CISA Known Exploited Vulnerabilities catalog — attackers are using these now.']
-  }
-  if (query === 'epss:>10 -is:kev') {
-    return ['Likely exploited', 'Not yet in KEV, ranked by EPSS: the probability of exploitation activity in the next 30 days.']
-  }
-  return ['CVE explorer', 'Search every CVE in the CVE List, enriched with NVD, CISA KEV, EPSS, and public exploits.']
-}
+// Saved views: tabs that set a query and sort. A view is active while the
+// URL's query equals its own; editing the query in the bar makes it a
+// custom search.
+export const VIEWS = [
+  { key: 'all', label: 'All CVEs', query: '', sort: null, hint: 'Every CVE in the CVE List, newest first.' },
+  { key: 'kev', label: 'Known exploited', query: 'is:kev', sort: 'kev_added', hint: 'In the CISA Known Exploited Vulnerabilities catalog: attackers are using these now. Sorted by date added.' },
+  { key: 'likely', label: 'Likely exploited', query: 'epss:>10 -is:kev', sort: 'epss', hint: 'Not yet in KEV but EPSS above 10%: likely to see exploitation in the next 30 days.' },
+  { key: 'ransomware', label: 'Ransomware', query: 'is:kev has:ransomware', sort: 'kev_added', hint: 'KEV entries CISA links to ransomware campaigns.' },
+  { key: 'critical', label: 'Critical · 7 days', query: 'severity:critical age:<7', sort: null, hint: 'Critical CVEs published in the last week.' },
+] as const
 
 export function CveListPage() {
   const [params, setParams] = useSearchParams()
   const query = params.get('query') ?? ''
   const parsed = parseQuery(query)
-  const [title, subtitle] = viewTitle(query)
+  const view = VIEWS.find((v) => v.query === query)
+
+  const pickView = (v: (typeof VIEWS)[number]) => {
+    const next = new URLSearchParams()
+    if (v.query) next.set('query', v.query)
+    if (v.sort) next.set('sort', v.sort)
+    const size = params.get('page_size')
+    if (size) next.set('page_size', size)
+    setParams(next)
+  }
 
   const submit = (q: string) => {
     const next = new URLSearchParams(params)
@@ -40,7 +48,22 @@ export function CveListPage() {
 
   return (
     <>
-      <PageHeader title={title} subtitle={subtitle} />
+      <PageHeader title="CVE explorer" subtitle="Search every CVE in the CVE List, enriched with NVD, CISA KEV, EPSS, and public exploits." />
+      <div className="mb-4 flex flex-wrap items-end gap-1 border-b border-zinc-800" role="tablist" aria-label="Saved views">
+        {VIEWS.map((v) => (
+          <button
+            key={v.key}
+            role="tab"
+            aria-selected={view?.key === v.key}
+            onClick={() => pickView(v)}
+            className={`-mb-px border-b-2 px-3.5 py-2 text-sm font-medium transition-colors ${view?.key === v.key ? 'border-cyan-400 text-white' : 'border-transparent text-zinc-400 hover:border-zinc-600 hover:text-zinc-200'}`}
+          >
+            {v.label}
+          </button>
+        ))}
+        {!view && <span className="-mb-px border-b-2 border-cyan-400/60 px-3.5 py-2 text-sm font-medium text-zinc-200">Custom search</span>}
+      </div>
+      {view && <p className="-mt-2 mb-3 text-xs text-zinc-500">{view.hint}</p>}
       <div className="space-y-4">
         <QueryBar value={query} onSubmit={submit} errors={parsed.errors} />
         <CveResults filters={parsed.api} view={params} onView={setParams} defaultSort={parsed.text ? 'relevance' : 'published'} />

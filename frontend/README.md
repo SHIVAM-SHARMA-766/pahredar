@@ -30,7 +30,7 @@ React Router 8 needs Node ≥ 22.22 and the dev machine has Node 20, so the app 
 | Path | Page |
 |---|---|
 | `/` | Dashboard: tile strip with period deltas, metric widget (`?metric=&range=&period=&chart=&from=&to=`), severity mix, EPSS movers (or highest EPSS this week until history exists), and three CVE lists (`pages/DashboardPage.tsx`) |
-| `/cves` | CVE explorer: `?query=` in the query language, plus `sort`, `order`, `page`, `page_size`. The sidebar's "Known exploited" (`query=is:kev`, sorted by KEV date) and "Likely exploited" (`query=epss:>10 -is:kev`, sorted by EPSS) are links with a query; the page title and highlighted nav item follow them |
+| `/cves` | CVE explorer: `?query=` in the query language, plus `sort`, `order`, `page`, `page_size`. Saved views are tabs above the query bar (`VIEWS` in `CveListPage.tsx`: All CVEs, Known exploited, Likely exploited, Ransomware, Critical · 7 days); a tab is active while the URL's `query` equals its own, otherwise the page shows "Custom search" |
 | `/cves/:id` | CVE detail: assessment banner, key facts, remediation, CVSS breakdown, affected products, exploits and GitHub PoCs, CNA advisory details, grouped references, related CVEs, CWE names, KEV, EPSS chart, SSVC, timeline |
 | `/vendors` | Vendors and products tabs (`?tab=products`) with search (`?q=`), ranked by CVE count. Names show the display label; links use the canonical key |
 | `/vendors/:vendor` | Vendor stats, CVEs per year, top 200 products |

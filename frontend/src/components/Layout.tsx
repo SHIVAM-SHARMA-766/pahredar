@@ -4,12 +4,10 @@ import {
   Bug,
   ChevronsLeft,
   ChevronsRight,
-  Flame,
   LayoutDashboard,
   Menu,
   RefreshCw,
   Search,
-  TrendingUp,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -29,13 +27,6 @@ interface NavItem {
   active: (loc: Location) => boolean
 }
 
-// Saved views are queries in the explorer's query language (lib/query.ts).
-const KEV_QUERY = 'is:kev'
-const LIKELY_QUERY = 'epss:>10 -is:kev'
-const queryOf = (loc: Location) => (loc.pathname === '/cves' ? new URLSearchParams(loc.search).get('query') : null)
-const isKevList = (loc: Location) => queryOf(loc) === KEV_QUERY
-const isLikelyList = (loc: Location) => queryOf(loc) === LIKELY_QUERY
-
 // Sections mirror what Pahredar does; "Known exploited" and "Likely exploited"
 // are saved views of the CVE explorer, so they share its route.
 const SECTIONS: { title: string; dot: string; items: NavItem[] }[] = [
@@ -48,9 +39,9 @@ const SECTIONS: { title: string; dot: string; items: NavItem[] }[] = [
     title: 'Vulnerability intelligence',
     dot: 'bg-amber-400',
     items: [
-      { to: '/cves', label: 'CVE explorer', icon: Bug, active: (l) => l.pathname.startsWith('/cves') && !isKevList(l) && !isLikelyList(l) },
-      { to: explorerLink(KEV_QUERY, 'kev_added'), label: 'Known exploited', icon: Flame, active: isKevList },
-      { to: explorerLink(LIKELY_QUERY, 'epss'), label: 'Likely exploited', icon: TrendingUp, active: isLikelyList },
+      // Known exploited, Likely exploited, and other saved views are tabs
+      // inside the explorer, not separate entries.
+      { to: '/cves', label: 'CVE explorer', icon: Bug, active: (l) => l.pathname.startsWith('/cves') },
       { to: '/vendors', label: 'Vendors & products', icon: Building2, active: (l) => l.pathname.startsWith('/vendors') },
     ],
   },

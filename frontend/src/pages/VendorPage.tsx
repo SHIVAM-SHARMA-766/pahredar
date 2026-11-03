@@ -5,6 +5,7 @@ import { Link, useParams, useSearchParams } from 'react-router'
 import { api } from '../api/client'
 import { YearChart } from '../components/charts'
 import { Breadcrumbs, Card, ErrorBox, PageHeader, SeverityBar, SeverityStats, Spinner } from '../components/ui'
+import { Gauge } from '../components/Gauge'
 import { fmtDate, fmtNumber, vendorPath } from '../lib/format'
 import { useOrigin } from '../lib/origin'
 import { explorerLink } from '../lib/query'
@@ -40,8 +41,15 @@ export function VendorPage() {
         />
       </div>
       <Card>
-        <SeverityStats counts={v} />
-        <SeverityBar counts={v} className="mt-4 h-2.5" />
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center">
+          <div className="min-w-0 flex-1">
+            <SeverityStats counts={v} />
+            <SeverityBar counts={v} className="mt-4 h-2.5" />
+          </div>
+          <div className="shrink-0 border-t border-zinc-800 pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
+            <RiskGauge counts={v} />
+          </div>
+        </div>
       </Card>
       <Card title="Published CVEs per year">
         <YearChart years={v.years} />
@@ -81,8 +89,15 @@ export function ProductPage() {
         <PageHeader title={p.label} subtitle={<>Latest CVE {fmtDate(p.latest_published)}</>} />
       </div>
       <Card>
-        <SeverityStats counts={p} />
-        <SeverityBar counts={p} className="mt-4 h-2.5" />
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center">
+          <div className="min-w-0 flex-1">
+            <SeverityStats counts={p} />
+            <SeverityBar counts={p} className="mt-4 h-2.5" />
+          </div>
+          <div className="shrink-0 border-t border-zinc-800 pt-5 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
+            <RiskGauge counts={p} />
+          </div>
+        </div>
       </Card>
       <Card title="Published CVEs per year">
         <YearChart years={p.years} />
@@ -90,4 +105,13 @@ export function ProductPage() {
       <CveResults filters={filters} view={view} onView={setView} title={`CVEs affecting ${p.label}`} />
     </div>
   )
+}
+
+// RiskGauge shows the share of a vendor's / product's CVEs that are critical
+// or high, as a radial signal.
+function RiskGauge({ counts }: { counts: { cves: number; critical: number; high: number } }) {
+  const pct = counts.cves ? Math.round(((counts.critical + counts.high) / counts.cves) * 100) : 0
+  const color = pct >= 40 ? '#f87171' : pct >= 20 ? '#fb923c' : '#fbbf24'
+  const risk = pct >= 40 ? 'High-severity heavy' : pct >= 20 ? 'Elevated' : 'Mostly lower severity'
+  return <Gauge value={pct} max={100} display={`${pct}%`} caption="crit + high" color={color} risk={risk} />
 }

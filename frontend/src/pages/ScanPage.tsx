@@ -5,6 +5,7 @@ import { Link, useSearchParams } from 'react-router'
 import { api, ApiError } from '../api/client'
 import type { ScanFinding, ScanJob, ScanReport, ScanSeverity, ScanTech } from '../api/types'
 import { Card, ErrorBox, Tag } from '../components/ui'
+import { Gauge } from '../components/Gauge'
 import { relativeTime } from '../lib/format'
 import { useOrigin } from '../lib/origin'
 
@@ -290,23 +291,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 const gaugeStroke: Record<string, string> = { A: '#34d399', B: '#22d3ee', C: '#fbbf24', D: '#fb923c', F: '#f87171' }
 
 function ScoreGauge({ score, grade }: { score: number; grade: string }) {
-  const r = 52
-  const c = 2 * Math.PI * r
-  const off = c * (1 - Math.max(0, Math.min(score, 100)) / 100)
-  const stroke = gaugeStroke[grade] ?? '#f87171'
-  return (
-    <div className="flex flex-col items-center">
-      <svg viewBox="0 0 140 140" className="h-36 w-36 -rotate-90">
-        <circle cx="70" cy="70" r={r} fill="none" stroke="currentColor" strokeWidth="10" className="text-zinc-800" />
-        <circle cx="70" cy="70" r={r} fill="none" stroke={stroke} strokeWidth="10" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off} />
-      </svg>
-      <div className="-mt-24 flex flex-col items-center">
-        <span className="text-3xl font-bold text-white">{score}</span>
-        <span className="text-xs tracking-wider text-zinc-500 uppercase">score</span>
-      </div>
-      <div className="mt-10 text-sm font-medium" style={{ color: stroke }}>Grade {grade} · {gradeRisk[grade] ?? 'Unknown'}</div>
-    </div>
-  )
+  return <Gauge value={score} max={100} display={String(score)} caption="score" color={gaugeStroke[grade] ?? '#f87171'} risk={`Grade ${grade} · ${gradeRisk[grade] ?? 'Unknown'}`} />
 }
 
 function ActiveCard({ active }: { active: NonNullable<ScanReport['active']> }) {

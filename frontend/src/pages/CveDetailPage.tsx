@@ -15,7 +15,8 @@ import { Breadcrumbs, Card, ErrorBox, ExploitTag, KevTag, RansomwareTag, Severit
 import { parseVector } from '../lib/cvss'
 import { fmtDate, fmtEpss, fmtPercentile, productPath, vendorPath } from '../lib/format'
 import { readOrigin } from '../lib/origin'
-import { severityText } from '../lib/severity'
+import { severityLabel, severityText } from '../lib/severity'
+import { Gauge } from '../components/Gauge'
 import { describeVersions, fixedVersions } from '../lib/versions'
 
 const link = 'text-cyan-300 hover:text-cyan-200'
@@ -118,6 +119,7 @@ function CveTabs({ c }: { c: CveDetail }) {
             <TimelineCard c={c} />
           </div>
           <div className="min-w-0 space-y-6">
+            <SignalCard c={c} />
             <WeaknessCard c={c} />
             {c.kev && <KevCard c={c} />}
             {c.euvd && (
@@ -311,6 +313,29 @@ function Header({ c }: { c: CveDetail }) {
         {c.assigner && <> · CNA {c.assigner}</>}
       </p>
     </div>
+  )
+}
+
+const sevStroke: Record<string, string> = {
+  CRITICAL: '#f87171', HIGH: '#fb923c', MEDIUM: '#fbbf24', LOW: '#38bdf8', NONE: '#71717a', UNKNOWN: '#71717a',
+}
+
+// SignalCard shows the CVE's CVSS as a radial gauge plus the priority and
+// exploitation at a glance (SOCRadar-style).
+function SignalCard({ c }: { c: CveDetail }) {
+  const best = c.cvss.v4 ?? c.cvss.v3 ?? c.cvss.v2
+  const score = best?.score ?? 0
+  const stroke = sevStroke[c.severity] ?? '#71717a'
+  const p = c.assessment.priority
+  return (
+    <Card title="Signal">
+      <Gauge value={score} max={10} display={best ? score.toFixed(1) : '—'} caption={best ? `CVSS v${best.version}` : 'CVSS'} color={stroke} risk={severityLabel(c.severity)} />
+      <div className="mt-3 space-y-1 text-center text-sm">
+        {p && <div className={`font-medium ${priorityInfo[p].text}`}>{p} · {priorityInfo[p].label}</div>}
+        <div className="text-zinc-400">{exploitationLabel[c.assessment.exploitation]}</div>
+        {c.epss && <div className="text-xs text-zinc-500">EPSS {fmtEpss(c.epss.score)} · {fmtPercentile(c.epss.percentile)}</div>}
+      </div>
+    </Card>
   )
 }
 

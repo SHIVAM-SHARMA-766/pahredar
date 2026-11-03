@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, CheckCircle2, Circle, Fingerprint, Loader2, Lock, Search, ShieldCheck, Zap } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronRight, Circle, Download, Fingerprint, Info, Loader2, Lock, Search, ShieldCheck, Zap } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { api, ApiError } from '../api/client'
@@ -79,6 +79,29 @@ export function ScanPage() {
     if (t && (!runActive || authorized)) start.mutate({ target: t, active: runActive, authorized })
   }
   const rescan = () => report && start.mutate({ target: report.target, fresh: true, active: runActive, authorized })
+  const newScan = () => {
+    setJobId(null)
+    const next = new URLSearchParams(params)
+    next.delete('job')
+    setParams(next, { replace: true })
+  }
+
+  // Once a scan is started, the landing is replaced by the result view.
+  if (jobId != null) {
+    return (
+      <ScanResult
+        host={jobData?.host ?? report?.host ?? input.trim()}
+        active={jobData?.active ?? runActive}
+        scanning={scanning}
+        job={jobData}
+        report={report}
+        cached={jobData?.cached ?? false}
+        errMsg={errMsg}
+        onNew={newScan}
+        onRescan={rescan}
+      />
+    )
+  }
 
   return (
     <div>
@@ -109,8 +132,8 @@ GET /.git/HEAD  404     GET /.env  404     /.well-known/security.txt 200
         <form onSubmit={submit} className={`mx-auto mt-5 flex max-w-xl items-center gap-2 rounded-full border bg-zinc-950 py-1.5 pr-1.5 pl-4 ${active ? 'border-rose-400/30' : 'border-zinc-800 focus-within:border-cyan-400/40'}`}>
           <Search className="h-4 w-4 shrink-0 text-zinc-500" />
           <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="example.com" autoFocus className="min-w-0 flex-1 bg-transparent py-1.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none" />
-          <button type="submit" disabled={scanning || !input.trim() || (runActive && !authorized)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium text-white disabled:opacity-50 ${active ? 'bg-rose-500 hover:bg-rose-400' : 'bg-cyan-500 hover:bg-cyan-400'}`}>
-            {scanning ? 'Scanning…' : active ? 'Run active scan' : 'Check exposure'} <span aria-hidden>→</span>
+          <button type="submit" disabled={!input.trim() || (runActive && !authorized)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium text-white disabled:opacity-50 ${active ? 'bg-rose-500 hover:bg-rose-400' : 'bg-cyan-500 hover:bg-cyan-400'}`}>
+            {active ? 'Run active scan' : 'Check exposure'} <span aria-hidden>→</span>
           </button>
         </form>
 
@@ -132,20 +155,194 @@ GET /.git/HEAD  404     GET /.env  404     /.well-known/security.txt 200
       </div>
 
       <div className="mt-8 space-y-6">
-        {scanning && <ProgressCard job={jobData} active={runActive} target={jobData?.target ?? input.trim()} />}
-        {errMsg && !scanning && <ErrorBox error={errMsg} />}
-        {report && !scanning && (
-          <>
-            <div className="flex items-center justify-end">
-              <button type="button" onClick={rescan} className="rounded-lg border border-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800">Re-scan</button>
-            </div>
-            <ReportView report={report} cached={jobData?.cached ?? false} />
-          </>
-        )}
-        {!report && !scanning && !errMsg && <ScanIntro />}
+        <ScanIntro />
       </div>
     </div>
   )
+}
+
+// gradeAccent is the left-border colour of the result header.
+const gradeAccent: Record<string, string> = {
+  A: 'border-l-emerald-400', B: 'border-l-cyan-400', C: 'border-l-amber-400', D: 'border-l-orange-400', F: 'border-l-red-400',
+}
+const gradeRisk: Record<string, string> = { A: 'Low risk', B: 'Low risk', C: 'Medium risk', D: 'High risk', F: 'High risk' }
+
+function ScanResult({ host, active, scanning, job, report, cached, errMsg, onNew, onRescan }: {
+  host: string; active: boolean; scanning: boolean; job?: ScanJob; report?: ScanReport; cached: boolean; errMsg: string | null; onNew: () => void; onRescan: () => void
+}) {
+  const grade = report?.grade ?? '?'
+  const [copied, setCopied] = useState(false)
+  const counts = (report?.findings ?? []).reduce<Record<string, number>>((a, f) => ((a[f.severity] = (a[f.severity] ?? 0) + 1), a), {})
+  const copyLink = () => {
+    navigator.clipboard?.writeText(window.location.href).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200) }).catch(() => {})
+  }
+  return (
+    <div>
+      <div className="mb-3 flex items-center gap-1 text-sm text-zinc-500">
+        <button onClick={onNew} className="hover:text-cyan-200">Scanner</button>
+        <ChevronRight className="h-3.5 w-3.5 text-zinc-600" />
+        <span className="font-mono text-zinc-300">{host}</span>
+      </div>
+
+      {/* Header */}
+      <div className={`overflow-hidden rounded-xl border border-zinc-800 border-l-4 bg-zinc-900/40 ${report ? gradeAccent[grade] ?? 'border-l-zinc-600' : 'border-l-cyan-400'}`}>
+        <div className="p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <Tag tone="zinc">Endpoint</Tag>
+                {report && <span className={`rounded px-2 py-0.5 font-semibold ring-1 ring-inset ${gradeColor[grade] ?? gradeColor.F}`}>Grade {grade} · {report.score}/100</span>}
+                {active && <Tag tone="red">Active</Tag>}
+                {cached && <Tag>cached</Tag>}
+              </div>
+              <h1 className="mt-2 font-mono text-2xl font-bold break-all text-white">{host}</h1>
+              <p className="mt-1 flex flex-wrap items-center gap-1 text-sm text-zinc-500">
+                <Info className="h-3.5 w-3.5" /> The grade is heuristic — verify before acting on results.
+                {report && <> · scanned {relativeTime(report.scanned_at)}</>}
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              {report && <button onClick={onRescan} className="rounded-lg border border-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800">Re-scan</button>}
+              <button onClick={onNew} className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-200 hover:bg-cyan-500/20">New scan</button>
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 divide-x divide-zinc-800 border-t border-zinc-800 sm:grid-cols-4">
+          <Stat label="Scanned" value={report ? relativeTime(report.scanned_at) : scanning ? 'running…' : '—'} />
+          <Stat label="Duration" value={report?.duration ?? '—'} />
+          <Stat label="Findings" value={report ? String(report.findings.filter((f) => f.severity !== 'good').length) : '—'} />
+          <Stat label="Score" value={report ? `${report.score}/100` : '—'} />
+        </div>
+      </div>
+
+      {/* Body */}
+      {scanning ? (
+        <div className="mt-6"><ProgressCard job={job} active={active} target={host} /></div>
+      ) : errMsg ? (
+        <div className="mt-6"><ErrorBox error={errMsg} /></div>
+      ) : report ? (
+        <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_340px]">
+          <div className="min-w-0 space-y-6">
+            <Card title="Findings">
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                {(['critical', 'high', 'medium', 'low', 'info', 'good'] as ScanSeverity[]).filter((s) => counts[s]).map((s) => (
+                  <span key={s} className={`rounded px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset ${sevStyle[s].tag}`}>{counts[s]} {sevStyle[s].label.toLowerCase()}</span>
+                ))}
+              </div>
+              {report.findings.length === 0 ? <p className="text-sm text-zinc-500">No findings.</p> : (
+                <ul className="space-y-2">{report.findings.map((f, i) => <FindingRow key={i} f={f} />)}</ul>
+              )}
+            </Card>
+            {report.active?.ran && <ActiveCard active={report.active} />}
+            <div className="grid gap-6 xl:grid-cols-2">
+              {report.tech.length > 0 && <TechCard tech={report.tech} />}
+              {report.tls && <TlsCard tls={report.tls} />}
+              <HeadersCard report={report} />
+              {report.dns && <DnsCard dns={report.dns} />}
+              {report.paths.some((p) => p.exposed) && <PathsCard report={report} />}
+              {report.related && <RelatedCard related={report.related} />}
+            </div>
+            {report.errors.length > 0 && (
+              <Card title="Scan notes"><ul className="space-y-1 text-xs text-zinc-500">{report.errors.map((e, i) => <li key={i}>{e}</li>)}</ul></Card>
+            )}
+          </div>
+
+          <div className="min-w-0 space-y-6">
+            <Card title="Score">
+              <ScoreGauge score={report.score} grade={grade} />
+            </Card>
+            <Card title="Target">
+              <dl>
+                <Row label="IP">{report.ip}</Row>
+                {report.http && <Row label="Final URL"><a href={report.http.final_url} target="_blank" rel="noreferrer" className={link}>{report.http.final_url}</a></Row>}
+                {report.http?.server && <Row label="Server">{report.http.server}</Row>}
+                {report.http?.powered_by && <Row label="Powered by">{report.http.powered_by}</Row>}
+                {report.http && <Row label="https redirect">{report.http.https_redirect ? 'yes' : 'no'}</Row>}
+                {report.http && report.http.methods.length > 0 && <Row label="Methods">{report.http.methods.join(', ')}</Row>}
+              </dl>
+            </Card>
+            <Card title="Export">
+              <button onClick={() => downloadJSON(report)} className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-950 py-2 text-sm text-zinc-200 hover:bg-zinc-800">
+                <Download className="h-4 w-4" /> Download report (JSON)
+              </button>
+              <div className="mt-3 text-xs text-zinc-500">Permalink</div>
+              <div className="mt-1 flex items-center gap-2">
+                <input readOnly value={window.location.href} className="min-w-0 flex-1 truncate rounded border border-zinc-800 bg-zinc-950 px-2 py-1 font-mono text-xs text-zinc-400" />
+                <button onClick={copyLink} className="shrink-0 rounded border border-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800">{copied ? 'Copied' : 'Copy'}</button>
+              </div>
+            </Card>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="px-4 py-3 text-center">
+      <div className="font-mono text-lg font-semibold text-zinc-100">{value}</div>
+      <div className="text-xs tracking-wider text-zinc-500 uppercase">{label}</div>
+    </div>
+  )
+}
+
+const gaugeStroke: Record<string, string> = { A: '#34d399', B: '#22d3ee', C: '#fbbf24', D: '#fb923c', F: '#f87171' }
+
+function ScoreGauge({ score, grade }: { score: number; grade: string }) {
+  const r = 52
+  const c = 2 * Math.PI * r
+  const off = c * (1 - Math.max(0, Math.min(score, 100)) / 100)
+  const stroke = gaugeStroke[grade] ?? '#f87171'
+  return (
+    <div className="flex flex-col items-center">
+      <svg viewBox="0 0 140 140" className="h-36 w-36 -rotate-90">
+        <circle cx="70" cy="70" r={r} fill="none" stroke="currentColor" strokeWidth="10" className="text-zinc-800" />
+        <circle cx="70" cy="70" r={r} fill="none" stroke={stroke} strokeWidth="10" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off} />
+      </svg>
+      <div className="-mt-24 flex flex-col items-center">
+        <span className="text-3xl font-bold text-white">{score}</span>
+        <span className="text-xs tracking-wider text-zinc-500 uppercase">score</span>
+      </div>
+      <div className="mt-10 text-sm font-medium" style={{ color: stroke }}>Grade {grade} · {gradeRisk[grade] ?? 'Unknown'}</div>
+    </div>
+  )
+}
+
+function ActiveCard({ active }: { active: NonNullable<ScanReport['active']> }) {
+  return (
+    <Card title="Active checks (Nuclei)">
+      <p className="mb-2 text-xs text-zinc-500">
+        {active.engine} · {active.duration} · {active.findings.length} template{active.findings.length === 1 ? '' : 's'} matched. These verify issues by probing the target; results also appear in Findings.
+        {active.note && <span className="text-amber-300/80"> · {active.note}</span>}
+      </p>
+      {active.findings.length === 0 ? (
+        <p className="text-sm text-zinc-500">No vulnerability template matched.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {active.findings.map((f) => (
+            <li key={f.template_id} className="flex flex-wrap items-baseline gap-x-2 text-sm">
+              <span className={`inline-flex h-5 items-center rounded px-1.5 text-xs font-medium ring-1 ring-inset ${sevStyle[(f.severity as ScanSeverity) in sevStyle ? (f.severity as ScanSeverity) : 'info'].tag}`}>{f.severity}</span>
+              <span className="text-zinc-200">{f.name}</span>
+              {f.count > 1 && <span className="text-xs text-zinc-500">×{f.count}</span>}
+              {f.cves.map((c) => <Link key={c} to={`/cves/${c}`} className="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-xs text-cyan-300 hover:bg-zinc-700">{c}</Link>)}
+              <span className="font-mono text-xs text-zinc-600">{f.template_id}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  )
+}
+
+function downloadJSON(report: ScanReport) {
+  const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `scan-${report.host}.json`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 function ProgressCard({ job, active, target }: { job?: ScanJob; active: boolean; target: string }) {
@@ -228,13 +425,6 @@ function ScanIntro() {
 }
 
 
-function GradeChip({ grade, small }: { grade: string; small?: boolean }) {
-  return (
-    <span className={`inline-flex items-center justify-center rounded font-bold ring-1 ring-inset ${gradeColor[grade] ?? gradeColor.F} ${small ? 'h-6 w-6 text-sm' : 'h-16 w-16 text-4xl'}`}>
-      {grade}
-    </span>
-  )
-}
 
 const featureTone: Record<string, string> = {
   violet: 'bg-violet-500/15 text-violet-300',
@@ -252,78 +442,6 @@ function Feature({ icon: Icon, tone, title, text }: { icon: typeof Search; tone:
   )
 }
 
-function ReportView({ report, cached }: { report: ScanReport; cached: boolean }) {
-  const counts = report.findings.reduce<Record<string, number>>((a, f) => ((a[f.severity] = (a[f.severity] ?? 0) + 1), a), {})
-  return (
-    <>
-      <Card>
-        <div className="flex flex-wrap items-center gap-4">
-          <GradeChip grade={report.grade} />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-baseline gap-2">
-              <h2 className="font-mono text-lg font-semibold text-white">{report.host}</h2>
-              <span className="text-sm text-zinc-500">{report.ip}</span>
-            </div>
-            <div className="mt-1 flex flex-wrap gap-1.5">
-              {(['critical', 'high', 'medium', 'low', 'info', 'good'] as ScanSeverity[]).filter((s) => counts[s]).map((s) => (
-                <span key={s} className={`rounded px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset ${sevStyle[s].tag}`}>{counts[s]} {sevStyle[s].label.toLowerCase()}</span>
-              ))}
-            </div>
-            <p className="mt-1.5 text-xs text-zinc-500">
-              Score {report.score}/100 · scanned in {report.duration} · {relativeTime(report.scanned_at)}
-              {cached && ' · cached'}{report.http && <> · <a href={report.http.final_url} target="_blank" rel="noreferrer" className={link}>{report.http.final_url}</a></>}
-            </p>
-          </div>
-        </div>
-      </Card>
-
-      <Card title="Findings">
-        {report.findings.length === 0 ? <p className="text-sm text-zinc-500">No findings.</p> : (
-          <ul className="space-y-2">
-            {report.findings.map((f, i) => <FindingRow key={i} f={f} />)}
-          </ul>
-        )}
-      </Card>
-
-      {report.active?.ran && (
-        <Card title="Active checks (Nuclei)">
-          <p className="mb-2 text-xs text-zinc-500">
-            {report.active.engine} · {report.active.duration} · {report.active.findings.length} template{report.active.findings.length === 1 ? '' : 's'} matched. These verify issues by probing the target; results also appear in Findings above.
-            {report.active.note && <span className="text-amber-300/80"> · {report.active.note}</span>}
-          </p>
-          {report.active.findings.length === 0 ? (
-            <p className="text-sm text-zinc-500">No vulnerability template matched.</p>
-          ) : (
-            <ul className="space-y-1.5">
-              {report.active.findings.map((f) => (
-                <li key={f.template_id} className="flex flex-wrap items-baseline gap-x-2 text-sm">
-                  <span className={`inline-flex h-5 items-center rounded px-1.5 text-xs font-medium ring-1 ring-inset ${sevStyle[(f.severity as ScanSeverity) in sevStyle ? (f.severity as ScanSeverity) : 'info'].tag}`}>{f.severity}</span>
-                  <span className="text-zinc-200">{f.name}</span>
-                  {f.count > 1 && <span className="text-xs text-zinc-500">×{f.count}</span>}
-                  {f.cves.map((c) => <Link key={c} to={`/cves/${c}`} className="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-xs text-cyan-300 hover:bg-zinc-700">{c}</Link>)}
-                  <span className="font-mono text-xs text-zinc-600">{f.template_id}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      )}
-
-      <div className="grid gap-6 md:grid-cols-2">
-        {report.tech.length > 0 && <TechCard tech={report.tech} />}
-        {report.tls && <TlsCard tls={report.tls} />}
-        <HeadersCard report={report} />
-        {report.dns && <DnsCard dns={report.dns} />}
-        {report.paths.some((p) => p.exposed) && <PathsCard report={report} />}
-        {report.related && <RelatedCard related={report.related} />}
-      </div>
-
-      {report.errors.length > 0 && (
-        <Card title="Scan notes"><ul className="space-y-1 text-xs text-zinc-500">{report.errors.map((e, i) => <li key={i}>{e}</li>)}</ul></Card>
-      )}
-    </>
-  )
-}
 
 function FindingRow({ f }: { f: ScanFinding }) {
   const Icon = f.severity === 'good' ? ShieldCheck : AlertTriangle

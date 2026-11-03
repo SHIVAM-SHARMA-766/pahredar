@@ -8,7 +8,7 @@ import {
   type DistroPackage, type LibraryPackage,
 } from '../lib/affected'
 import {
-  activeScans, cveLookups, sigmaCommands, suricataCommands, versionCommand, weaknessHints, windowsChecks, type Command,
+  activeScans, cveLookups, sigmaCommands, suricataCommands, versionCommand, weaknessHints, windowsChecks, yaraFile, type Command,
 } from '../lib/detection'
 import { Card, Tag } from './ui'
 
@@ -130,7 +130,76 @@ function SuricataRule({ r }: { r: DetectionRule }) {
   )
 }
 
-type Tab = 'exposure' | 'scan' | 'network' | 'logs' | 'hunt'
+type Tab = 'exposure' | 'scan' | 'network' | 'logs' | 'files' | 'hunt'
+
+const relatedTag = <Tag title="The rule's references cite this CVE: a behaviour detection that also catches it, not one written for it">related</Tag>
+
+// RuleDetails: one Splunk, Elastic, or YARA rule, expandable to its query.
+function RuleDetails({ r, chips, children }: { r: DetectionRule; chips?: ReactNode; children?: ReactNode }) {
+  return (
+    <li className="rounded-md border border-zinc-800 px-3 py-2">
+      <details>
+        <summary className="cursor-pointer list-none">
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span className="font-medium text-zinc-100">{r.title}</span>
+            {r.meta.related && relatedTag}
+            {chips}
+          </div>
+          {r.meta.description && r.meta.description !== r.title && <p className="mt-0.5 line-clamp-2 text-xs text-zinc-500">{r.meta.description}</p>}
+          <span className="text-xs text-cyan-300/80">Show rule</span>
+        </summary>
+        <div className="mt-3 space-y-3">
+          {children}
+          <CodeBlock text={r.body} />
+          {r.url && <a href={r.url} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-xs ${link}`}>View source <ExternalLink className="h-3 w-3" /></a>}
+          {r.meta.license && <span className="ml-3 text-xs text-zinc-600">License: {r.meta.license}</span>}
+        </div>
+      </details>
+    </li>
+  )
+}
+
+function SplunkRule({ r }: { r: DetectionRule }) {
+  return (
+    <RuleDetails r={r} chips={<>{r.meta.type && <Tag>{r.meta.type}</Tag>}{r.meta.status && r.meta.status !== 'production' && <Tag>{r.meta.status}</Tag>}</>}>
+      {r.meta.data_source?.length ? <p className="text-xs text-zinc-400">Data source: {r.meta.data_source.join(', ')}</p> : null}
+      {r.meta.how_to_implement && <p className="text-xs whitespace-pre-line text-zinc-500">{r.meta.how_to_implement}</p>}
+    </RuleDetails>
+  )
+}
+
+function ElasticRule({ r }: { r: DetectionRule }) {
+  return (
+    <RuleDetails r={r} chips={<>{r.meta.language && <Tag tone="cyan">{r.meta.language}</Tag>}{r.meta.severity && <Tag tone={levelTone[r.meta.severity as keyof typeof levelTone] ?? 'zinc'}>{r.meta.severity}</Tag>}</>}>
+      {r.meta.index?.length ? <p className="font-mono text-xs text-zinc-400">index: {r.meta.index.join(', ')}</p> : null}
+    </RuleDetails>
+  )
+}
+
+function SnortRule({ r }: { r: DetectionRule }) {
+  return (
+    <li className="border-b border-zinc-800/60 py-1.5 last:border-0">
+      <details>
+        <summary className="flex cursor-pointer list-none flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="font-mono text-xs text-zinc-500 tabular-nums">{r.rule_id}</span>
+          <span className="min-w-0 flex-1 text-zinc-200">{r.title}</span>
+          {r.meta.enabled === false && <Tag tone="amber" title="Shipped commented out; uncomment it to use it">disabled by default</Tag>}
+          {r.meta.classtype && <span className="text-xs text-zinc-500">{r.meta.classtype}</span>}
+        </summary>
+        <CodeBlock text={r.body} />
+      </details>
+    </li>
+  )
+}
+
+function snortCommands(rules: DetectionRule[]): Command[] {
+  const sids = rules.map((r) => r.rule_id).slice(0, 40)
+  return [
+    { label: 'Download the Snort 3 community rules', cmd: 'curl -sLO https://www.snort.org/downloads/community/snort3-community-rules.tar.gz && tar xzf snort3-community-rules.tar.gz' },
+    { label: 'Run Snort 3 with them on an interface', cmd: 'sudo snort -c /usr/local/etc/snort/snort.lua -R snort3-community-rules/snort3-community.rules -i eth0 -A alert_fast' },
+    { label: 'Hunt past alerts for these rules', cmd: `grep -E '\[1:(${sids.join('|')}):' /var/log/snort/alert_fast.txt` },
+  ]
+}
 
 // ScriptBlock shows a generated script with copy and download buttons.
 function ScriptBlock({ file, text }: { file: string; text: string }) {
@@ -334,7 +403,13 @@ export function DetectionCard({ c }: { c: CveDetail }) {
   const lookups = cveLookups(c.id, ecosystems)
   const scans = activeScans(c.id, c.exploits, rules, host)
   const suricata = rules.filter((r) => r.source === 'suricata')
+  const snort = rules.filter((r) => r.source === 'snort')
   const sigma = rules.filter((r) => r.source === 'sigma')
+  const splunk = rules.filter((r) => r.source === 'splunk')
+  const elastic = rules.filter((r) => r.source === 'elastic')
+  const yara = rules.filter((r) => r.source === 'yara')
+  const networkRules = suricata.length + snort.length
+  const logRules = sigma.length + splunk.length + elastic.length
   const hints = weaknessHints(c.cwes.map((w) => w.id))
   const vector = (c.cvss.v4 ?? c.cvss.v3 ?? c.cvss.v2)?.vector ?? ''
   const network = /AV:N/.test(vector)
@@ -350,28 +425,32 @@ export function DetectionCard({ c }: { c: CveDetail }) {
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'exposure', label: 'Am I affected?', count: versionChecks.length || undefined },
     { key: 'scan', label: 'Active scan', count: scans.length },
-    { key: 'network', label: 'Network IDS', count: suricata.length },
-    { key: 'logs', label: 'Logs / SIEM', count: sigma.length },
+    { key: 'network', label: 'Network IDS', count: networkRules },
+    { key: 'logs', label: 'Logs / SIEM', count: logRules },
+    { key: 'files', label: 'Files (YARA)', count: yara.length },
     { key: 'hunt', label: 'What to look for', count: hints.length || undefined },
   ]
   const firstWithData = tabs.find((t) => t.key !== 'exposure' && t.key !== 'hunt' && t.count)?.key
   const [tab, setTab] = useState<Tab | null>(null)
   const [allSuricata, setAllSuricata] = useState(false)
+  const [allSnort, setAllSnort] = useState(false)
   const current = tab ?? (versionChecks.length ? 'exposure' : firstWithData ?? 'exposure')
 
   // "Start here": the most direct way to know, then the way to catch attempts.
   const steps: [string, Tab][] = []
   if (versionChecks.length) steps.push([`check the installed version (${versionChecks.join(', ')})`, 'exposure'])
   if (scans.length) steps.push([`scan exposed hosts with ${scans.length === 1 ? 'the ready-made check' : `${scans.length} ready-made checks`}`, 'scan'])
-  if (suricata.length) steps.push([`watch traffic with ${suricata.length} Suricata rule${suricata.length > 1 ? 's' : ''}`, 'network'])
-  if (sigma.length) steps.push([`alert on logs with ${sigma.length} Sigma rule${sigma.length > 1 ? 's' : ''}`, 'logs'])
+  if (networkRules) steps.push([`watch traffic with ${networkRules} network rule${networkRules > 1 ? 's' : ''}`, 'network'])
+  if (logRules) steps.push([`alert on logs with ${logRules} SIEM rule${logRules > 1 ? 's' : ''}`, 'logs'])
+  if (yara.length) steps.push([`scan files with ${yara.length} YARA rule${yara.length > 1 ? 's' : ''}`, 'files'])
   if (!steps.length && hints.length) steps.push(['hunt for the weakness class indicators', 'hunt'])
 
   const coverage: [string, boolean, string, Tab][] = [
     ['Version check', versionChecks.length > 0, versionChecks.join(' · ') || (pending ? 'loading…' : 'none'), 'exposure'],
     ['Remote scan', scans.length > 0, scans.length ? String(scans.length) : 'none', 'scan'],
-    ['Network IDS', suricata.length > 0, suricata.length ? String(suricata.length) : 'none', 'network'],
-    ['Logs / SIEM', sigma.length > 0, sigma.length ? String(sigma.length) : 'none', 'logs'],
+    ['Network IDS', networkRules > 0, networkRules ? String(networkRules) : 'none', 'network'],
+    ['Logs / SIEM', logRules > 0, logRules ? String(logRules) : 'none', 'logs'],
+    ['Files (YARA)', yara.length > 0, yara.length ? String(yara.length) : 'none', 'files'],
   ]
 
   return (
@@ -459,26 +538,74 @@ export function DetectionCard({ c }: { c: CveDetail }) {
         )}
 
         {current === 'network' && (
-          suricata.length > 0 ? (
+          networkRules > 0 ? (
             <>
-              <Section title="Deploy and hunt"><Commands items={suricataCommands(rules)} /></Section>
-              <Section title={`Suricata rules · ET Open (${suricata.length})`} hint="Proofpoint Emerging Threats Open ruleset. Click a rule to see it.">
-                <ul>{suricata.slice(0, allSuricata ? undefined : 15).map((r) => <SuricataRule key={r.rule_id} r={r} />)}</ul>
-                {!allSuricata && suricata.length > 15 && <button className={`mt-2 text-sm ${link}`} onClick={() => setAllSuricata(true)}>Show all {suricata.length} rules</button>}
-              </Section>
+              {suricata.length > 0 && (
+                <>
+                  <Section title="Suricata: deploy and hunt"><Commands items={suricataCommands(rules)} /></Section>
+                  <Section title={`Suricata rules · ET Open (${suricata.length})`} hint="Proofpoint Emerging Threats Open ruleset. Click a rule to see it.">
+                    <ul>{suricata.slice(0, allSuricata ? undefined : 15).map((r) => <SuricataRule key={r.rule_id} r={r} />)}</ul>
+                    {!allSuricata && suricata.length > 15 && <button className={`mt-2 text-sm ${link}`} onClick={() => setAllSuricata(true)}>Show all {suricata.length} rules</button>}
+                  </Section>
+                </>
+              )}
+              {snort.length > 0 && (
+                <>
+                  <Section title="Snort 3: deploy and hunt"><Commands items={snortCommands(snort)} /></Section>
+                  <Section title={`Snort 3 community rules (${snort.length})`} hint="Cisco Talos community ruleset (GPLv2). Rules shipped commented out are marked.">
+                    <ul>{snort.slice(0, allSnort ? undefined : 15).map((r) => <SnortRule key={r.rule_id} r={r} />)}</ul>
+                    {!allSnort && snort.length > 15 && <button className={`mt-2 text-sm ${link}`} onClick={() => setAllSnort(true)}>Show all {snort.length} rules</button>}
+                  </Section>
+                </>
+              )}
             </>
           ) : (
-            <p className="text-zinc-500">No ET Open Suricata rule references this CVE.</p>
+            <p className="text-zinc-500">No ET Open Suricata or Snort 3 community rule references this CVE.</p>
           )
         )}
 
         {current === 'logs' && (
-          sigma.length > 0 ? (
-            <Section title={`Sigma rules (${sigma.length})`} hint="Vendor-neutral detections from SigmaHQ. Convert them to your SIEM's query language with sigma-cli (pip install sigma-cli).">
-              <ul className="space-y-2">{sigma.map((r) => <SigmaRule key={r.rule_id} r={r} />)}</ul>
-            </Section>
+          logRules > 0 ? (
+            <>
+              {sigma.length > 0 && (
+                <Section title={`Sigma rules (${sigma.length})`} hint="Vendor-neutral detections from SigmaHQ. Convert them to your SIEM's query language with sigma-cli (pip install sigma-cli).">
+                  <ul className="space-y-2">{sigma.map((r) => <SigmaRule key={r.rule_id} r={r} />)}</ul>
+                </Section>
+              )}
+              {splunk.length > 0 && (
+                <Section title={`Splunk detections (${splunk.length})`} hint="From Splunk's security_content (ES Content Update). The `macros` in the SPL come with the ESCU app; without it, replace them with your index and sourcetype.">
+                  <ul className="space-y-2">{splunk.map((r) => <SplunkRule key={r.rule_id} r={r} />)}</ul>
+                </Section>
+              )}
+              {elastic.length > 0 && (
+                <Section title={`Elastic rules (${elastic.length})`} hint="From elastic/detection-rules. Most ship as Elastic prebuilt rules (Security → Rules → Add Elastic rules); otherwise create a custom rule with this query and language.">
+                  <ul className="space-y-2">{elastic.map((r) => <ElasticRule key={r.rule_id} r={r} />)}</ul>
+                </Section>
+              )}
+            </>
           ) : (
-            <p className="text-zinc-500">No SigmaHQ rule names this CVE. See <em>What to look for</em> for the weakness class.</p>
+            <p className="text-zinc-500">No Sigma, Splunk, or Elastic rule names this CVE. See <em>What to look for</em> for the weakness class.</p>
+          )
+        )}
+
+        {current === 'files' && (
+          yara.length > 0 ? (
+            <>
+              <Section title="Scan files" hint="All YARA rules for this CVE in one file. signature-base rules may use external variables, so define them (empty values are fine). Scan web roots, upload folders, and temp directories.">
+                <ScriptBlock file={`pahredar-${c.id}.yar`} text={yaraFile(yara)} />
+                <div className="mt-3">
+                  <Commands items={[
+                    { label: 'Scan a directory tree', cmd: `yara -r -s -d filename= -d filepath= -d extension= -d filetype= -d owner= pahredar-${c.id}.yar /var/www` },
+                    { label: 'Scan a running process (Linux, by PID)', cmd: `sudo yara -s -d filename= -d filepath= -d extension= -d filetype= -d owner= pahredar-${c.id}.yar PID` },
+                  ]} />
+                </div>
+              </Section>
+              <Section title={`YARA rules (${yara.length})`} hint="From Florian Roth's signature-base (Detection Rule License 1.1): exploit tools, webshells, and artefacts seen in exploitation.">
+                <ul className="space-y-2">{yara.map((r) => <RuleDetails key={r.rule_id} r={r} chips={r.meta.score ? <Tag>score {r.meta.score}</Tag> : undefined} />)}</ul>
+              </Section>
+            </>
+          ) : (
+            <p className="text-zinc-500">No YARA rule in signature-base names this CVE.</p>
           )
         )}
 

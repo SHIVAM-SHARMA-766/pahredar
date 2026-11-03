@@ -55,14 +55,16 @@ type DetectionOut struct {
 	CVEIDs []string        `json:"cve_ids"`
 }
 
-// DetectionForCVE returns the rules naming a CVE: Nmap scripts first, then
-// Sigma, then Suricata (enabled-by-default rules before disabled ones).
+// DetectionForCVE returns the rules naming a CVE: active checks (Nmap),
+// log rules (Sigma, Splunk, Elastic), network rules (Suricata, Snort), then
+// YARA; within a source, CVE-specific before related (cited only in a
+// rule's references) and enabled-by-default before disabled.
 func (s *Store) DetectionForCVE(ctx context.Context, cveID string, limit int) ([]DetectionOut, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT source, rule_id, title, url, body, meta, cve_ids FROM detection_rule
 		WHERE cve_ids @> ARRAY[$1]::text[]
-		ORDER BY array_position(ARRAY['nmap', 'sigma', 'suricata'], source),
-		         (meta ->> 'enabled') = 'false', cardinality(cve_ids), title
+		ORDER BY array_position(ARRAY['nmap', 'sigma', 'splunk', 'elastic', 'suricata', 'snort', 'yara'], source),
+		         (meta ->> 'related') = 'true', (meta ->> 'enabled') = 'false', cardinality(cve_ids), title
 		LIMIT $2`, cveID, limit)
 	if err != nil {
 		return nil, err

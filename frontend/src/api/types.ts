@@ -84,11 +84,12 @@ export interface Exploit {
 }
 
 export interface DetectionRule {
-  source: 'sigma' | 'suricata' | 'nmap'
+  source: 'sigma' | 'suricata' | 'nmap' | 'splunk' | 'elastic' | 'snort' | 'yara'
   rule_id: string
   title: string
   url: string | null
-  // Sigma: the rule YAML. Suricata: the rule line. Nmap: the script file name.
+  // Sigma: the rule YAML. Suricata / Snort: the rule line. Nmap: the script
+  // file name. Splunk: the SPL search. Elastic: the query. YARA: the rule.
   body: string
   meta: {
     // Sigma
@@ -107,6 +108,27 @@ export interface DetectionRule {
     updated_at?: string
     // Nmap
     categories?: string[]
+    // Splunk, Elastic, Snort, YARA
+    license?: string
+    // The CVE is cited only in the rule's references: a behaviour rule
+    // that also catches this CVE rather than one written for it.
+    related?: boolean
+    description?: string
+    type?: string
+    data_source?: string[]
+    how_to_implement?: string
+    language?: string
+    severity?: string
+    risk_score?: number
+    index?: string[]
+    name?: string
+    score?: string
+    file?: string
+    reference?: string
+    // YARA: modules the rule uses, and the texts of the file's other rules
+    // its condition needs (dependencies first).
+    imports?: string[]
+    requires?: string[]
   }
   cve_ids: string[]
 }

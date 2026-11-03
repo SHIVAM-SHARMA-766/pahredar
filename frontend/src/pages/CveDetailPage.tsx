@@ -225,8 +225,9 @@ function AtAGlance({ c, onOpen }: { c: CveDetail; onOpen: (tab: TabKey) => void 
   const products = [...new Set(c.affected.map((a) => a.product_label || a.product).filter(Boolean))]
   const rules = det.data?.rules ?? []
   const scanCount = c.exploits.filter((e) => e.source === 'nuclei' || (e.source === 'metasploit' && (e.meta?.check || e.source_ref.includes('/scanner/')))).length + rules.filter((r) => r.source === 'nmap').length
-  const ids = rules.filter((r) => r.source === 'suricata').length
-  const sigma = rules.filter((r) => r.source === 'sigma').length
+  const ids = rules.filter((r) => r.source === 'suricata' || r.source === 'snort').length
+  const sigma = rules.filter((r) => r.source === 'sigma' || r.source === 'splunk' || r.source === 'elastic').length
+  const yara = rules.filter((r) => r.source === 'yara').length
   const fixes = fixesByProduct(c.affected)
   const pocs = c.exploits.filter((e) => e.source === 'github').length
   const modules = c.exploits.filter((e) => e.source !== 'github' && e.source !== 'trickest').length
@@ -236,7 +237,7 @@ function AtAGlance({ c, onOpen }: { c: CveDetail; onOpen: (tab: TabKey) => void 
     ['Affected', products.length ? <>{products.slice(0, 4).join(', ')}{products.length > 4 && <span className="text-zinc-500"> +{products.length - 4} more</span>}<span className="text-zinc-500"> · {vendors.size} vendor{vendors.size === 1 ? '' : 's'}</span></> : 'No products listed', 'technical'],
     ['Exploitation', <>{exploitationLabel[c.assessment.exploitation]}{c.kev && <> · in CISA KEV since {fmtDate(c.kev.date_added)}</>}{c.euvd && <> · ENISA EUVD exploited{c.euvd.exploited_since && <> since {fmtDate(c.euvd.exploited_since)}</>}</>}{!c.kev && !c.euvd && c.vulncheck && <> · in VulnCheck KEV{c.vulncheck.date_added && <> since {fmtDate(c.vulncheck.date_added)}</>}</>}{(c.kev?.known_ransomware_use === 'Known' || c.vulncheck?.ransomware) && <> · used by ransomware</>}{(modules || pocs) ? <span className="text-zinc-500"> · {modules} module{modules === 1 ? '' : 's'}, {pocs} GitHub PoC{pocs === 1 ? '' : 's'}</span> : null}</>, 'exploits'],
     ['ATT&CK', attackSummary, 'attack'],
-    ['Detect', det.isPending ? 'Loading…' : (scanCount || ids || sigma) ? [scanCount && `${scanCount} active check${scanCount === 1 ? '' : 's'}`, ids && `${ids} Suricata rule${ids === 1 ? '' : 's'}`, sigma && `${sigma} Sigma rule${sigma === 1 ? '' : 's'}`].filter(Boolean).join(' · ') : 'No ready-made rule; version checks and hunting hints available', 'detection'],
+    ['Detect', det.isPending ? 'Loading…' : (scanCount || ids || sigma || yara) ? [scanCount && `${scanCount} active check${scanCount === 1 ? '' : 's'}`, ids && `${ids} network rule${ids === 1 ? '' : 's'}`, sigma && `${sigma} log / SIEM rule${sigma === 1 ? '' : 's'}`, yara && `${yara} YARA rule${yara === 1 ? '' : 's'}`].filter(Boolean).join(' · ') : 'No ready-made rule; version checks and hunting hints available', 'detection'],
     ['Fix', fixes.length ? `Fixed versions listed for ${fixes.length} product${fixes.length === 1 ? '' : 's'}` : c.advisory.solutions.length ? 'Vendor solution published' : c.advisory.workarounds.length ? 'Workaround only' : 'No fix listed in the record; check vendor advisories', 'remediation'],
     ['Coverage', articles.isPending ? 'Loading…' : `${articles.data?.items.length ?? 0} article${articles.data?.items.length === 1 ? '' : 's'} in Pahredar's feeds`, 'intel'],
   ]

@@ -17,7 +17,7 @@ Go module for the Pahredar backend: one binary that applies database migrations,
 | `internal/sources/euvd/` | ENISA EUVD exploited-list client (paged search API) |
 | `internal/sources/attack/` | CTID KEV→ATT&CK mapping files and the MITRE CAPEC CSV parser |
 | `internal/sources/debian/` | Debian Security Tracker JSON, stream-decoded per package |
-| `internal/sources/detection/` | Sigma (repository archive), Suricata ET Open, and Nmap script-index parsers producing rules with the CVEs they name |
+| `internal/sources/detection/` | Sigma (repository archive), Suricata ET Open, and Nmap script-index parsers (`detection.go`); Splunk security_content, Elastic detection-rules, Snort 3 community, and YARA signature-base parsers (`more.go`, YAML via go.yaml.in/yaml/v3, TOML via BurntSushi/toml). All produce rules with the CVEs they name |
 | `internal/sources/feeds/` | The feed list (`All`: key, name, URL, kind, whether to read article pages) a lenient RSS 2.0 / RDF / Atom parser with CVE ID extraction, readers for GitHub security advisories (`FormatGitHub`, per repository or the global database), CERT-In's note list (`FormatCERTIn`), and NVIDIA's bulletin table (`FormatNVIDIA`), and `ArticleText`, which keeps only an article page's own text (uses `golang.org/x/net/html`) |
 | `internal/sources/fetch/` | Shared HTTP client and `Get` (User-Agent, non-200 → `StatusError`). |
 
@@ -59,7 +59,7 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `STATS_REFRESH_INTERVAL` | no | `6h` | Fallback; stats also refresh after data-changing cvelist/NVD/KEV runs |
 | `CWE_SYNC_INTERVAL` | no | `168h` | MITRE CWE names |
 | `FEEDS_SYNC_INTERVAL` | no | `1h` | News, research, PSIRT, and government feeds |
-| `DETECTION_SYNC_INTERVAL` | no | `24h` | Sigma, Suricata (ET Open), and Nmap rules |
+| `DETECTION_SYNC_INTERVAL` | no | `24h` | Sigma, Suricata (ET Open), Nmap, Splunk, Elastic, Snort 3, and YARA rules |
 | `CONTEXT_SYNC_INTERVAL` | no | `24h` | ENISA EUVD, Debian tracker, and VulnCheck KEV; ATT&CK mappings and CAPEC run every 7× this |
 | `NVD_API_KEY` | strongly recommended | none | Without it requests are spaced 6.5 s apart instead of 0.7 s |
 | `GITHUB_TOKEN` | no | none | Raises the GitHub API limit above 60 requests/hour (cvelist downloads, fix-commit diffs) |
@@ -110,6 +110,7 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `00003_sort_indexes.sql` | Sort indexes rebuilt as `DESC NULLS LAST, id DESC` (and a COALESCE CVSS expression index) to match the list API's `ORDER BY` |
 | `00004_enrichment.sql` | `kev.forensic_triage`; `cve.exploit_ref` with a backfill from `refs` (~10 s on the full corpus); `kev (date_added DESC, cve_id)` index |
 | `00005_vendor_stats.sql` | Materialized views `vendor_stats`, `product_stats`, `vendor_year_stats` with unique indexes (required for `REFRESH … CONCURRENTLY`); ~12 s to create on the full corpus |
+| `00016_more_detection.sql` | `detection_rule.source` allows `splunk`, `elastic`, `snort`, `yara` |
 | `00015_article_bookmark.sql` | `feed_article.bookmarked_at` |
 | `00014_mastodon.sql` | `mastodon` report source |
 | `00013_vulncheck_threat_intel.sql` | `vulncheck_kev`; `otx` / `threatfox` / `bluesky` report sources |

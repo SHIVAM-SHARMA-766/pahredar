@@ -30,7 +30,8 @@ const (
 
 	sigmaURL    = "https://codeload.github.com/SigmaHQ/sigma/tar.gz/refs/heads/master"
 	suricataURL = "https://rules.emergingthreats.net/open/suricata-7.0/emerging-all.rules"
-	nmapURL     = "https://raw.githubusercontent.com/nmap/nmap/master/scripts/script.db"
+	// The SVN mirror: raw.githubusercontent.com is intercepted on some networks.
+	nmapURL = "https://svn.nmap.org/nmap/scripts/script.db"
 
 	// maxRuleSize skips oversized files in the Sigma archive.
 	maxRuleSize = 64 << 10

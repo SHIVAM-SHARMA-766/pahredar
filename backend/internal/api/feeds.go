@@ -146,7 +146,7 @@ func (s *Server) cveDetection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "id must look like CVE-2024-12345")
 		return
 	}
-	out, err := s.store.DetectionForCVE(r.Context(), id, 200)
+	out, err := s.store.DetectionForCVE(r.Context(), id, 500)
 	if err != nil {
 		internalError(w, r, err)
 		return

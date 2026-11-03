@@ -203,3 +203,18 @@ const cweHints: Record<string, string[]> = {
 export function weaknessHints(cweIds: string[]): { cwe: string; hints: string[] }[] {
   return cweIds.filter((c) => cweHints[c]).map((c) => ({ cwe: c, hints: cweHints[c] }))
 }
+
+// yaraFile joins YARA rules into one compilable file: each module imported
+// once, then the helper rules they need (once each, dependencies first),
+// then the rules themselves.
+export function yaraFile(rules: DetectionRule[]): string {
+  const imports = new Set<string>()
+  const helpers: string[] = []
+  const bodies = new Set(rules.map((r) => r.body))
+  for (const r of rules) {
+    for (const i of r.meta.imports ?? []) if (/^\w+$/.test(i)) imports.add(i)
+    for (const h of r.meta.requires ?? []) if (!helpers.includes(h) && !bodies.has(h)) helpers.push(h)
+  }
+  const head = [...imports].map((i) => `import "${i}"`).join('\n')
+  return [head, ...helpers, ...bodies].filter(Boolean).join('\n\n') + '\n'
+}

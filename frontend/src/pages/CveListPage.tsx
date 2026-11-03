@@ -5,6 +5,7 @@ import { CveTable, type SortKey } from '../components/CveTable'
 import { QueryBar } from '../components/QueryBar'
 import { Card, ErrorBox, PageHeader, Spinner } from '../components/ui'
 import { fmtNumber } from '../lib/format'
+import { useOrigin } from '../lib/origin'
 import { parseQuery } from '../lib/query'
 
 // URL parameters of the explorer: `query` (the query language), plus `sort`,
@@ -25,6 +26,7 @@ export const VIEWS = [
 
 export function CveListPage() {
   const [params, setParams] = useSearchParams()
+  useOrigin('CVE explorer')
   const query = params.get('query') ?? ''
   const parsed = parseQuery(query)
   const view = VIEWS.find((v) => v.query === query)

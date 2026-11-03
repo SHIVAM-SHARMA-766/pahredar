@@ -4,18 +4,19 @@ import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { api } from '../api/client'
 import { YearChart } from '../components/charts'
-import { Card, ErrorBox, PageHeader, SeverityBar, SeverityStats, Spinner } from '../components/ui'
+import { Breadcrumbs, Card, ErrorBox, PageHeader, SeverityBar, SeverityStats, Spinner } from '../components/ui'
 import { fmtDate, fmtNumber, vendorPath } from '../lib/format'
+import { useOrigin } from '../lib/origin'
 import { explorerLink } from '../lib/query'
 import { CveResults } from './CveListPage'
 import { ProductTable } from './VendorsPage'
 
-const link = 'text-cyan-300 hover:text-cyan-200'
 
 export function VendorPage() {
   const { vendor = '' } = useParams()
   const query = useQuery({ queryKey: ['vendor', vendor], queryFn: () => api.getVendor(vendor) })
   const [filter, setFilter] = useState('')
+  useOrigin(query.data?.label)
 
   if (query.isPending) return <Spinner />
   if (query.isError) return <ErrorBox error={query.error} />
@@ -26,7 +27,7 @@ export function VendorPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link to="/vendors" className="text-xs text-zinc-500 hover:text-zinc-300">← Vendors & products</Link>
+        <Breadcrumbs items={[{ label: 'Vendors & products', to: '/vendors' }, { label: v.label }]} />
         <PageHeader
           title={v.label}
           subtitle={<>{fmtNumber(v.products)} products · latest CVE {fmtDate(v.latest_published)}</>}
@@ -65,6 +66,7 @@ export function ProductPage() {
   const { vendor = '', product = '' } = useParams()
   const query = useQuery({ queryKey: ['product', vendor, product], queryFn: () => api.getProduct(vendor, product) })
   const [view, setView] = useSearchParams()
+  useOrigin(query.data?.label)
 
   if (query.isPending) return <Spinner />
   if (query.isError) return <ErrorBox error={query.error} />
@@ -75,7 +77,7 @@ export function ProductPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link to={vendorPath(p.vendor)} className={`text-sm ${link}`}>← {p.vendor_label}</Link>
+        <Breadcrumbs items={[{ label: 'Vendors & products', to: '/vendors' }, { label: p.vendor_label, to: vendorPath(p.vendor) }, { label: p.label }]} />
         <PageHeader title={p.label} subtitle={<>Latest CVE {fmtDate(p.latest_published)}</>} />
       </div>
       <Card>

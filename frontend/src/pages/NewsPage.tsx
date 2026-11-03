@@ -7,6 +7,7 @@ import type { CveBadge, FeedKind, NewsArticle } from '../api/types'
 import { KIND_LABEL, KindTag, TrendingCard } from '../components/FeedCards'
 import { Card, ErrorBox, PageHeader, Spinner, Tag } from '../components/ui'
 import { fmtDate, fmtNumber, relativeTime } from '../lib/format'
+import { useOrigin } from '../lib/origin'
 import { severityText } from '../lib/severity'
 
 // Security news from Pahredar's own feeds (GET /api/v1/news). Every filter
@@ -23,6 +24,7 @@ const RANGES: [number, string][] = [[1, '24 h'], [7, '7 days'], [30, '30 days'],
 
 export function NewsPage() {
   const [params, setParams] = useSearchParams()
+  useOrigin('Security news')
   const kind = (params.get('kind') ?? '') as FeedKind | ''
   const feed = params.get('feed') ?? ''
   const q = params.get('q') ?? ''

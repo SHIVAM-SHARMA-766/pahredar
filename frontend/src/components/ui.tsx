@@ -1,4 +1,6 @@
+import { ChevronRight } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { Link } from 'react-router'
 import { ApiError } from '../api/client'
 import type { SeverityCounts, Severity } from '../api/types'
 import { severityBadge, severityFill, severityLabel } from '../lib/severity'
@@ -149,5 +151,26 @@ export function PageHeader({ title, subtitle, actions }: { title: ReactNode; sub
       </div>
       {actions}
     </div>
+  )
+}
+
+// Breadcrumbs: the path back to where the page was reached from. The last
+// item is the current page and is not a link.
+export function Breadcrumbs({ items }: { items: { label: ReactNode; to?: string }[] }) {
+  return (
+    <nav aria-label="Breadcrumb" className="mb-2 text-sm">
+      <ol className="flex flex-wrap items-center gap-1 text-zinc-500">
+        {items.map((it, i) => (
+          <li key={i} className="flex min-w-0 items-center gap-1">
+            {i > 0 && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-zinc-600" />}
+            {it.to && i < items.length - 1 ? (
+              <Link to={it.to} className="truncate hover:text-cyan-200">{it.label}</Link>
+            ) : (
+              <span aria-current="page" className="truncate text-zinc-300">{it.label}</span>
+            )}
+          </li>
+        ))}
+      </ol>
+    </nav>
   )
 }

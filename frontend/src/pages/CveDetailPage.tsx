@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, ExternalLink, ShieldAlert, ShieldCheck, ShieldQuestion } from 'lucide-react'
-import { useRef, useState, type ReactNode } from 'react'
+import { AlertTriangle, ArrowUp, ExternalLink, ShieldAlert, ShieldCheck, ShieldQuestion } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { api, ApiError } from '../api/client'
 import type { Affected, CveDetail, Metric, Reference } from '../api/types'
@@ -11,9 +11,10 @@ import { DetectionCard, useDetection } from '../components/DetectionCard'
 import { NotYetPublished, useArticles } from '../components/FeedCards'
 import { ReportsCard } from '../components/ReportsCard'
 import { ThreatIntelCard } from '../components/ThreatIntelCard'
-import { Card, ErrorBox, ExploitTag, KevTag, RansomwareTag, SeverityBadge, Spinner, Tag } from '../components/ui'
+import { Breadcrumbs, Card, ErrorBox, ExploitTag, KevTag, RansomwareTag, SeverityBadge, Spinner, Tag } from '../components/ui'
 import { parseVector } from '../lib/cvss'
 import { fmtDate, fmtEpss, fmtPercentile, productPath, vendorPath } from '../lib/format'
+import { readOrigin } from '../lib/origin'
 import { severityText } from '../lib/severity'
 import { describeVersions, fixedVersions } from '../lib/versions'
 
@@ -22,16 +23,21 @@ const link = 'text-cyan-300 hover:text-cyan-200'
 export function CveDetailPage() {
   const { id = '' } = useParams()
   const query = useQuery({ queryKey: ['cve', id], queryFn: () => api.getCve(id) })
+  // The first crumb is the list page the user came from, with its filters.
+  const crumbs = <Breadcrumbs items={[readOrigin() ?? { label: 'CVE explorer', to: '/cves' }, { label: id.toUpperCase() }]} />
 
-  if (query.isPending) return <Spinner />
+  if (query.isPending) return <>{crumbs}<Spinner /></>
   if (query.isError) {
-    return query.error instanceof ApiError && query.error.status === 404 ? <NotYetPublished id={id.toUpperCase()} /> : <ErrorBox error={query.error} />
+    return <>{crumbs}{query.error instanceof ApiError && query.error.status === 404 ? <NotYetPublished id={id.toUpperCase()} /> : <ErrorBox error={query.error} />}</>
   }
   const c = query.data
 
   return (
     <div className="space-y-6">
-      <Header c={c} />
+      <div>
+        {crumbs}
+        <Header c={c} />
+      </div>
       {c.state !== 'REJECTED' && <AssessmentBanner c={c} />}
       <KeyFacts c={c} />
       <CveTabs c={c} />
@@ -58,7 +64,22 @@ const TABS: [TabKey, string][] = [
 // link can open it directly.
 function CveTabs({ c }: { c: CveDetail }) {
   const [params, setParams] = useSearchParams()
-  const navRef = useRef<HTMLElement>(null)
+  const navRef = useRef<HTMLDivElement>(null)
+  // stuck: the bar is pinned to the top, so the page header has scrolled
+  // away and the bar shows which CVE this is.
+  const [stuck, setStuck] = useState(false)
+  useEffect(() => {
+    const bar = navRef.current
+    if (!bar) return
+    const check = () => setStuck(window.scrollY > 0 && bar.getBoundingClientRect().top <= parseFloat(getComputedStyle(bar).top) + 0.5)
+    check()
+    window.addEventListener('scroll', check, { passive: true })
+    window.addEventListener('resize', check)
+    return () => {
+      window.removeEventListener('scroll', check)
+      window.removeEventListener('resize', check)
+    }
+  }, [])
   const tab = TABS.find(([k]) => k === params.get('tab'))?.[0] ?? 'overview'
   const open = (k: TabKey) => {
     setParams(k === 'overview' ? {} : { tab: k }, { replace: true })
@@ -69,18 +90,23 @@ function CveTabs({ c }: { c: CveDetail }) {
 
   return (
     <>
-      <nav ref={navRef} className="sticky top-14 z-20 -mx-1 flex scroll-mt-14 gap-1 overflow-x-auto border-b border-zinc-800 bg-zinc-950/95 px-1 backdrop-blur lg:top-0 lg:scroll-mt-0">
-        {TABS.map(([k, label]) => (
-          <button
-            key={k}
-            onClick={() => open(k)}
-            className={`-mb-px border-b-2 px-3 py-2.5 text-sm whitespace-nowrap ${tab === k ? 'border-cyan-400 text-zinc-100' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
-          >
-            {label}
-            {counts[k] ? <span className="ml-1.5 text-xs text-zinc-500">{counts[k]}</span> : null}
-          </button>
-        ))}
-      </nav>
+      <div ref={navRef} className="sticky top-14 z-20 -mx-1 flex scroll-mt-14 flex-col border-b border-zinc-800 bg-zinc-950/95 px-1 backdrop-blur lg:top-0 lg:scroll-mt-0">
+        {stuck && <StuckIdentity c={c} />}
+        {/* Tabs scroll sideways on narrow screens; the scrollbar is hidden
+            and vertical overflow clipped so no stray scrollbar appears. */}
+        <nav className="flex min-w-0 flex-1 gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {TABS.map(([k, label]) => (
+            <button
+              key={k}
+              onClick={() => open(k)}
+              className={`border-b-2 px-3 py-2.5 text-sm whitespace-nowrap ${tab === k ? 'border-cyan-400 text-zinc-100' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
+            >
+              {label}
+              {counts[k] ? <span className="ml-1.5 text-xs text-zinc-500">{counts[k]}</span> : null}
+            </button>
+          ))}
+        </nav>
+      </div>
 
       {tab === 'overview' && (
         <div className="grid gap-6 lg:grid-cols-3">
@@ -235,6 +261,28 @@ function ExtLink({ href, children }: { href: string; children: ReactNode }) {
       {children}
       <ExternalLink className="h-3 w-3" />
     </a>
+  )
+}
+
+// StuckIdentity names the CVE above the tabs once the bar is pinned and
+// the page header has scrolled away (its own row, so every tab still fits);
+// clicking it returns to the top.
+function StuckIdentity({ c }: { c: CveDetail }) {
+  const best = c.cvss.v4 ?? c.cvss.v3 ?? c.cvss.v2
+  const p = c.assessment.priority
+  return (
+    <button
+      onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+      title="Back to top"
+      className="group flex min-w-0 items-center gap-2 border-b border-zinc-800/70 px-1 py-1.5 text-left"
+    >
+      <span className="shrink-0 font-mono text-sm font-semibold text-white">{c.id}</span>
+      {c.state === 'REJECTED' ? <Tag>Rejected</Tag> : <SeverityBadge severity={c.severity} score={best?.score} />}
+      {c.kev && <KevTag />}
+      {p && <span className={`shrink-0 text-xs font-semibold ${priorityInfo[p].text}`}>{p}</span>}
+      {c.title && <span className="min-w-0 truncate text-sm text-zinc-400 max-sm:hidden">{c.title}</span>}
+      <ArrowUp className="ml-auto h-3.5 w-3.5 shrink-0 text-zinc-600 group-hover:text-zinc-300" />
+    </button>
   )
 }
 

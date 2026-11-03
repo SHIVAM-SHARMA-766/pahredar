@@ -6,6 +6,7 @@ import { api } from '../api/client'
 import type { ProductSummary, VendorSummary } from '../api/types'
 import { Card, ErrorBox, PageHeader, SeverityBar, Spinner } from '../components/ui'
 import { fmtDate, fmtNumber, productPath, vendorPath } from '../lib/format'
+import { useOrigin } from '../lib/origin'
 
 const link = 'text-cyan-300 hover:text-cyan-200'
 const th = 'py-2.5 pr-3 text-[11px] font-semibold tracking-wider text-zinc-500 uppercase'
@@ -14,6 +15,7 @@ const th = 'py-2.5 pr-3 text-[11px] font-semibold tracking-wider text-zinc-500 u
 // `?q=` filters either by substring.
 export function VendorsPage() {
   const [params, setParams] = useSearchParams()
+  useOrigin('Vendors & products')
   const tab = params.get('tab') === 'products' ? 'products' : 'vendors'
   const q = params.get('q') ?? ''
   const deferred = useDeferredValue(q.trim().toLowerCase())

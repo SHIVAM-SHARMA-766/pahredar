@@ -8,12 +8,14 @@ import { LatestAdvisoriesCard, TrendingCard } from '../components/FeedCards'
 import { MetricWidget } from '../components/MetricWidget'
 import { Card, ErrorBox, ExploitTag, KevTag, PageHeader, RansomwareTag, SeverityBadge, Spinner } from '../components/ui'
 import { fmtDate, fmtEpss, fmtNumber, relativeTime } from '../lib/format'
+import { useOrigin } from '../lib/origin'
 import { explorerLink } from '../lib/query'
 import { bestScore, chartSeries } from '../lib/severity'
 
 const link = 'text-cyan-300 hover:text-cyan-200'
 
 export function DashboardPage() {
+  useOrigin('Dashboard')
   const query = useQuery({ queryKey: ['dashboard'], queryFn: api.dashboard, refetchInterval: 5 * 60_000 })
   // The metric widget keeps its settings in the URL so a view is linkable.
   const [params, setParams] = useSearchParams()

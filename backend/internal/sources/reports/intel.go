@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -17,9 +18,9 @@ import (
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/fetch"
 )
 
-// Threat intelligence and social sources that need a free signup key:
-// AlienVault OTX pulses, abuse.ch ThreatFox IOCs, and Bluesky posts. Each
-// returns ErrNotConfigured when its key is missing.
+// Threat intelligence and social sources: AlienVault OTX pulses, abuse.ch
+// ThreatFox IOCs, and Bluesky posts need a free signup key and return
+// ErrNotConfigured without one; Mastodon hashtag timelines are public.
 
 const (
 	otxURL       = "https://otx.alienvault.com/api/v1/indicators/cve/"
@@ -398,4 +399,100 @@ func (c *Client) postJSON(ctx context.Context, u string, extra http.Header, body
 		return err
 	}
 	return json.Unmarshal(data, v)
+}
+
+// --- Mastodon ----------------------------------------------------------------
+
+// mastodonInstances are large general servers whose public hashtag
+// timelines include posts federated from the rest of the fediverse.
+// infosec.exchange and ioc.exchange require a login for this.
+var mastodonInstances = []string{"https://mastodon.social", "https://fosstodon.org"}
+
+// mastodon reads the public hashtag timelines for the CVE ID, in both tag
+// spellings people use (#CVE202346604 and #CVE_2023_46604), merged and
+// most engaged first.
+func (c *Client) mastodon(ctx context.Context, cveID string) ([]NewsItem, error) {
+	compact := strings.ReplaceAll(cveID, "-", "")
+	tags := []string{compact, strings.ReplaceAll(cveID, "-", "_")}
+	type status struct {
+		URI       string `json:"uri"`
+		URL       string `json:"url"`
+		CreatedAt string `json:"created_at"`
+		Content   string `json:"content"`
+		Replies   int    `json:"replies_count"`
+		Reblogs   int    `json:"reblogs_count"`
+		Favs      int    `json:"favourites_count"`
+		Account   struct {
+			Acct string `json:"acct"`
+			URL  string `json:"url"`
+		} `json:"account"`
+	}
+	seen := map[string]bool{}
+	var out []NewsItem
+	var lastErr error
+	ok := 0
+	for _, inst := range mastodonInstances {
+		for _, tag := range tags {
+			var list []status
+			if err := c.getJSON(ctx, inst+"/api/v1/timelines/tag/"+url.PathEscape(tag)+"?limit=40", &list); err != nil {
+				lastErr = err
+				continue
+			}
+			ok++
+			for _, st := range list {
+				if st.URI == "" || seen[st.URI] {
+					continue
+				}
+				seen[st.URI] = true
+				link := st.URL
+				if link == "" {
+					link = st.URI
+				}
+				acct := st.Account.Acct
+				// Local accounts have no domain in acct.
+				if !strings.Contains(acct, "@") {
+					if u, err := url.Parse(st.Account.URL); err == nil && u.Host != "" {
+						acct += "@" + u.Host
+					}
+				}
+				title := htmlText(st.Content)
+				if r := []rune(title); len(r) > 300 {
+					title = string(r[:300]) + "…"
+				}
+				// The same account posting the same text twice (as shown) is
+				// one post.
+				if k := acct + "\x00" + title; seen[k] {
+					continue
+				} else {
+					seen[k] = true
+				}
+				out = append(out, NewsItem{
+					Title: title, URL: link, Source: "@" + acct, Published: st.CreatedAt,
+					DiscussionURL: link, Points: st.Favs + st.Reblogs, Comments: st.Replies,
+				})
+			}
+		}
+	}
+	if ok == 0 && lastErr != nil {
+		return nil, lastErr
+	}
+	if len(out) == 0 {
+		return nil, ErrNotFound
+	}
+	slices.SortStableFunc(out, func(a, b NewsItem) int { return cmp.Compare(b.Points, a.Points) })
+	if len(out) > maxPosts {
+		out = out[:maxPosts]
+	}
+	return out, nil
+}
+
+var (
+	htmlBreak = regexp.MustCompile(`(?i)<br\s*/?>|</p>`)
+	htmlTag   = regexp.MustCompile(`(?s)<[^>]*>`)
+)
+
+// htmlText turns a post's HTML into one line of text: paragraphs and line
+// breaks become spaces, inline tags (links, hashtags) vanish.
+func htmlText(s string) string {
+	return clean(htmlTag.ReplaceAllString(htmlBreak.ReplaceAllString(s, " "), ""))
 }

@@ -163,7 +163,7 @@ func fresh(c db.CachedReport) bool {
 		ttl = reportNotFoundTTL
 	}
 	switch c.Source {
-	case reports.SourceNews, reports.SourceDiscussions, reports.SourceBluesky, reports.SourceOTX, reports.SourceThreatFox:
+	case reports.SourceNews, reports.SourceDiscussions, reports.SourceBluesky, reports.SourceMastodon, reports.SourceOTX, reports.SourceThreatFox:
 		ttl = newsTTL
 	case reports.SourceHistory:
 		ttl = historyTTL

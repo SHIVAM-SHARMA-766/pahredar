@@ -117,38 +117,41 @@ function Msrc({ r }: { r: MsrcReport }) {
 
 // --- News and discussions ----------------------------------------------------
 
-// Four tabs: articles from Pahredar's own feeds (vendor, government,
-// research, news; ingested hourly), Google News search, Hacker News, and
-// Bluesky posts (needs BLUESKY_HANDLE and BLUESKY_APP_PASSWORD).
+// Tabs: articles from Pahredar's own feeds (vendor, government, research,
+// news; ingested hourly), Google News search, Hacker News, Bluesky posts
+// (needs BLUESKY_HANDLE and BLUESKY_APP_PASSWORD), and Mastodon posts
+// tagged with the CVE (public, no key).
 export function NewsCard({ id }: { id: string }) {
-  const q = useQuery({ queryKey: ['reports', id, 'news'], queryFn: () => api.getCveReports(id, ['news', 'discussions', 'bluesky']), staleTime: 10 * 60_000 })
+  const q = useQuery({ queryKey: ['reports', id, 'news'], queryFn: () => api.getCveReports(id, ['news', 'discussions', 'bluesky', 'mastodon']), staleTime: 10 * 60_000 })
   const own = useArticles(id)
-  const [tab, setTab] = useState<'feeds' | 'news' | 'discussions' | 'bluesky' | null>(null)
+  const [tab, setTab] = useState<'feeds' | 'news' | 'discussions' | 'bluesky' | 'mastodon' | null>(null)
   if (q.isPending && own.isPending) return <Card title="News & research"><Spinner label="Searching news and discussions…" /></Card>
   const feedItems = own.data?.items ?? []
   const news = q.data?.reports.news ?? []
   const disc = q.data?.reports.discussions ?? []
   const bsky = q.data?.reports.bluesky ?? []
+  const masto = q.data?.reports.mastodon ?? []
   const bskyOff = q.data?.sources.find((s) => s.source === 'bluesky')?.status === 'disabled'
-  if (!feedItems.length && !news.length && !disc.length && !bsky.length) {
+  if (!feedItems.length && !news.length && !disc.length && !bsky.length && !masto.length) {
     return <Card title="News & research"><p className="text-sm text-zinc-500">{q.isError ? 'News is unavailable right now.' : 'No articles or discussions mention this CVE ID yet.'}</p></Card>
   }
-  const counts = { feeds: feedItems.length, news: news.length, discussions: disc.length, bluesky: bsky.length }
-  const active = tab && counts[tab] ? tab : feedItems.length ? 'feeds' : news.length ? 'news' : disc.length ? 'discussions' : 'bluesky'
+  const counts = { feeds: feedItems.length, news: news.length, discussions: disc.length, bluesky: bsky.length, mastodon: masto.length }
+  const active = tab && counts[tab] ? tab : feedItems.length ? 'feeds' : news.length ? 'news' : disc.length ? 'discussions' : bsky.length ? 'bluesky' : 'mastodon'
   const btn = (on: boolean) => `rounded-md px-3 py-1 text-sm ${on ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200'}`
   return (
     <Card
       title="News & research"
       actions={
-        <div className="flex rounded-lg border border-zinc-800 p-0.5">
+        <div className="flex flex-wrap rounded-lg border border-zinc-800 p-0.5">
           <button className={btn(active === 'feeds')} onClick={() => setTab('feeds')} disabled={!feedItems.length}>Security feeds ({feedItems.length})</button>
           <button className={btn(active === 'news')} onClick={() => setTab('news')} disabled={!news.length}>Google News ({news.length})</button>
           <button className={btn(active === 'discussions')} onClick={() => setTab('discussions')} disabled={!disc.length}>Hacker News ({disc.length})</button>
           <button className={btn(active === 'bluesky')} onClick={() => setTab('bluesky')} disabled={!bsky.length} title={bskyOff ? 'Set BLUESKY_HANDLE and BLUESKY_APP_PASSWORD in .env' : undefined}>Bluesky ({bskyOff ? 'off' : bsky.length})</button>
+          <button className={btn(active === 'mastodon')} onClick={() => setTab('mastodon')} disabled={!masto.length}>Mastodon ({masto.length})</button>
         </div>
       }
     >
-      {active === 'feeds' ? <FeedArticleList items={feedItems} current={id} /> : active === 'news' ? <NewsList items={news} /> : active === 'bluesky' ? <DiscussionList items={bsky} social /> : <DiscussionList items={disc} />}
+      {active === 'feeds' ? <FeedArticleList items={feedItems} current={id} /> : active === 'news' ? <NewsList items={news} /> : active === 'bluesky' ? <DiscussionList items={bsky} social /> : active === 'mastodon' ? <DiscussionList items={masto} social /> : <DiscussionList items={disc} />}
       <p className="mt-3 text-xs text-zinc-500">
         {active === 'feeds'
           ? 'Vendor PSIRT, CISA and CERT/CC, research blogs, and security news that Pahredar reads hourly.'
@@ -156,6 +159,8 @@ export function NewsCard({ id }: { id: string }) {
             ? 'Google News results for the exact CVE ID, refreshed daily.'
             : active === 'bluesky'
               ? 'Bluesky posts mentioning the CVE ID, most engaged first (likes + reposts), refreshed daily.'
+              : active === 'mastodon'
+                ? 'Mastodon posts tagged with the CVE ID (#CVE202346604 or #CVE_2023_46604) across the fediverse, as seen from mastodon.social and fosstodon.org, most engaged first (favourites + boosts), refreshed daily.'
               : 'Hacker News stories mentioning the CVE ID, by points, refreshed daily.'}
       </p>
     </Card>

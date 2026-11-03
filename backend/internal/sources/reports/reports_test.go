@@ -71,3 +71,10 @@ func TestIsMicrosoft(t *testing.T) {
 		t.Fatal("isMicrosoft wrong")
 	}
 }
+
+func TestHTMLText(t *testing.T) {
+	got := htmlText(`<p>React2Shell (<a href="https://x/tags/cve">#<span>CVE202555182</span></a>) &amp; Next.js</p><p>patch now</p>`)
+	if got != "React2Shell (#CVE202555182) & Next.js patch now" {
+		t.Fatalf("got %q", got)
+	}
+}

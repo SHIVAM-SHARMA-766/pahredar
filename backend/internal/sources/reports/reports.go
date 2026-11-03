@@ -20,7 +20,8 @@
 //     GitHub commits the CVE references (commits.go).
 //   - Threat intelligence with a free key (intel.go): AlienVault OTX pulses
 //     (campaigns, adversaries, malware, ATT&CK), abuse.ch ThreatFox IOCs
-//     tagged with the CVE, and Bluesky posts mentioning it.
+//     tagged with the CVE, and Bluesky posts mentioning it; Mastodon posts
+//     tagged with it (public hashtag timelines, no key).
 //
 // Coverage is best for open-source and Linux software; closed-source vendor
 // products are usually absent. Fetches happen on demand (see the API's
@@ -53,6 +54,7 @@ const (
 	SourceOTX         = "otx"
 	SourceThreatFox   = "threatfox"
 	SourceBluesky     = "bluesky"
+	SourceMastodon    = "mastodon"
 
 	osvURL    = "https://api.osv.dev/v1/vulns/"
 	redHatURL = "https://access.redhat.com/hydra/rest/securitydata/cve/"
@@ -64,7 +66,7 @@ const (
 )
 
 // Sources lists every report source in display order.
-var Sources = []string{SourceOSV, SourceRedHat, SourceUbuntu, SourceMSRC, SourceAdvisories, SourceNews, SourceDiscussions, SourceHistory, SourceCommits, SourceOTX, SourceThreatFox, SourceBluesky}
+var Sources = []string{SourceOSV, SourceRedHat, SourceUbuntu, SourceMSRC, SourceAdvisories, SourceNews, SourceDiscussions, SourceHistory, SourceCommits, SourceOTX, SourceThreatFox, SourceBluesky, SourceMastodon}
 
 // Request carries what a fetcher may need beyond the CVE ID.
 type Request struct {
@@ -227,6 +229,8 @@ func (c *Client) Fetch(ctx context.Context, source string, req Request) (any, er
 		return c.threatFox(ctx, req.CVEID)
 	case SourceBluesky:
 		return c.bluesky(ctx, req.CVEID)
+	case SourceMastodon:
+		return c.mastodon(ctx, req.CVEID)
 	}
 	return nil, fmt.Errorf("unknown report source %q", source)
 }

@@ -377,7 +377,7 @@ export interface Series {
   points: { date: string; values: Record<string, number> }[]
 }
 
-export type ReportSource = 'osv' | 'redhat' | 'ubuntu' | 'msrc' | 'advisories' | 'news' | 'discussions' | 'history' | 'commits' | 'otx' | 'threatfox' | 'bluesky'
+export type ReportSource = 'osv' | 'redhat' | 'ubuntu' | 'msrc' | 'advisories' | 'news' | 'discussions' | 'history' | 'commits' | 'otx' | 'threatfox' | 'bluesky' | 'mastodon'
 
 export interface ReportStatus {
   source: ReportSource
@@ -439,6 +439,7 @@ export interface CveReports {
     otx?: OtxReport
     threatfox?: ThreatFoxReport
     bluesky?: NewsItem[]
+    mastodon?: NewsItem[]
   }
 }
 

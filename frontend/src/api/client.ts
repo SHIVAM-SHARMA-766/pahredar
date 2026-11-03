@@ -61,6 +61,12 @@ export const api = {
     }
     return request<NewsPage>(`/api/v1/news?${p}`)
   },
+  setBookmark: (url: string, bookmarked: boolean) =>
+    request<{ url: string; bookmarked: boolean }>('/api/v1/news/bookmark', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, bookmarked }),
+    }),
   getRelated: (id: string) => request<{ groups: RelatedGroup[] }>(`/api/v1/cves/${enc(id)}/related`),
   series: (metric: string, from: string, to: string) =>
     request<Series>(`/api/v1/stats/series?${new URLSearchParams({ metric, from, to })}`),

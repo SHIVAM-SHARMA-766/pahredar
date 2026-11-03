@@ -33,6 +33,16 @@ const (
 	KindNews       = "news"       // security news sites
 )
 
+// Retention is how long articles of each kind are kept, by their published
+// date (or first-seen date when undated). Older items are not stored and
+// stored ones are pruned after each run; bookmarked articles are kept.
+var Retention = map[string]time.Duration{
+	KindGovernment: 60 * 24 * time.Hour,
+	KindVendor:     30 * 24 * time.Hour,
+	KindResearch:   7 * 24 * time.Hour,
+	KindNews:       7 * 24 * time.Hour,
+}
+
 type Feed struct {
 	Key  string
 	Name string

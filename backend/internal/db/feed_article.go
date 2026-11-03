@@ -189,7 +189,9 @@ type NewsParams struct {
 	WithCVEOnly bool
 	// Top ranks by the importance of the CVEs an article names instead of
 	// by date (see NewsArticles).
-	Top           bool
+	Top bool
+	// Bookmarked lists only bookmarked articles.
+	Bookmarked    bool
 	Limit, Offset int
 }
 
@@ -199,7 +201,8 @@ type NewsArticle struct {
 	// exploited CVE (CISA KEV, EUVD, VulnCheck KEV) counts 3, critical 2,
 	// high 1, plus 1 per other feed covering that CVE in the window (at
 	// most 4). Roundups score 0.
-	Score int `json:"score"`
+	Score      int  `json:"score"`
+	Bookmarked bool `json:"bookmarked"`
 }
 
 // NewsArticles lists feed articles for the news page, with the total
@@ -211,8 +214,9 @@ func (s *Store) NewsArticles(ctx context.Context, p NewsParams) ([]NewsArticle, 
 	}
 	rows, err := s.pool.Query(ctx, `
 		WITH a AS (
-			SELECT feed, url, title, summary, `+articleDate+` AS at, cve_ids FROM feed_article
+			SELECT feed, url, title, summary, `+articleDate+` AS at, cve_ids, bookmarked_at IS NOT NULL AS bookmarked FROM feed_article
 			WHERE ($1::text[] IS NULL OR feed = ANY($1))
+			  AND (NOT $8 OR bookmarked_at IS NOT NULL)
 			  AND `+articleDate+` >= $2
 			  AND ($3 = '' OR strpos(lower(title || ' ' || COALESCE(summary, '')), lower($3)) > 0)
 			  AND (NOT $4 OR cardinality(cve_ids) > 0)
@@ -243,9 +247,9 @@ func (s *Store) NewsArticles(ctx context.Context, p NewsParams) ([]NewsArticle, 
 				ELSE 0 END AS score
 			FROM a
 		)
-		SELECT feed, url, title, summary, at, cve_ids, score, count(*) OVER ()
+		SELECT feed, url, title, summary, at, cve_ids, score, bookmarked, count(*) OVER ()
 		FROM scored ORDER BY `+order+` LIMIT $6 OFFSET $7`,
-		p.Feeds, p.Since, p.Query, p.WithCVEOnly, roundupLimit, p.Limit, p.Offset)
+		p.Feeds, p.Since, p.Query, p.WithCVEOnly, roundupLimit, p.Limit, p.Offset, p.Bookmarked)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -254,7 +258,7 @@ func (s *Store) NewsArticles(ctx context.Context, p NewsParams) ([]NewsArticle, 
 	total := 0
 	for rows.Next() {
 		var a NewsArticle
-		if err := rows.Scan(&a.Feed, &a.URL, &a.Title, &a.Summary, &a.Published, &a.CVEIDs, &a.Score, &total); err != nil {
+		if err := rows.Scan(&a.Feed, &a.URL, &a.Title, &a.Summary, &a.Published, &a.CVEIDs, &a.Score, &a.Bookmarked, &total); err != nil {
 			return nil, 0, err
 		}
 		out = append(out, a)
@@ -312,5 +316,21 @@ func (s *Store) SetArticleCVEs(ctx context.Context, url string, ids []string) (b
 		ids = []string{}
 	}
 	tag, err := s.pool.Exec(ctx, `UPDATE feed_article SET cve_ids = $2 WHERE url = $1 AND cve_ids IS DISTINCT FROM $2`, url, ids)
+	return tag.RowsAffected() > 0, err
+}
+
+// PruneArticles deletes articles of the given feeds dated before cutoff,
+// except bookmarked ones.
+func (s *Store) PruneArticles(ctx context.Context, feeds []string, cutoff time.Time) (int, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM feed_article
+		WHERE feed = ANY($1) AND `+articleDate+` < $2 AND bookmarked_at IS NULL`, feeds, cutoff)
+	return int(tag.RowsAffected()), err
+}
+
+// SetBookmark bookmarks or un-bookmarks an article; false means no article
+// has that URL.
+func (s *Store) SetBookmark(ctx context.Context, url string, on bool) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `UPDATE feed_article
+		SET bookmarked_at = CASE WHEN $2 THEN COALESCE(bookmarked_at, now()) END WHERE url = $1`, url, on)
 	return tag.RowsAffected() > 0, err
 }

@@ -84,7 +84,8 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `GET /api/v1/cves/{id}/articles` | Feed articles mentioning a CVE (`internal/api/feeds.go`) |
 | `GET /api/v1/stats/trending` | CVEs ranked by distinct feeds mentioning them |
 | `GET /api/v1/feeds`, `/api/v1/feeds/advisories` | Feed list with counts; newest vendor/government advisories |
-| `GET /api/v1/news` | News page list: filters, top/newest sort, paging, and a badge per named CVE (`internal/api/news.go`, `db.NewsArticles`) |
+| `GET /api/v1/news` | News page list: filters, top/newest sort, `bookmarked=1`, paging, and a badge per named CVE (`internal/api/news.go`, `db.NewsArticles`) |
+| `PUT /api/v1/news/bookmark` | Bookmark or un-bookmark an article (`{"url", "bookmarked"}`); bookmarked articles are not pruned |
 | `GET /api/v1/vendors` | Vendor ranking/search (`q`, `page_size`) from `vendor_stats` |
 | `GET /api/v1/products` | Product ranking/search across vendors (`q`, `page_size`) from `product_stats` |
 | `GET /api/v1/vendors/{vendor}` | Vendor summary, CVEs per year, top 200 products |
@@ -109,6 +110,7 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `00003_sort_indexes.sql` | Sort indexes rebuilt as `DESC NULLS LAST, id DESC` (and a COALESCE CVSS expression index) to match the list API's `ORDER BY` |
 | `00004_enrichment.sql` | `kev.forensic_triage`; `cve.exploit_ref` with a backfill from `refs` (~10 s on the full corpus); `kev (date_added DESC, cve_id)` index |
 | `00005_vendor_stats.sql` | Materialized views `vendor_stats`, `product_stats`, `vendor_year_stats` with unique indexes (required for `REFRESH … CONCURRENTLY`); ~12 s to create on the full corpus |
+| `00015_article_bookmark.sql` | `feed_article.bookmarked_at` |
 | `00014_mastodon.sql` | `mastodon` report source |
 | `00013_vulncheck_threat_intel.sql` | `vulncheck_kev`; `otx` / `threatfox` / `bluesky` report sources |
 | `00012_attack_exploited_debian.sql` | `euvd_exploited`, `attack_mapping`, `capec`, `debian_status`; `trickest` exploit source; `history` / `commits` report sources |

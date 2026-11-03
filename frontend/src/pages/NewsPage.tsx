@@ -1,5 +1,5 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { ExternalLink, Search, X } from 'lucide-react'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Bookmark, BookmarkCheck, ExternalLink, Search, X } from 'lucide-react'
 import { useDeferredValue } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { api } from '../api/client'
@@ -10,7 +10,8 @@ import { fmtDate, fmtNumber, relativeTime } from '../lib/format'
 import { severityText } from '../lib/severity'
 
 // Security news from Pahredar's own feeds (GET /api/v1/news). Every filter
-// lives in the URL: kind, feed, q, days, cves, sort, page.
+// lives in the URL: kind, feed, q, days, cves, saved, sort, page. Saved
+// (bookmarked) articles are listed regardless of the time range.
 
 const link = 'text-cyan-300 hover:text-cyan-200'
 const PAGE_SIZE = 30
@@ -18,7 +19,7 @@ const PAGE_SIZE = 30
 const ROUNDUP = 15
 
 const KINDS: [FeedKind | '', string][] = [['', 'All'], ['news', 'News'], ['research', 'Research'], ['vendor', 'Vendor advisories'], ['government', 'Government']]
-const RANGES: [number, string][] = [[1, '24 h'], [7, '7 days'], [30, '30 days'], [0, 'All time']]
+const RANGES: [number, string][] = [[1, '24 h'], [7, '7 days'], [30, '30 days'], [0, 'All stored']]
 
 export function NewsPage() {
   const [params, setParams] = useSearchParams()
@@ -27,6 +28,7 @@ export function NewsPage() {
   const q = params.get('q') ?? ''
   const days = params.has('days') ? Number(params.get('days')) : 7
   const cves = params.get('cves') === '1'
+  const saved = params.get('saved') === '1'
   const sort = params.get('sort') === 'newest' ? 'newest' : 'top'
   const page = Math.max(1, Number(params.get('page')) || 1)
   const deferredQ = useDeferredValue(q.trim())
@@ -44,8 +46,8 @@ export function NewsPage() {
 
   const feeds = useQuery({ queryKey: ['feeds'], queryFn: api.feeds, staleTime: 10 * 60_000 })
   const news = useQuery({
-    queryKey: ['news', kind, feed, deferredQ, days, cves, sort, page],
-    queryFn: () => api.news({ kind: kind || undefined, feed: feed || undefined, q: deferredQ, days, cves, sort, page, limit: PAGE_SIZE }),
+    queryKey: ['news', kind, feed, deferredQ, saved ? 0 : days, cves, saved, sort, page],
+    queryFn: () => api.news({ kind: kind || undefined, feed: feed || undefined, q: deferredQ, days: saved ? 0 : days, cves, bookmarked: saved, sort, page, limit: PAGE_SIZE }),
     placeholderData: keepPreviousData,
     refetchInterval: 10 * 60_000,
   })
@@ -62,6 +64,7 @@ export function NewsPage() {
           <>
             {feeds.data ? `${feeds.data.items.length} vendor, government, research, and news feeds` : 'Vendor, government, research, and news feeds'}, read hourly
             {latest && <> · newest article {relativeTime(latest)}</>}. <b className="font-medium text-zinc-300">Top</b> ranks stories by the CVEs they cover: exploited first, then critical, then how many sources cover them.
+            {' '}Government advisories are kept 60 days, vendor advisories 30, news and research 7; bookmark an article to keep it.
           </>
         }
       />
@@ -73,15 +76,21 @@ export function NewsPage() {
               <button key={label} className={seg(!feed && kind === k)} onClick={() => set({ kind: k, feed: '' })}>{label}</button>
             ))}
           </div>
-          <div className="flex rounded-lg border border-zinc-800 bg-zinc-900 p-0.5">
+          <div className={`flex rounded-lg border border-zinc-800 bg-zinc-900 p-0.5 ${saved ? 'opacity-40' : ''}`} title={saved ? 'Saved articles are shown whatever their date' : undefined}>
             {RANGES.map(([d, label]) => (
-              <button key={d} className={seg(days === d)} onClick={() => set({ days: d === 7 ? '' : String(d) })}>{label}</button>
+              <button key={d} disabled={saved} className={seg(!saved && days === d)} onClick={() => set({ days: d === 7 ? '' : String(d) })}>{label}</button>
             ))}
           </div>
           <div className="flex rounded-lg border border-zinc-800 bg-zinc-900 p-0.5">
             <button className={seg(sort === 'top')} onClick={() => set({ sort: '' })} title="Exploited and critical CVEs, widely covered, first">Top</button>
             <button className={seg(sort === 'newest')} onClick={() => set({ sort: 'newest' })}>Newest</button>
           </div>
+          <button
+            onClick={() => set({ saved: saved ? '' : '1' })}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm ${saved ? 'border-cyan-400/40 bg-cyan-500/10 text-cyan-100' : 'border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200'}`}
+          >
+            <BookmarkCheck className="h-4 w-4" /> Saved
+          </button>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative min-w-64 flex-1">
@@ -109,7 +118,7 @@ export function NewsPage() {
         <div className="min-w-0 lg:col-span-2">
           <Card title={news.data ? `${fmtNumber(news.data.total)} article${news.data.total === 1 ? '' : 's'}` : 'Articles'}>
             {news.isPending ? <Spinner /> : news.isError ? <ErrorBox error={news.error} /> : news.data.items.length === 0 ? (
-              <p className="py-8 text-center text-sm text-zinc-500">No articles match. Try a longer time range or fewer filters.</p>
+              <p className="py-8 text-center text-sm text-zinc-500">{saved ? 'No saved articles yet. Use the bookmark icon on an article to keep it here.' : 'No articles match. Try a longer time range or fewer filters.'}</p>
             ) : (
               <>
                 <ul className={`divide-y divide-zinc-800 ${news.isPlaceholderData ? 'opacity-60' : ''}`}>
@@ -156,30 +165,50 @@ export function NewsPage() {
 }
 
 function Article({ a, badges, onFeed }: { a: NewsArticle; badges: Record<string, CveBadge>; onFeed: (feed: string) => void }) {
+  const qc = useQueryClient()
+  const bookmark = useMutation({
+    mutationFn: (on: boolean) => api.setBookmark(a.url, on),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['news'] }),
+  })
+  // Show the requested state while the request is in flight.
+  const on = bookmark.isPending ? !!bookmark.variables : a.bookmarked
   const roundup = a.cve_ids.length > ROUNDUP
   // Exploited first, then by score, so the CVEs that make a story matter
   // lead the chip row.
   const ids = [...a.cve_ids].sort((x, y) => rank(badges[y]) - rank(badges[x]))
   return (
-    <li className="py-3">
-      <a href={a.url} target="_blank" rel="noreferrer" className="group inline font-medium text-zinc-100 hover:text-cyan-200">
-        {a.title}
-        <ExternalLink className="ml-1 inline h-3 w-3 text-zinc-600 group-hover:text-cyan-300" />
-      </a>
-      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500">
-        <KindTag kind={a.feed_kind} />
-        <button onClick={() => onFeed(a.feed)} className="text-zinc-300 hover:text-cyan-200">{a.feed_name}</button>
-        <span>·</span>
-        <span title={fmtDate(a.published)}>{relativeTime(a.published)}</span>
-      </div>
-      {a.summary && <p className="mt-1.5 line-clamp-2 text-sm text-zinc-400">{a.summary}</p>}
-      {ids.length > 0 && (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {roundup && <span className="text-xs text-zinc-500">Roundup naming {ids.length} CVEs:</span>}
-          {ids.slice(0, roundup ? 6 : 8).map((id) => <CveChip key={id} id={id} b={badges[id]} />)}
-          {ids.length > (roundup ? 6 : 8) && <span className="text-xs text-zinc-500">+{ids.length - (roundup ? 6 : 8)} more</span>}
+    <li className="flex gap-3 py-3">
+      <div className="min-w-0 flex-1">
+        <a href={a.url} target="_blank" rel="noreferrer" className="group inline font-medium text-zinc-100 hover:text-cyan-200">
+          {a.title}
+          <ExternalLink className="ml-1 inline h-3 w-3 text-zinc-600 group-hover:text-cyan-300" />
+        </a>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500">
+          <KindTag kind={a.feed_kind} />
+          <button onClick={() => onFeed(a.feed)} className="text-zinc-300 hover:text-cyan-200">{a.feed_name}</button>
+          <span>·</span>
+          <span title={fmtDate(a.published)}>{relativeTime(a.published)}</span>
         </div>
-      )}
+        {a.summary && <p className="mt-1.5 line-clamp-2 text-sm text-zinc-400">{a.summary}</p>}
+        {ids.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {roundup && <span className="text-xs text-zinc-500">Roundup naming {ids.length} CVEs:</span>}
+            {ids.slice(0, roundup ? 6 : 8).map((id) => <CveChip key={id} id={id} b={badges[id]} />)}
+            {ids.length > (roundup ? 6 : 8) && <span className="text-xs text-zinc-500">+{ids.length - (roundup ? 6 : 8)} more</span>}
+          </div>
+        )}
+        {bookmark.isError && <p className="mt-1 text-xs text-red-300">Could not save the bookmark; try again.</p>}
+      </div>
+      <button
+        onClick={() => bookmark.mutate(!on)}
+        disabled={bookmark.isPending}
+        title={on ? 'Remove bookmark' : 'Bookmark: keep this article and find it under Saved'}
+        aria-label={on ? 'Remove bookmark' : 'Bookmark'}
+        aria-pressed={on}
+        className={`h-8 w-8 shrink-0 rounded-md p-1.5 ${on ? 'text-cyan-300 hover:bg-zinc-800' : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200'}`}
+      >
+        {on ? <BookmarkCheck className="h-5 w-5" /> : <Bookmark className="h-5 w-5" />}
+      </button>
     </li>
   )
 }

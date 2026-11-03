@@ -545,6 +545,8 @@ export interface NewsArticle extends FeedArticle {
   // Best of the article's CVEs: exploited 3, critical 2, high 1, plus 1 per
   // other feed covering it in the window (≤ 4). Roundups score 0.
   score: number
+  // Bookmarked articles are kept past their kind's retention.
+  bookmarked: boolean
 }
 
 export interface CveBadge {
@@ -567,6 +569,7 @@ export interface NewsQuery {
   q?: string
   days?: number
   cves?: boolean
+  bookmarked?: boolean
   sort?: 'top' | 'newest'
   page?: number
   limit?: number

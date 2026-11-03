@@ -40,7 +40,7 @@ React Router 8 needs Node ≥ 22.22 and the dev machine has Node 20, so the app 
 | `/vendors` | Vendors and products tabs (`?tab=products`) with search (`?q=`), ranked by CVE count. Names show the display label; links use the canonical key |
 | `/vendors/:vendor` | Vendor stats, CVEs per year, top 200 products |
 | `/vendors/:vendor/products/:product` | Product stats, CVEs per year, and the CVE list fixed to that product |
-| `/news` | Security news (`pages/NewsPage.tsx`): `?kind=&feed=&q=&days=&cves=1&sort=newest&page=`; defaults are all kinds, 7 days, top first |
+| `/news` | Security news (`pages/NewsPage.tsx`): `?kind=&feed=&q=&days=&cves=1&saved=1&sort=newest&page=`; defaults are all kinds, 7 days, top first; each article has a bookmark button (`PUT /api/v1/news/bookmark`), and `saved=1` lists bookmarked articles whatever their date |
 | `/sync` | Per-source status with "Run now", and recent runs (polls every 5 s) |
 
 ## Conventions

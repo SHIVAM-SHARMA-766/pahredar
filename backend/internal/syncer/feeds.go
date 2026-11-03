@@ -26,10 +26,12 @@ const (
 )
 
 // SyncFeeds reads every feed in feeds.All and stores its items with the CVE
-// IDs they mention. A failing feed is logged and skipped; the run fails only
+// IDs they mention, then prunes articles past their kind's retention
+// (feeds.Retention) unless bookmarked. A failing feed is logged and skipped; the run fails only
 // if more than half of the feeds fail.
 func (e *Enrichment) SyncFeeds(ctx context.Context) error {
 	return e.runner.Run(ctx, SourceFeeds, e.snapshotPlan(SourceFeeds), func(ctx context.Context, run *Run) error {
+		now := time.Now()
 		type result struct {
 			feed  feeds.Feed
 			items []feeds.Item
@@ -63,8 +65,13 @@ func (e *Enrichment) SyncFeeds(ctx context.Context) error {
 				slog.Warn("feed failed", "feed", r.feed.Key, "err", r.err)
 				continue
 			}
+			cutoff := now.Add(-feeds.Retention[r.feed.Kind])
 			for _, it := range r.items {
 				if seen[it.URL] {
+					continue
+				}
+				// Past retention: not stored (pruning would delete it again).
+				if it.Published != nil && it.Published.Before(cutoff) {
 					continue
 				}
 				seen[it.URL] = true
@@ -121,6 +128,17 @@ func (e *Enrichment) SyncFeeds(ctx context.Context) error {
 		run.Inserted, run.Updated, err = e.store.UpsertArticles(ctx, rows)
 		if err != nil {
 			return err
+		}
+		byKind := map[string][]string{}
+		for _, f := range feeds.All {
+			byKind[f.Kind] = append(byKind[f.Kind], f.Key)
+		}
+		for kind, keys := range byKind {
+			n, err := e.store.PruneArticles(ctx, keys, now.Add(-feeds.Retention[kind]))
+			if err != nil {
+				return err
+			}
+			run.Deleted += n
 		}
 		slog.Info("feeds read", "feeds", len(feeds.All)-len(failed), "failed", strings.Join(failed, ","), "items", len(rows), "pages_checked", len(toCheck))
 		return e.store.SetSyncCursor(ctx, SourceFeeds, time.Now().UTC().Format(time.RFC3339))

@@ -37,6 +37,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/stats/trending", s.trending)
 	mux.HandleFunc("GET /api/v1/feeds", s.feedList)
 	mux.HandleFunc("GET /api/v1/news", s.news)
+	mux.HandleFunc("PUT /api/v1/news/bookmark", s.setBookmark)
 	mux.HandleFunc("GET /api/v1/feeds/advisories", s.latestAdvisories)
 	mux.HandleFunc("GET /api/v1/stats/dashboard", s.dashboard)
 	mux.HandleFunc("GET /api/v1/stats/series", s.series)

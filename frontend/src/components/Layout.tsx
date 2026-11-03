@@ -34,7 +34,10 @@ const SECTIONS: { title: string; dot: string; items: NavItem[] }[] = [
   {
     title: 'Overview',
     dot: 'bg-sky-400',
-    items: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, active: (l) => l.pathname === '/' }],
+    items: [
+      { to: '/', label: 'Dashboard', icon: LayoutDashboard, active: (l) => l.pathname === '/' },
+      { to: '/news', label: 'Security news', icon: Newspaper, active: (l) => l.pathname === '/news' },
+    ],
   },
   {
     title: 'Vulnerability intelligence',
@@ -44,7 +47,6 @@ const SECTIONS: { title: string; dot: string; items: NavItem[] }[] = [
       // inside the explorer, not separate entries.
       { to: '/cves', label: 'CVE explorer', icon: Bug, active: (l) => l.pathname.startsWith('/cves') },
       { to: '/vendors', label: 'Vendors & products', icon: Building2, active: (l) => l.pathname.startsWith('/vendors') },
-      { to: '/news', label: 'Security news', icon: Newspaper, active: (l) => l.pathname === '/news' },
     ],
   },
   {

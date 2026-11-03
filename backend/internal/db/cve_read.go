@@ -95,7 +95,10 @@ const listFrom = ` FROM cve LEFT JOIN kev ON kev.cve_id = cve.id LEFT JOIN epss 
 // summaryDescriptionLength truncates descriptions in list responses.
 const summaryDescriptionLength = 300
 
-func (s *Store) ListCVEs(ctx context.Context, p ListCVEParams) ([]CVESummary, int, error) {
+// cveWhere builds the shared WHERE clause, bound args, and relevance-rank
+// expression for the CVE filters, so ListCVEs and FacetCVEs match row for
+// row.
+func cveWhere(p ListCVEParams) (string, []any, string) {
 	var where []string
 	var args []any
 	arg := func(v any) string {
@@ -176,6 +179,15 @@ func (s *Store) ListCVEs(ctx context.Context, p ListCVEParams) ([]CVESummary, in
 	whereSQL := ""
 	if len(where) > 0 {
 		whereSQL = " WHERE " + strings.Join(where, " AND ")
+	}
+	return whereSQL, args, rank
+}
+
+func (s *Store) ListCVEs(ctx context.Context, p ListCVEParams) ([]CVESummary, int, error) {
+	whereSQL, args, rank := cveWhere(p)
+	arg := func(v any) string {
+		args = append(args, v)
+		return fmt.Sprintf("$%d", len(args))
 	}
 
 	var total int
@@ -417,4 +429,36 @@ func (s *Store) GetCVE(ctx context.Context, id string) (*CVEDetail, error) {
 		return nil, err
 	}
 	return &d, nil
+}
+
+// CVEFacets is a severity breakdown and KEV count for a filter set, used by
+// the explorer's overview strip. It runs one aggregate scan over the same
+// WHERE clause as ListCVEs (no correlated subqueries, so it stays cheap).
+type CVEFacets struct {
+	Total    int            `json:"total"`
+	Severity map[string]int `json:"severity"`
+	KEV      int            `json:"kev"`
+}
+
+func (s *Store) FacetCVEs(ctx context.Context, p ListCVEParams) (*CVEFacets, error) {
+	whereSQL, args, _ := cveWhere(p)
+	var total, crit, high, med, low, kev int
+	err := s.pool.QueryRow(ctx, `SELECT count(*),
+		count(*) FILTER (WHERE severity = 'CRITICAL'),
+		count(*) FILTER (WHERE severity = 'HIGH'),
+		count(*) FILTER (WHERE severity = 'MEDIUM'),
+		count(*) FILTER (WHERE severity = 'LOW'),
+		count(*) FILTER (WHERE kev.cve_id IS NOT NULL)`+listFrom+whereSQL, args...).
+		Scan(&total, &crit, &high, &med, &low, &kev)
+	if err != nil {
+		return nil, err
+	}
+	return &CVEFacets{
+		Total: total,
+		Severity: map[string]int{
+			"CRITICAL": crit, "HIGH": high, "MEDIUM": med, "LOW": low,
+			"OTHER": total - crit - high - med - low,
+		},
+		KEV: kev,
+	}, nil
 }

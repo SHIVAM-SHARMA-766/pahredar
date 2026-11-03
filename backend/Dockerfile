@@ -1,15 +1,11 @@
 FROM golang:1.26-alpine AS build
 WORKDIR /src
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/pahredar ./cmd/pahredar
-# Empty data dir, copied with nonroot ownership so the named volume inherits it.
-RUN mkdir -p /out/data
 
 # Nuclei is bundled for the optional active (intrusive) endpoint scanner. It
 # is only invoked when SCAN_ACTIVE_ENABLED=true; its presence alone changes
-# nothing. Pinned by version and verified by SHA-256.
+# nothing. Pinned by version and verified by SHA-256. These downloads sit
+# before the source copy so editing Go code does not re-fetch them (the layer
+# cache stays valid across code changes); wget retries ride out flaky networks.
 ARG TARGETARCH
 RUN apk add --no-cache unzip
 RUN NUCLEI_VERSION=3.11.1 && \
@@ -18,11 +14,20 @@ RUN NUCLEI_VERSION=3.11.1 && \
       arm64) SUM=8044e3d9768ba0a744b2872c1a87e813006f013da97ca9f50f7661a4203bec07 ;; \
       *) echo "unsupported arch $TARGETARCH" && exit 1 ;; \
     esac && \
-    wget -q -O /tmp/n.zip "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_${TARGETARCH}.zip" && \
+    wget -q --tries=5 --waitretry=5 --retry-connrefused -O /tmp/n.zip "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_${TARGETARCH}.zip" && \
     echo "${SUM}  /tmp/n.zip" | sha256sum -c - && \
     unzip -o /tmp/n.zip -d /out nuclei
 # Nuclei templates (data, run by the sandboxed engine), pinned by tag.
-RUN NT_VERSION=10.5.0 && mkdir -p /out/nuclei-templates &&     wget -q -O /tmp/nt.tgz "https://codeload.github.com/projectdiscovery/nuclei-templates/tar.gz/refs/tags/v${NT_VERSION}" &&     tar xzf /tmp/nt.tgz -C /out/nuclei-templates --strip-components=1
+RUN NT_VERSION=10.5.0 && mkdir -p /out/nuclei-templates && \
+    wget -q --tries=5 --waitretry=5 --retry-connrefused -O /tmp/nt.tgz "https://codeload.github.com/projectdiscovery/nuclei-templates/tar.gz/refs/tags/v${NT_VERSION}" && \
+    tar xzf /tmp/nt.tgz -C /out/nuclei-templates --strip-components=1
+
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/pahredar ./cmd/pahredar
+# Empty data dir, copied with nonroot ownership so the named volume inherits it.
+RUN mkdir -p /out/data
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/pahredar /pahredar

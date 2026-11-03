@@ -34,6 +34,14 @@ export interface CveList {
   page_size: number
 }
 
+// Severity breakdown + KEV count for a filter set (GET /api/v1/cves/facets),
+// used by the explorer's graphical overview strip.
+export interface CveFacets {
+  total: number
+  severity: Record<string, number>
+  kev: number
+}
+
 export interface Metric {
   provider: Provider
   provider_name?: string

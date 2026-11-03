@@ -333,9 +333,28 @@ function SignalCard({ c }: { c: CveDetail }) {
       <div className="mt-3 space-y-1 text-center text-sm">
         {p && <div className={`font-medium ${priorityInfo[p].text}`}>{p} · {priorityInfo[p].label}</div>}
         <div className="text-zinc-400">{exploitationLabel[c.assessment.exploitation]}</div>
-        {c.epss && <div className="text-xs text-zinc-500">EPSS {fmtEpss(c.epss.score)} · {fmtPercentile(c.epss.percentile)}</div>}
       </div>
+      {c.epss && <EpssMeter score={c.epss.score} percentile={c.epss.percentile} />}
     </Card>
+  )
+}
+
+// EpssMeter draws the EPSS exploit-probability as a thin bar, coloured by how
+// high the probability is, with the percentile underneath.
+function EpssMeter({ score, percentile }: { score: number; percentile: number }) {
+  const pct = Math.round(score * 100)
+  const color = score >= 0.5 ? '#d13d43' : score >= 0.1 ? '#e8833a' : '#22b8cf'
+  return (
+    <div className="mt-4 border-t border-zinc-800 pt-3">
+      <div className="flex items-baseline justify-between text-[11px] tracking-wider text-zinc-500 uppercase">
+        <span>EPSS · exploit probability</span>
+        <span className="font-semibold text-zinc-200 tabular-nums">{fmtEpss(score)}</span>
+      </div>
+      <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-zinc-800">
+        <div className="h-full rounded-full" style={{ width: `${Math.max(2, pct)}%`, background: color }} />
+      </div>
+      <div className="mt-1 text-[11px] text-zinc-500">{fmtPercentile(percentile)} of all CVEs · next 30 days</div>
+    </div>
   )
 }
 

@@ -5,6 +5,7 @@ import { CveTable, type SortKey } from '../components/CveTable'
 import { QueryBar } from '../components/QueryBar'
 import { Card, ErrorBox, PageHeader, Spinner } from '../components/ui'
 import { fmtNumber } from '../lib/format'
+import { severityFill } from '../lib/severity'
 import { useOrigin } from '../lib/origin'
 import { parseQuery } from '../lib/query'
 
@@ -68,6 +69,7 @@ export function CveListPage() {
       {view && <p className="-mt-2 mb-3 text-xs text-zinc-500">{view.hint}</p>}
       <div className="space-y-4">
         <QueryBar value={query} onSubmit={submit} errors={parsed.errors} />
+        <CveFacetBar filters={parsed.api} />
         <CveResults filters={parsed.api} view={params} onView={setParams} defaultSort={parsed.text ? 'relevance' : 'published'} />
       </div>
     </>
@@ -197,5 +199,76 @@ function Pager({ page, lastPage, onPage }: { page: number; lastPage: number; onP
       )}
       <button className={`${btn} ${idle}`} disabled={page >= lastPage} onClick={() => onPage(page + 1)}>Next →</button>
     </nav>
+  )
+}
+
+
+// SEVERITY_SEGMENTS drives the explorer's overview bar: the severity order and
+// the fill each slice uses.
+const SEVERITY_SEGMENTS: { key: string; label: string; fill: string }[] = [
+  { key: 'CRITICAL', label: 'Critical', fill: severityFill.CRITICAL },
+  { key: 'HIGH', label: 'High', fill: severityFill.HIGH },
+  { key: 'MEDIUM', label: 'Medium', fill: severityFill.MEDIUM },
+  { key: 'LOW', label: 'Low', fill: severityFill.LOW },
+  { key: 'OTHER', label: 'Unscored', fill: 'var(--sev-other)' },
+]
+
+// CveFacetBar is the graphical summary above the results table: the severity
+// composition and KEV count of everything matching the current query (not
+// just the visible page). It is keyed on the filters alone, so paging and
+// re-sorting do not refetch it.
+function CveFacetBar({ filters }: { filters: URLSearchParams }) {
+  const key = filters.toString()
+  const q = useQuery({
+    queryKey: ['cve-facets', key],
+    queryFn: () => api.cveFacets(filters),
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
+  })
+  const f = q.data
+  if (q.isError) return null
+  const total = f?.total ?? 0
+  const segments = f ? SEVERITY_SEGMENTS.map((s) => ({ ...s, n: f.severity[s.key] ?? 0 })).filter((s) => s.n > 0) : []
+  const kevPct = total ? Math.round((f!.kev / total) * 100) : 0
+
+  return (
+    <div className={`rounded-xl border border-zinc-800 bg-gradient-to-br from-zinc-900 to-zinc-950 p-4 ${q.isPlaceholderData ? 'opacity-60' : ''}`}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+        <div className="shrink-0">
+          <div className="font-mono text-2xl font-bold text-white tabular-nums">{fmtNumber(total)}</div>
+          <div className="text-[11px] tracking-wider text-zinc-500 uppercase">matching CVEs</div>
+        </div>
+
+        <div className="min-w-0 flex-1 lg:border-l lg:border-zinc-800 lg:pl-4">
+          {total > 0 ? (
+            <>
+              <div className="flex h-2.5 overflow-hidden rounded-full bg-zinc-800">
+                {segments.map((s) => (
+                  <div key={s.key} className="h-full border-r-2 border-zinc-950 last:border-r-0" style={{ width: `${(s.n / total) * 100}%`, background: s.fill }} title={`${s.label}: ${fmtNumber(s.n)}`} />
+                ))}
+              </div>
+              <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1">
+                {segments.map((s) => (
+                  <li key={s.key} className="flex items-center gap-1.5 text-xs text-zinc-400">
+                    <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: s.fill }} />
+                    <span>{s.label}</span>
+                    <span className="font-medium text-zinc-200 tabular-nums">{fmtNumber(s.n)}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="text-sm text-zinc-500">{q.isPending ? 'Summarising…' : 'No CVEs match this query.'}</p>
+          )}
+        </div>
+
+        <div className="flex shrink-0 gap-2 lg:flex-col lg:items-end">
+          <div className="rounded-lg border border-red-400/20 bg-red-500/[0.07] px-3 py-1.5 text-center">
+            <div className="font-mono text-base font-semibold text-red-300 tabular-nums">{fmtNumber(f?.kev ?? 0)}</div>
+            <div className="text-[10px] tracking-wider text-red-300/70 uppercase">In CISA KEV{total > 0 ? ` · ${kevPct}%` : ''}</div>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }

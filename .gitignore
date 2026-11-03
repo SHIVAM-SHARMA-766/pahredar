@@ -4,3 +4,5 @@ dist/
 /backend/bin/
 *.zip
 *.tsbuildinfo
+backend/.nuclei-cache/
+backend/Dockerfile.local

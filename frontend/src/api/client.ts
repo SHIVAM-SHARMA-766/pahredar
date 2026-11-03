@@ -2,6 +2,7 @@ import type {
   AttackMapping,
   CapecPattern,
   CveDetail,
+  CveFacets,
   CveList,
   CveReports,
   DetectionRule,
@@ -47,6 +48,7 @@ const enc = encodeURIComponent
 export const api = {
   dashboard: () => request<Dashboard>('/api/v1/stats/dashboard'),
   listCves: (params: URLSearchParams) => request<CveList>(`/api/v1/cves?${params}`),
+  cveFacets: (params: URLSearchParams) => request<CveFacets>(`/api/v1/cves/facets?${params}`),
   getCve: (id: string) => request<CveDetail>(`/api/v1/cves/${enc(id)}`),
   getCveReports: (id: string, sources: string[]) =>
     request<CveReports>(`/api/v1/cves/${enc(id)}/reports?${new URLSearchParams({ sources: sources.join(',') })}`),

@@ -43,6 +43,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.healthz)
 	mux.HandleFunc("GET /api/v1/cves", s.listCVEs)
+	mux.HandleFunc("GET /api/v1/cves/facets", s.cveFacets)
 	mux.HandleFunc("GET /api/v1/cves/{id}", s.getCVE)
 	mux.HandleFunc("GET /api/v1/cves/{id}/reports", s.cveReports)
 	mux.HandleFunc("GET /api/v1/cves/{id}/related", s.relatedCVEs)

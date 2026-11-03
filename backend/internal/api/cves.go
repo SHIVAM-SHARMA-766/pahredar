@@ -38,6 +38,20 @@ type listResponse struct {
 	PageSize int             `json:"page_size"`
 }
 
+func (s *Server) cveFacets(w http.ResponseWriter, r *http.Request) {
+	p, _, err := parseListParams(r.URL.Query())
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	facets, err := s.store.FacetCVEs(r.Context(), p)
+	if err != nil {
+		internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, facets)
+}
+
 func (s *Server) listCVEs(w http.ResponseWriter, r *http.Request) {
 	p, page, err := parseListParams(r.URL.Query())
 	if err != nil {

@@ -118,3 +118,17 @@ func TestParseCERTIn(t *testing.T) {
 		t.Fatal("want an error when the layout changes")
 	}
 }
+
+func TestParseNVIDIA(t *testing.T) {
+	readme := "# Security Bulletins for 2026\n\n| Bulletin ID | Title | Initial Publication Date | Updated Publication Date | CVEs |\n|---|---|---|---|---|\n" +
+		"| [5883](5883/5883.md) | Security Bulletin: - NVIDIA - TensorRT LLM - October 2026 | 2026-10-27 | 2026-10-28 | [CVE-2026-65119](5883/CVE-2026-65119.json), [CVE-2026-24269](5883/CVE-2026-24269.json) |\n"
+	items, err := parseNVIDIA(strings.NewReader(readme), 2026)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items = %+v, err = %v", items, err)
+	}
+	it := items[0]
+	if it.Title != "NVIDIA bulletin 5883: NVIDIA - TensorRT LLM - October 2026" || it.URL != "https://github.com/NVIDIA/product-security/blob/main/2026/5883/5883.md" ||
+		strings.Join(it.CVEIDs, ",") != "CVE-2026-65119,CVE-2026-24269" || it.Published == nil || it.Published.Format("2006-01-02") != "2026-10-27" {
+		t.Fatalf("item = %+v", it)
+	}
+}

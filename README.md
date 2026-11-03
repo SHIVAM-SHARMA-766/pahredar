@@ -12,7 +12,7 @@ A personal, self-hosted CVE tracker. Pahredar keeps a local copy of every publis
 - Detection guidance per CVE: version-check commands, Nuclei / Nmap / Metasploit checks, Suricata (ET Open) and Sigma rules, hunting hints
 - Attack context: CTID ATT&CK mappings, MITRE CAPEC patterns; threat intelligence from AlienVault OTX pulses and ThreatFox IOCs (free keys)
 - Remediation: fixed versions, Debian per-release status, fix-commit diffs, vendor advisories (MSRC, Red Hat, Ubuntu, OSV)
-- News and research: 56 vendor, national CERT, research, and news sources (AWS, Microsoft, Next.js, PHP, CERT-In, JVN Japan, …) synced hourly, on a news page ranked by exploited and widely covered CVEs, plus Google News, Hacker News, and Bluesky per CVE
+- News and research: 67 vendor, national CERT, research, mailing-list, and news sources (AWS, Microsoft, Next.js, PHP, the GitHub Advisory Database, oss-security, CERT-In, JVN Japan, …) synced hourly, on a news page ranked by exploited and widely covered CVEs, plus Google News, Hacker News, and Bluesky per CVE
 - Dashboard: critical CVEs this week, publish volume by severity over 90 days, newest critical, recently added to KEV, likely-exploited CVEs not yet in KEV, biggest EPSS increases
 - Full-text search and filters (severity, KEV, exploit available, vendor, product, CWE, dates, EPSS)
 - CVE detail page in tabs: overview, detection, ATT&CK, remediation, exploits, reports & news, CVSS & affected, NVD change history, references

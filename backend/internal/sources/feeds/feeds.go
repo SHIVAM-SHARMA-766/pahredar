@@ -8,12 +8,14 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"html"
 	"io"
 	"net/http"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -55,6 +57,11 @@ const (
 	// FormatCERTIn reads CERT-In's vulnerability note list page; CERT-In
 	// has no feed.
 	FormatCERTIn = "certin"
+	// FormatNVIDIA reads the bulletin table in NVIDIA PSIRT's GitHub
+	// repository (one README per year); NVIDIA publishes bulletins only
+	// there. "{year}" in URL is the current year, or last year until the
+	// new year's README exists.
+	FormatNVIDIA = "nvidia"
 )
 
 // All is the feed list. Every URL was checked to return a parseable feed
@@ -93,6 +100,18 @@ var All = []Feed{
 	{Key: "jenkins", Name: "Jenkins", URL: "https://www.jenkins.io/security/advisories/rss.xml", Kind: KindVendor, FetchPage: true, MaxItems: 30},
 	{Key: "grafana", Name: "Grafana", URL: "https://grafana.com/security/security-advisories/index.xml", Kind: KindVendor, FetchPage: true, MaxItems: 40},
 	{Key: "hashicorp", Name: "HashiCorp", URL: "https://discuss.hashicorp.com/c/security/52.rss", Kind: KindVendor},
+	{Key: "drupal", Name: "Drupal core", URL: "https://www.drupal.org/security/rss.xml", Kind: KindVendor},
+	{Key: "drupal-contrib", Name: "Drupal modules", URL: "https://www.drupal.org/security/contrib/rss.xml", Kind: KindVendor},
+	{Key: "wordpress", Name: "WordPress", URL: "https://wordpress.org/news/category/security/feed/", Kind: KindVendor},
+	// Every reviewed advisory in the GitHub Advisory Database: npm, PyPI,
+	// Maven, Go, Rust, Composer, NuGet, RubyGems, … with the package named.
+	{Key: "ghsa", Name: "GitHub Advisory Database", URL: "https://api.github.com/advisories?type=reviewed&per_page=100&sort=published&direction=desc", Kind: KindVendor, Format: FormatGitHub},
+	// Network, storage, and hardware vendors.
+	{Key: "juniper", Name: "Juniper", URL: "https://supportportal.juniper.net/knowledgerss?type=Security", Kind: KindVendor},
+	{Key: "sonicwall", Name: "SonicWall", URL: "https://psirtapi.global.sonicwall.com/api/v1/feed/rss.xml", Kind: KindVendor, MaxItems: 100},
+	{Key: "synology", Name: "Synology", URL: "https://www.synology.com/api/rssfeed/security/en-global", Kind: KindVendor, MaxItems: 100},
+	{Key: "qnap", Name: "QNAP", URL: "https://www.qnap.com/en/security-advisory/feed", Kind: KindVendor},
+	{Key: "nvidia", Name: "NVIDIA", URL: "https://api.github.com/repos/NVIDIA/product-security/contents/{year}/README.md", Kind: KindVendor, Format: FormatNVIDIA},
 	// Government: national CERTs and cyber agencies.
 	{Key: "cisa", Name: "CISA advisories", URL: "https://www.cisa.gov/cybersecurity-advisories/all.xml", Kind: KindGovernment},
 	{Key: "cisa-ics", Name: "CISA ICS advisories", URL: "https://www.cisa.gov/cybersecurity-advisories/ics-advisories.xml", Kind: KindGovernment},
@@ -117,6 +136,10 @@ var All = []Feed{
 	{Key: "zdi-blog", Name: "ZDI blog", URL: "https://www.zerodayinitiative.com/blog?format=rss", Kind: KindResearch},
 	{Key: "rapid7", Name: "Rapid7", URL: "https://www.rapid7.com/blog/rss/", Kind: KindResearch, FetchPage: true},
 	{Key: "wordfence", Name: "Wordfence (WordPress)", URL: "https://www.wordfence.com/feed/", Kind: KindResearch},
+	// Disclosure mailing lists: open-source issues often appear on
+	// oss-security before a CVE record is published.
+	{Key: "oss-security", Name: "oss-security mailing list", URL: "https://seclists.org/rss/oss-sec.rss", Kind: KindResearch, FetchPage: true},
+	{Key: "fulldisclosure", Name: "Full Disclosure mailing list", URL: "https://seclists.org/rss/fulldisclosure.rss", Kind: KindResearch, FetchPage: true},
 	// News.
 	{Key: "thehackernews", Name: "The Hacker News", URL: "https://feeds.feedburner.com/TheHackersNews", Kind: KindNews, FetchPage: true},
 	{Key: "bleepingcomputer", Name: "BleepingComputer", URL: "https://www.bleepingcomputer.com/feed/", Kind: KindNews, FetchPage: true},
@@ -309,8 +332,23 @@ func Fetch(ctx context.Context, c *http.Client, f Feed) ([]Item, error) {
 		accept = "application/vnd.github+json"
 	case FormatCERTIn:
 		accept = "text/html"
+	case FormatNVIDIA:
+		accept = "application/vnd.github.raw"
 	}
-	resp, err := fetch.Get(ctx, c, f.URL, http.Header{"Accept": {accept}})
+	get := func(url string) (*http.Response, error) {
+		return fetch.Get(ctx, c, url, http.Header{"Accept": {accept}})
+	}
+	url := f.URL
+	year := time.Now().UTC().Year()
+	if strings.Contains(url, "{year}") {
+		url = strings.ReplaceAll(f.URL, "{year}", strconv.Itoa(year))
+	}
+	resp, err := get(url)
+	var se *fetch.StatusError
+	if errors.As(err, &se) && se.Code == http.StatusNotFound && url != f.URL {
+		year--
+		resp, err = get(strings.ReplaceAll(f.URL, "{year}", strconv.Itoa(year)))
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -322,6 +360,8 @@ func Fetch(ctx context.Context, c *http.Client, f Feed) ([]Item, error) {
 		items, err = parseGitHub(body)
 	case FormatCERTIn:
 		items, err = parseCERTIn(body, resp.Request.URL)
+	case FormatNVIDIA:
+		items, err = parseNVIDIA(body, year)
 	default:
 		items, err = Parse(body)
 	}
@@ -515,6 +555,13 @@ func parseGitHub(r io.Reader) ([]Item, error) {
 		Identifiers []struct {
 			Value string `json:"value"`
 		} `json:"identifiers"`
+		// Only in the global advisory database.
+		Vulnerabilities []struct {
+			Package struct {
+				Ecosystem string `json:"ecosystem"`
+				Name      string `json:"name"`
+			} `json:"package"`
+		} `json:"vulnerabilities"`
 	}
 	if err := json.NewDecoder(r).Decode(&advisories); err != nil {
 		return nil, err
@@ -534,6 +581,17 @@ func parseGitHub(r io.Reader) ([]Item, error) {
 		title := a.Summary
 		if a.CVE != nil && *a.CVE != "" {
 			title = *a.CVE + ": " + title
+		}
+		// "(npm: next, react)" names the affected packages.
+		var pkgs []string
+		for _, v := range a.Vulnerabilities {
+			p := v.Package.Ecosystem + ": " + v.Package.Name
+			if v.Package.Name != "" && !slices.Contains(pkgs, p) && len(pkgs) < 3 {
+				pkgs = append(pkgs, p)
+			}
+		}
+		if len(pkgs) > 0 {
+			title += " (" + strings.Join(pkgs, ", ") + ")"
 		}
 		desc := plain(a.Description)
 		if a.Severity != "" {
@@ -579,6 +637,32 @@ func parseCERTIn(r io.Reader, base *neturl.URL) ([]Item, error) {
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("no vulnerability notes found; the page layout may have changed")
+	}
+	return out, nil
+}
+
+// nvidiaRow matches one bulletin row of the yearly README:
+// | [5883](5883/5883.md) | Title | 2026-10-27 | 2026-10-27 | [CVE-…](…), … |
+var nvidiaRow = regexp.MustCompile(`(?m)^\|\s*\[(\d+)\]\(([^)]+)\)\s*\|\s*([^|]+?)\s*\|\s*(\d{4}-\d{2}-\d{2})\s*\|[^|]*\|([^\n]*)$`)
+
+func parseNVIDIA(r io.Reader, year int) ([]Item, error) {
+	page, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	var out []Item
+	for _, m := range nvidiaRow.FindAllStringSubmatch(string(page), -1) {
+		published := parseDate(m[4])
+		title := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(m[3]), "Security Bulletin"), ":"))
+		title = strings.TrimSpace(strings.TrimLeft(title, "-: "))
+		out = append(out, Item{
+			URL:   "https://github.com/NVIDIA/product-security/blob/main/" + strconv.Itoa(year) + "/" + strings.TrimPrefix(m[2], "./"),
+			Title: truncate("NVIDIA bulletin "+m[1]+": "+title, 300), Summary: title,
+			Published: published, CVEIDs: ExtractCVEs(m[5]), HasBody: true,
+		})
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no bulletins found; the README layout may have changed")
 	}
 	return out, nil
 }

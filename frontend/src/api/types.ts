@@ -638,11 +638,20 @@ export interface FeedInfo {
 
 export type ScanSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info' | 'good'
 
+export interface ScanEvidence {
+  request: string
+  response: string
+  snippet?: string
+}
+
 export interface ScanFinding {
   severity: ScanSeverity
   category: string
   title: string
   detail?: string
+  // Present on Pahredar's own active checks: the request sent and the
+  // response that proves the finding.
+  evidence?: ScanEvidence
 }
 
 export interface ScanTechCve {

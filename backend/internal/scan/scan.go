@@ -61,10 +61,19 @@ type Progress struct {
 
 // Finding is one observation about the target.
 type Finding struct {
-	Severity string `json:"severity"`
-	Category string `json:"category"` // tls, headers, dns, cookies, exposure, tech
-	Title    string `json:"title"`
-	Detail   string `json:"detail,omitempty"`
+	Severity string    `json:"severity"`
+	Category string    `json:"category"` // tls, headers, dns, cookies, exposure, tech, verify, active
+	Title    string    `json:"title"`
+	Detail   string    `json:"detail,omitempty"`
+	Evidence *Evidence `json:"evidence,omitempty"`
+}
+
+// Evidence is the request Pahredar's own active checks sent and the response
+// that proves a finding, so a result can be trusted and reproduced.
+type Evidence struct {
+	Request  string `json:"request"`           // method, path, and the headers that matter
+	Response string `json:"response"`          // status line and the headers that matter
+	Snippet  string `json:"snippet,omitempty"` // the relevant part of the response body
 }
 
 // Report is the full assessment of one endpoint.
@@ -169,6 +178,9 @@ func (sc *Scanner) Scan(ctx context.Context, target string, active bool, onProgr
 		onProgress = func(Progress) {}
 	}
 	phases := []Phase{{"DNS", "pending"}, {"TLS & certificate", "pending"}, {"HTTP, headers & technology", "pending"}}
+	if active {
+		phases = append(phases, Phase{"Verification checks", "pending"})
+	}
 	if active && sc.active != nil {
 		phases = append(phases, Phase{"Active checks", "pending"})
 	}
@@ -262,12 +274,23 @@ func (sc *Scanner) Scan(ctx context.Context, target string, active bool, onProgr
 
 	wg.Wait()
 
-	if active && sc.active != nil {
-		// Scan the resolved final URL from the passive phase when available.
-		targetURL := rep.URL
-		if rep.HTTP != nil && rep.HTTP.FinalURL != "" {
-			targetURL = rep.HTTP.FinalURL
+	// Resolve the URL the passive phase ended on (after any scheme/redirect).
+	targetURL := rep.URL
+	if rep.HTTP != nil && rep.HTTP.FinalURL != "" {
+		targetURL = rep.HTTP.FinalURL
+	}
+
+	// Pahredar's own transparent active checks (with evidence), run before
+	// Nuclei so their results appear first.
+	if active {
+		setPhase("Verification checks", "running")
+		if vbase, err := url.Parse(targetURL); err == nil {
+			sc.verify(ctx, host, vbase, rep, &mu, emit)
 		}
+		setPhase("Verification checks", "done")
+	}
+
+	if active && sc.active != nil {
 		setPhase("Active checks", "running")
 		onActive := func(ap ActiveProgress) {
 			pmu.Lock()
@@ -304,6 +327,11 @@ func (sc *Scanner) Scan(ctx context.Context, target string, active bool, onProgr
 // add records a finding (thread-safe via the caller's mutex).
 func (rep *Report) add(sev, cat, title, detail string) {
 	rep.Findings = append(rep.Findings, Finding{Severity: sev, Category: cat, Title: title, Detail: detail})
+}
+
+// addEv records a finding with supporting request/response evidence.
+func (rep *Report) addEv(sev, cat, title, detail string, ev *Evidence) {
+	rep.Findings = append(rep.Findings, Finding{Severity: sev, Category: cat, Title: title, Detail: detail, Evidence: ev})
 }
 
 // sortFindings orders findings most-severe first (stable).

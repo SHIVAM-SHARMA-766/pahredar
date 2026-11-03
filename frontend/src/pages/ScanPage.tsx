@@ -1,9 +1,9 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, CheckCircle2, ChevronRight, Circle, Download, Fingerprint, Info, Loader2, Lock, Search, ShieldCheck, Zap } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Circle, Download, Fingerprint, Info, Loader2, Lock, Search, ShieldCheck, Zap } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { api, ApiError } from '../api/client'
-import type { ScanFinding, ScanJob, ScanReport, ScanSeverity, ScanTech } from '../api/types'
+import type { ScanEvidence, ScanFinding, ScanJob, ScanReport, ScanSeverity, ScanTech } from '../api/types'
 import { Card, ErrorBox, Tag } from '../components/ui'
 import { Gauge } from '../components/Gauge'
 import { relativeTime } from '../lib/format'
@@ -505,16 +505,51 @@ function Feature({ icon: Icon, tone, title, text }: { icon: typeof Search; tone:
 
 function FindingRow({ f }: { f: ScanFinding }) {
   const Icon = f.severity === 'good' ? ShieldCheck : AlertTriangle
+  const [open, setOpen] = useState(false)
   return (
     <li className="flex gap-3">
       <span className={`mt-0.5 inline-flex h-5 shrink-0 items-center gap-1 rounded px-1.5 text-xs font-medium ring-1 ring-inset ${sevStyle[f.severity].tag}`}>
         <Icon className="h-3 w-3" />{sevStyle[f.severity].label}
       </span>
-      <div className="min-w-0">
-        <div className="text-sm text-zinc-200">{f.title} {f.category === 'active' ? <span className="rounded bg-rose-500/15 px-1 text-[10px] font-medium text-rose-300 ring-1 ring-rose-400/30">verified</span> : <span className="text-xs text-zinc-600">· {f.category}</span>}</div>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm text-zinc-200">
+          {f.title}{' '}
+          {f.category === 'active' ? <span className="rounded bg-rose-500/15 px-1 text-[10px] font-medium text-rose-300 ring-1 ring-rose-400/30">verified · nuclei</span>
+            : f.category === 'verify' ? <span className="rounded bg-cyan-500/15 px-1 text-[10px] font-medium text-cyan-300 ring-1 ring-cyan-400/30">verified · evidence</span>
+            : <span className="text-xs text-zinc-600">· {f.category}</span>}
+        </div>
         {f.detail && <p className="text-xs text-zinc-500">{f.detail}</p>}
+        {f.evidence && (
+          <div className="mt-1.5">
+            <button onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200">
+              {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />} {open ? 'Hide' : 'Show'} evidence
+            </button>
+            {open && <EvidenceBlock e={f.evidence} />}
+          </div>
+        )}
       </div>
     </li>
+  )
+}
+
+function EvidenceBlock({ e }: { e: ScanEvidence }) {
+  return (
+    <div className="mt-1.5 space-y-2 rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+      <div>
+        <div className="mb-1 text-[10px] font-semibold tracking-wider text-zinc-500 uppercase">Request sent</div>
+        <pre className="overflow-x-auto font-mono text-xs break-all whitespace-pre-wrap text-emerald-300/90">{e.request}</pre>
+      </div>
+      <div>
+        <div className="mb-1 text-[10px] font-semibold tracking-wider text-zinc-500 uppercase">Response</div>
+        <pre className="overflow-x-auto font-mono text-xs break-all whitespace-pre-wrap text-cyan-200/90">{e.response}</pre>
+      </div>
+      {e.snippet && (
+        <div>
+          <div className="mb-1 text-[10px] font-semibold tracking-wider text-zinc-500 uppercase">Body evidence</div>
+          <pre className="overflow-x-auto font-mono text-xs break-all whitespace-pre-wrap text-amber-200/80">{e.snippet}</pre>
+        </div>
+      )}
+    </div>
   )
 }
 

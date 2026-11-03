@@ -3,12 +3,13 @@ import { Bookmark, BookmarkCheck, ExternalLink, Search, X } from 'lucide-react'
 import { useDeferredValue } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { api } from '../api/client'
-import type { CveBadge, FeedKind, NewsArticle, TrendingItem } from '../api/types'
+import type { CveBadge, FeedKind, NewsArticle, Severity, TrendingItem } from '../api/types'
 import { KIND_LABEL, KindTag, TrendingCard } from '../components/FeedCards'
-import { Card, ErrorBox, Spinner, Tag } from '../components/ui'
+import { Gauge } from '../components/Gauge'
+import { Card, ErrorBox, KevTag, Spinner, Tag } from '../components/ui'
 import { fmtDate, fmtNumber, relativeTime } from '../lib/format'
 import { useOrigin } from '../lib/origin'
-import { bestScore, severityText } from '../lib/severity'
+import { bestScore, severityFill, severityText } from '../lib/severity'
 
 // Security news from Pahredar's own feeds (GET /api/v1/news). Every filter
 // lives in the URL: kind, feed, q, days, cves, saved, sort, page. Saved
@@ -221,10 +222,14 @@ function CveChip({ id, b }: { id: string; b?: CveBadge }) {
     </Link>
   )
 }
-
+// NewsBrief is the graphical hero at the top of the news page: a ranked set of
+// top stories from the last 7 days alongside a compact "threat mix" panel
+// (severity breakdown of the trending CVEs and the exploited share), with a
+// stat strip underneath. All of it is derived from the trending query.
 function NewsBrief({ feeds, latest, trending }: { feeds?: number; latest?: string | null; trending?: TrendingItem[] }) {
   const items = trending ?? []
-  const top = items[0]
+  const [top, ...rest] = items
+  const runnersUp = rest.slice(0, 3)
   const exploited = items.filter((t) => t.cve?.kev).length
   const stats: [string, string][] = [
     ['Trending CVEs', String(items.length || 0)],
@@ -233,23 +238,40 @@ function NewsBrief({ feeds, latest, trending }: { feeds?: number; latest?: strin
     ['Updated', latest ? relativeTime(latest) : '—'],
   ]
   return (
-    <div className="mb-6 overflow-hidden rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900/80 to-zinc-950">
-      <div className="p-5 sm:p-6">
-        <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Security Brief</h1>
-        <p className="mt-1 text-sm text-zinc-400">Vendor, government, research, and news feeds, read hourly and ranked by the CVEs each story covers — exploited first, then critical, then how many sources cover them.</p>
-        {top && (
-          <Link to={`/cves/${top.id}`} className="mt-4 block rounded-xl border border-zinc-800 bg-zinc-950/50 p-4 transition-colors hover:border-zinc-700">
-            <div className="text-[11px] font-semibold tracking-wider text-cyan-300/80 uppercase">Top story · last 7 days</div>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <span className="font-mono text-sm font-semibold text-cyan-300">{top.id}</span>
-              {top.cve && bestScore(top.cve) != null && <span className={`text-sm font-semibold ${severityText[top.cve.severity]}`}>{bestScore(top.cve)!.toFixed(1)}</span>}
-              {top.cve?.kev && <Tag tone="red">KEV</Tag>}
-              <span className="text-xs text-zinc-500">{top.sources} sources · {top.articles} articles</span>
-            </div>
-            <p className="mt-1 text-sm text-zinc-200">{top.headline}</p>
-          </Link>
+    <div className="mb-6 overflow-hidden rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 via-zinc-900/80 to-zinc-950">
+      <div className="flex flex-col gap-1 border-b border-zinc-800/80 px-5 pt-5 pb-4 sm:flex-row sm:items-start sm:justify-between sm:px-6">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Security Brief</h1>
+          <p className="mt-1 max-w-2xl text-sm text-zinc-400">Vendor, government, research, and news feeds, read hourly and ranked by the CVEs each story covers — exploited first, then critical, then how widely it is reported.</p>
+        </div>
+        {latest && (
+          <span className="mt-2 inline-flex shrink-0 items-center gap-1.5 self-start rounded-full border border-zinc-700/70 bg-zinc-950/60 px-2.5 py-1 text-xs text-zinc-400 sm:mt-0">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" /> Updated {relativeTime(latest)}
+          </span>
         )}
       </div>
+
+      <div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-3">
+        <div className="min-w-0 space-y-3 lg:col-span-2">
+          {top ? (
+            <>
+              <TopStory t={top} />
+              {runnersUp.length > 0 && (
+                <ol className="divide-y divide-zinc-800/80 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/40">
+                  {runnersUp.map((t, i) => <RunnerUp key={t.id} t={t} rank={i + 2} />)}
+                </ol>
+              )}
+            </>
+          ) : (
+            <div className="rounded-xl border border-dashed border-zinc-800 p-8 text-center text-sm text-zinc-500">No CVE mentions in the last 7 days yet; feeds are read hourly.</div>
+          )}
+        </div>
+
+        <div className="min-w-0">
+          <ThreatMix items={items} exploited={exploited} />
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 divide-x divide-zinc-800 border-t border-zinc-800 sm:grid-cols-4">
         {stats.map(([label, value]) => (
           <div key={label} className="px-4 py-3 text-center">
@@ -257,6 +279,120 @@ function NewsBrief({ feeds, latest, trending }: { feeds?: number; latest?: strin
             <div className="text-[11px] tracking-wider text-zinc-500 uppercase">{label}</div>
           </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+// The single most prominent story: a large, accented card.
+function TopStory({ t }: { t: TrendingItem }) {
+  const score = t.cve ? bestScore(t.cve) : null
+  return (
+    <Link to={`/cves/${t.id}`} className="block rounded-xl border border-cyan-400/20 bg-gradient-to-br from-cyan-500/[0.07] to-zinc-950/20 p-4 transition-colors hover:border-cyan-400/40">
+      <div className="flex items-center gap-2 text-[11px] font-semibold tracking-wider text-cyan-300/80 uppercase">
+        <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" /> Top story · last 7 days
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <span className="font-mono text-base font-semibold text-cyan-300">{t.id}</span>
+        {score != null && <span className={`text-base font-bold ${severityText[t.cve!.severity]}`}>{score.toFixed(1)}</span>}
+        {t.cve?.kev && <KevTag />}
+        {!t.cve && <Tag tone="amber">Not in CVE List yet</Tag>}
+      </div>
+      <p className="mt-2 line-clamp-2 text-[15px] leading-snug text-zinc-100">{t.headline}</p>
+      <div className="mt-2 flex items-center gap-3 text-xs text-zinc-500">
+        <span className="font-medium text-zinc-300">{t.sources} sources</span>
+        <span>·</span>
+        <span>{t.articles} articles</span>
+        <span>·</span>
+        <span>{relativeTime(t.latest)}</span>
+      </div>
+    </Link>
+  )
+}
+
+// A compact ranked row for stories 2–4.
+function RunnerUp({ t, rank }: { t: TrendingItem; rank: number }) {
+  const score = t.cve ? bestScore(t.cve) : null
+  return (
+    <li>
+      <Link to={`/cves/${t.id}`} className="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-zinc-900/60">
+        <span className="w-4 shrink-0 text-center font-mono text-xs text-zinc-600">{rank}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-[13px] font-semibold text-cyan-300">{t.id}</span>
+            {score != null && <span className={`text-xs font-semibold ${severityText[t.cve!.severity]}`}>{score.toFixed(1)}</span>}
+            {t.cve?.kev && <KevTag />}
+          </div>
+          <p className="mt-0.5 truncate text-sm text-zinc-400" title={t.headline}>{t.headline}</p>
+        </div>
+        <span className="shrink-0 text-right text-xs text-zinc-500 tabular-nums">{t.sources} src</span>
+      </Link>
+    </li>
+  )
+}
+
+// SEV_ORDER drives the severity-mix bar and its legend.
+const SEV_ORDER: { key: Severity; label: string }[] = [
+  { key: 'CRITICAL', label: 'Critical' },
+  { key: 'HIGH', label: 'High' },
+  { key: 'MEDIUM', label: 'Medium' },
+  { key: 'LOW', label: 'Low' },
+]
+
+// ThreatMix is the graphical panel: a stacked severity bar of the trending
+// CVEs plus a radial exploited-share gauge.
+function ThreatMix({ items, exploited }: { items: TrendingItem[]; exploited: number }) {
+  // Count trending CVEs by severity; anything unscored or not in the list
+  // falls into an "Other" bucket so the bar always sums to the total.
+  const counts = new Map<string, number>()
+  for (const t of items) {
+    const sev = t.cve && bestScore(t.cve) != null ? t.cve.severity : 'OTHER'
+    counts.set(sev, (counts.get(sev) ?? 0) + 1)
+  }
+  const total = items.length
+  const segments = [
+    ...SEV_ORDER.map((s) => ({ label: s.label, n: counts.get(s.key) ?? 0, fill: severityFill[s.key] })),
+    { label: 'Other', n: counts.get('OTHER') ?? 0, fill: 'var(--sev-other)' },
+  ].filter((s) => s.n > 0)
+
+  return (
+    <div className="flex h-full flex-col gap-4 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
+      <div className="text-[11px] font-semibold tracking-wider text-zinc-400 uppercase">Threat mix · last 7 days</div>
+      <div className="flex items-center justify-center">
+        <Gauge
+          value={exploited}
+          max={total || 1}
+          display={String(exploited)}
+          caption="exploited"
+          color="var(--sev-critical)"
+          risk={total ? `${Math.round((exploited / total) * 100)}% of trending` : 'No data'}
+        />
+      </div>
+      <div>
+        <div className="mb-1.5 flex items-center justify-between text-xs">
+          <span className="text-zinc-400">By severity</span>
+          <span className="text-zinc-500 tabular-nums">{total} CVEs</span>
+        </div>
+        {total > 0 ? (
+          <>
+            <div className="flex h-2.5 overflow-hidden rounded-full bg-zinc-800">
+              {segments.map((s) => (
+                <div key={s.label} className="h-full border-r-2 border-zinc-950 last:border-r-0" style={{ width: `${(s.n / total) * 100}%`, background: s.fill }} title={`${s.label}: ${s.n}`} />
+              ))}
+            </div>
+            <ul className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-1">
+              {segments.map((s) => (
+                <li key={s.label} className="flex items-center gap-1.5 text-xs text-zinc-400">
+                  <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: s.fill }} />
+                  <span className="truncate">{s.label}</span>
+                  <span className="ml-auto font-medium text-zinc-200 tabular-nums">{s.n}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <p className="text-xs text-zinc-500">No scored CVEs in this window.</p>
+        )}
       </div>
     </div>
   )

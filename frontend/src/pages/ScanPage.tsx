@@ -155,6 +155,8 @@ GET /.git/HEAD  404     GET /.env  404     /.well-known/security.txt 200
         <Feature icon={active ? Zap : AlertTriangle} tone="rose" title="Optional active verification" text="With authorisation, runs Nuclei's vulnerability templates to actually verify issues. No denial-of-service, no exploitation." />
       </div>
 
+      {active && <div className="mt-6"><ActiveCoverage /></div>}
+
       <div className="mt-8 space-y-6">
         <ScanIntro />
       </div>
@@ -221,9 +223,12 @@ function ScanResult({ host, active, scanning, job, report, cached, errMsg, onNew
 
       {/* Body */}
       {scanning ? (
-        <div className="mt-6 space-y-6">
-          <ProgressCard job={job} active={active} target={host} />
-          {live.length > 0 && <FindingsCard findings={live} live />}
+        <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_340px]">
+          <div className="min-w-0 space-y-6">
+            <ProgressCard job={job} active={active} target={host} />
+            {live.length > 0 && <FindingsCard findings={live} live />}
+          </div>
+          {active && <div className="min-w-0"><ActiveCoverage /></div>}
         </div>
       ) : errMsg ? (
         <div className="mt-6"><ErrorBox error={errMsg} /></div>
@@ -249,6 +254,7 @@ function ScanResult({ host, active, scanning, job, report, cached, errMsg, onNew
             <Card title="Score">
               <ScoreGauge score={report.score} grade={grade} />
             </Card>
+            {active && <ActiveCoverage />}
             <Card title="Target">
               <dl>
                 <Row label="IP">{report.ip}</Row>
@@ -273,6 +279,58 @@ function ScanResult({ host, active, scanning, job, report, cached, errMsg, onNew
         </div>
       ) : null}
     </div>
+  )
+}
+
+// CATEGORY_META maps Nuclei's folder keys to a label and a one-line
+// description of what that group of checks looks for.
+const CATEGORY_META: Record<string, { label: string; desc: string }> = {
+  cves: { label: 'Known CVEs', desc: 'Published vulnerabilities probed on the live target' },
+  'exposed-panels': { label: 'Exposed panels', desc: 'Admin, login and management interfaces reachable from outside' },
+  technologies: { label: 'Technology detection', desc: 'Frameworks, servers and products in use' },
+  osint: { label: 'OSINT & info leaks', desc: 'Public info and data unintentionally exposed' },
+  misconfiguration: { label: 'Misconfigurations', desc: 'Unsafe defaults, debug modes, open settings' },
+  vulnerabilities: { label: 'Generic vulnerabilities', desc: 'XSS, SSRF, LFI, injection and similar classes' },
+  exposures: { label: 'Exposed files & secrets', desc: 'Config, backups, logs, tokens left reachable' },
+  'default-logins': { label: 'Default credentials', desc: 'Products still using shipped default passwords' },
+  'token-spray': { label: 'API token checks', desc: 'Leaked API keys validated against their service' },
+  takeovers: { label: 'Subdomain takeover', desc: 'Dangling DNS pointing at claimable services' },
+  iot: { label: 'IoT & devices', desc: 'Routers, cameras and embedded device issues' },
+  miscellaneous: { label: 'Miscellaneous', desc: 'Checks that do not fit another group' },
+  cnvd: { label: 'CNVD advisories', desc: 'Vulnerabilities from the Chinese CNVD database' },
+  ssl: { label: 'TLS / SSL', desc: 'Certificate and protocol weaknesses' },
+  'credential-stuffing': { label: 'Credential stuffing', desc: 'Known breached-credential checks' },
+}
+
+// ActiveCoverage shows what the active (Nuclei) scan actually covers, broken
+// down by category with counts, so the total is not just an opaque number.
+function ActiveCoverage() {
+  const config = useQuery({ queryKey: ['scan-config'], queryFn: api.scanConfig, staleTime: 5 * 60_000 })
+  const cats = config.data?.active_catalog ?? []
+  const total = config.data?.active_total ?? 0
+  if (cats.length === 0) return null
+  const max = Math.max(...cats.map((c) => c.count))
+  return (
+    <Card title="Active scan coverage" actions={<span className="text-xs text-zinc-500 tabular-nums">{total.toLocaleString()} checks · {cats.length} categories</span>}>
+      <p className="mb-3 text-xs text-zinc-500">Nuclei community templates, grouped. The active scan runs these against the target to verify issues — no denial-of-service or exploitation.</p>
+      <ul className="space-y-2.5">
+        {cats.map((c) => {
+          const meta = CATEGORY_META[c.key] ?? { label: c.key, desc: '' }
+          return (
+            <li key={c.key}>
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-sm font-medium text-zinc-200">{meta.label}</span>
+                <span className="shrink-0 font-mono text-xs text-zinc-400 tabular-nums">{c.count.toLocaleString()}</span>
+              </div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-zinc-800">
+                <div className="h-full rounded-full bg-rose-400/70" style={{ width: `${Math.max(3, Math.round((c.count / max) * 100))}%` }} />
+              </div>
+              {meta.desc && <p className="mt-0.5 text-xs text-zinc-600">{meta.desc}</p>}
+            </li>
+          )
+        })}
+      </ul>
+    </Card>
   )
 }
 

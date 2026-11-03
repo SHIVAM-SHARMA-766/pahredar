@@ -5,8 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +23,8 @@ import (
 type Nuclei struct {
 	bin, templatesDir, home string
 	mu                      sync.Mutex // serialises template updates
+	catOnce                 sync.Once
+	cat                     []Category
 }
 
 // NewNuclei returns a runner, or nil when no binary path is given. home must
@@ -253,4 +258,52 @@ func nucleiSeverity(s string) string {
 	default:
 		return SevInfo
 	}
+}
+
+// Category is one group of Nuclei templates and how many it holds, so the UI
+// can show what the active scan actually covers instead of a bare total.
+type Category struct {
+	Key   string `json:"key"`
+	Count int    `json:"count"`
+}
+
+// Catalog returns the template counts per category for the HTTP and SSL
+// template folders the active scan runs (fuzzing is excluded, matching the
+// scan's -exclude-tags). It is computed once and cached.
+func (n *Nuclei) Catalog() []Category {
+	n.catOnce.Do(func() { n.cat = scanCatalog(n.templatesDir) })
+	return n.cat
+}
+
+func scanCatalog(dir string) []Category {
+	out := []Category{}
+	// HTTP categories live one level under http/.
+	entries, err := os.ReadDir(filepath.Join(dir, "http"))
+	if err != nil {
+		return out
+	}
+	for _, e := range entries {
+		if !e.IsDir() || e.Name() == "fuzzing" || e.Name() == "global-matchers" || e.Name() == "honeypot" {
+			continue
+		}
+		if c := countYAML(filepath.Join(dir, "http", e.Name())); c > 0 {
+			out = append(out, Category{Key: e.Name(), Count: c})
+		}
+	}
+	if c := countYAML(filepath.Join(dir, "ssl")); c > 0 {
+		out = append(out, Category{Key: "ssl", Count: c})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Count > out[j].Count })
+	return out
+}
+
+func countYAML(dir string) int {
+	n := 0
+	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && strings.HasSuffix(d.Name(), ".yaml") {
+			n++
+		}
+		return nil
+	})
+	return n
 }

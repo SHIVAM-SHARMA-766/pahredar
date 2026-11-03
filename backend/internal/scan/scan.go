@@ -119,6 +119,15 @@ func (sc *Scanner) ActiveAvailable() bool { return sc.active != nil }
 // AllowsPrivate reports whether private targets are permitted.
 func (sc *Scanner) AllowsPrivate() bool { return sc.allowPrivate }
 
+// ActiveCatalog lists the Nuclei template categories the active scan covers,
+// or nil when active scanning is not configured.
+func (sc *Scanner) ActiveCatalog() []Category {
+	if sc.active == nil {
+		return nil
+	}
+	return sc.active.Catalog()
+}
+
 // allowed reports whether sc may connect to ip.
 func (sc *Scanner) allowed(ip net.IP) bool { return sc.allowPrivate || isPublicIP(ip) }
 

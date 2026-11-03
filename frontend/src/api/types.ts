@@ -737,9 +737,17 @@ export interface ScanReport {
   errors: string[]
 }
 
+export interface ScanCategory {
+  key: string
+  count: number
+}
+
 export interface ScanConfig {
   active_available: boolean
   allow_private: boolean
+  // Nuclei template categories the active scan covers, largest first.
+  active_catalog?: ScanCategory[]
+  active_total?: number
 }
 
 export interface ScanPhase {

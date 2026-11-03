@@ -200,10 +200,19 @@ func (s *Server) getScan(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(payload)
 }
 
-// scanConfig tells the UI which scanner capabilities the server enables.
+// scanConfig tells the UI which scanner capabilities the server enables and,
+// when active scanning is on, the Nuclei template categories it covers (so the
+// UI can show what the checks are, not just a total).
 func (s *Server) scanConfig(w http.ResponseWriter, r *http.Request) {
+	catalog := s.scanner.ActiveCatalog()
+	total := 0
+	for _, c := range catalog {
+		total += c.Count
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"active_available": s.scanner.ActiveAvailable(),
 		"allow_private":    s.scanner.AllowsPrivate(),
+		"active_catalog":   catalog,
+		"active_total":     total,
 	})
 }

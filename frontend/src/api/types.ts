@@ -538,6 +538,39 @@ export interface FeedArticle {
   cve_ids: string[]
 }
 
+// GET /api/v1/news: feed articles with a top-story score and a badge per
+// CVE they name.
+export interface NewsArticle extends FeedArticle {
+  // Best of the article's CVEs: exploited 3, critical 2, high 1, plus 1 per
+  // other feed covering it in the window (≤ 4). Roundups score 0.
+  score: number
+}
+
+export interface CveBadge {
+  severity: Severity
+  score: number | null
+  kev: boolean
+  // CISA KEV, ENISA EUVD, or VulnCheck KEV.
+  exploited: boolean
+}
+
+export interface NewsPage {
+  items: NewsArticle[]
+  total: number
+  cves: Record<string, CveBadge>
+}
+
+export interface NewsQuery {
+  kind?: FeedKind
+  feed?: string
+  q?: string
+  days?: number
+  cves?: boolean
+  sort?: 'top' | 'newest'
+  page?: number
+  limit?: number
+}
+
 export interface TrendingItem {
   id: string
   sources: number

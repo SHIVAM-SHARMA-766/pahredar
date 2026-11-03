@@ -126,3 +126,57 @@ func (e *Enrichment) SyncFeeds(ctx context.Context) error {
 		return e.store.SetSyncCursor(ctx, SourceFeeds, time.Now().UTC().Format(time.RFC3339))
 	})
 }
+
+// RecheckArticlePages re-reads every checked article page of the
+// FetchPage feeds and replaces its CVE IDs with those in the feed text plus
+// the page's article text. Run it after changing how pages are read; an
+// unreadable page keeps its stored IDs.
+func (e *Enrichment) RecheckArticlePages(ctx context.Context) error {
+	var keys []string
+	for _, f := range feeds.All {
+		if f.FetchPage {
+			keys = append(keys, f.Key)
+		}
+	}
+	rows, err := e.store.PageCheckedArticles(ctx, keys)
+	if err != nil {
+		return err
+	}
+	pages := fetch.PublicOnlyClient(pageTimeout)
+	sem := make(chan struct{}, pageParallel)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	changed, unreadable := 0, 0
+	for _, r := range rows {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			pctx, cancel := context.WithTimeout(ctx, pageTimeout)
+			defer cancel()
+			ids, err := feeds.PageCVEs(pctx, pages, r.URL)
+			if err != nil {
+				mu.Lock()
+				unreadable++
+				mu.Unlock()
+				return
+			}
+			fresh := feeds.ExtractCVEs(strings.Join(append([]string{r.Title, r.Summary}, ids...), " "))
+			ok, err := e.store.SetArticleCVEs(ctx, r.URL, fresh)
+			if err != nil {
+				slog.Warn("update article", "url", r.URL, "err", err)
+				return
+			}
+			if ok {
+				mu.Lock()
+				changed++
+				mu.Unlock()
+				slog.Info("article CVEs changed", "url", r.URL, "before", strings.Join(r.CVEIDs, ","), "after", strings.Join(fresh, ","))
+			}
+		}()
+	}
+	wg.Wait()
+	slog.Info("article pages rechecked", "articles", len(rows), "changed", changed, "unreadable", unreadable)
+	return nil
+}

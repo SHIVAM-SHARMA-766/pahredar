@@ -179,3 +179,138 @@ func (s *Store) FeedStats(ctx context.Context) ([]FeedStat, error) {
 	}
 	return pgx.CollectRows(rows, pgx.RowToStructByPos[FeedStat])
 }
+
+// NewsParams filters the news list. Feeds nil means every feed; Since zero
+// means no time window.
+type NewsParams struct {
+	Feeds       []string
+	Since       time.Time
+	Query       string
+	WithCVEOnly bool
+	// Top ranks by the importance of the CVEs an article names instead of
+	// by date (see NewsArticles).
+	Top           bool
+	Limit, Offset int
+}
+
+type NewsArticle struct {
+	ArticleOut
+	// Score is the top-story score: the best of the article's CVEs, where an
+	// exploited CVE (CISA KEV, EUVD, VulnCheck KEV) counts 3, critical 2,
+	// high 1, plus 1 per other feed covering that CVE in the window (at
+	// most 4). Roundups score 0.
+	Score int `json:"score"`
+}
+
+// NewsArticles lists feed articles for the news page, with the total
+// matching count.
+func (s *Store) NewsArticles(ctx context.Context, p NewsParams) ([]NewsArticle, int, error) {
+	order := `at DESC, url`
+	if p.Top {
+		order = `score DESC, ` + order
+	}
+	rows, err := s.pool.Query(ctx, `
+		WITH a AS (
+			SELECT feed, url, title, summary, `+articleDate+` AS at, cve_ids FROM feed_article
+			WHERE ($1::text[] IS NULL OR feed = ANY($1))
+			  AND `+articleDate+` >= $2
+			  AND ($3 = '' OR strpos(lower(title || ' ' || COALESCE(summary, '')), lower($3)) > 0)
+			  AND (NOT $4 OR cardinality(cve_ids) > 0)
+		),
+		coverage AS (
+			SELECT c AS cve_id, count(DISTINCT feed) AS feeds
+			FROM feed_article, unnest(cve_ids) c
+			WHERE `+articleDate+` >= $2 AND cardinality(cve_ids) <= $5
+			GROUP BY c
+		),
+		-- Each CVE named by a listed article, scored once.
+		cve_score AS (
+			SELECT x.id,
+				CASE WHEN EXISTS (SELECT 1 FROM kev WHERE kev.cve_id = x.id)
+				       OR EXISTS (SELECT 1 FROM euvd_exploited e WHERE e.cve_id = x.id)
+				       OR EXISTS (SELECT 1 FROM vulncheck_kev v WHERE v.cve_id = x.id) THEN 3
+				     WHEN cve.severity = 'CRITICAL' THEN 2
+				     WHEN cve.severity = 'HIGH' THEN 1
+				     ELSE 0 END
+				+ LEAST(COALESCE(cov.feeds, 1) - 1, 4) AS score
+			FROM (SELECT DISTINCT unnest(cve_ids) AS id FROM a WHERE cardinality(cve_ids) <= $5) x
+			LEFT JOIN cve ON cve.id = x.id
+			LEFT JOIN coverage cov ON cov.cve_id = x.id
+		),
+		scored AS (
+			SELECT a.*, CASE WHEN cardinality(a.cve_ids) BETWEEN 1 AND $5
+				THEN (SELECT max(cs.score) FROM unnest(a.cve_ids) x JOIN cve_score cs ON cs.id = x)
+				ELSE 0 END AS score
+			FROM a
+		)
+		SELECT feed, url, title, summary, at, cve_ids, score, count(*) OVER ()
+		FROM scored ORDER BY `+order+` LIMIT $6 OFFSET $7`,
+		p.Feeds, p.Since, p.Query, p.WithCVEOnly, roundupLimit, p.Limit, p.Offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	out := []NewsArticle{}
+	total := 0
+	for rows.Next() {
+		var a NewsArticle
+		if err := rows.Scan(&a.Feed, &a.URL, &a.Title, &a.Summary, &a.Published, &a.CVEIDs, &a.Score, &total); err != nil {
+			return nil, 0, err
+		}
+		out = append(out, a)
+	}
+	return out, total, rows.Err()
+}
+
+// CVEBadge is what a CVE chip shows: severity, best CVSS score, and
+// whether it is known exploited.
+type CVEBadge struct {
+	Severity  string   `json:"severity"`
+	Score     *float64 `json:"score"`
+	KEV       bool     `json:"kev"`
+	Exploited bool     `json:"exploited"`
+}
+
+func (s *Store) CVEBadges(ctx context.Context, ids []string) (map[string]CVEBadge, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, severity, COALESCE(cvss_v4_score, cvss_v3_score, cvss_v2_score)::float8,
+		       EXISTS (SELECT 1 FROM kev WHERE kev.cve_id = cve.id),
+		       EXISTS (SELECT 1 FROM kev WHERE kev.cve_id = cve.id)
+		       OR EXISTS (SELECT 1 FROM euvd_exploited e WHERE e.cve_id = cve.id)
+		       OR EXISTS (SELECT 1 FROM vulncheck_kev v WHERE v.cve_id = cve.id)
+		FROM cve WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]CVEBadge{}
+	for rows.Next() {
+		var id string
+		var b CVEBadge
+		if err := rows.Scan(&id, &b.Severity, &b.Score, &b.KEV, &b.Exploited); err != nil {
+			return nil, err
+		}
+		out[id] = b
+	}
+	return out, rows.Err()
+}
+
+// PageCheckedArticles lists articles from the given feeds whose pages were
+// read, for re-extracting their CVE IDs.
+func (s *Store) PageCheckedArticles(ctx context.Context, feeds []string) ([]ArticleRow, error) {
+	rows, err := s.pool.Query(ctx, `SELECT feed, url, title, COALESCE(summary, ''), published_at, cve_ids, page_checked
+		FROM feed_article WHERE feed = ANY($1) AND page_checked ORDER BY url`, feeds)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowToStructByPos[ArticleRow])
+}
+
+// SetArticleCVEs replaces an article's CVE IDs (UpsertArticles only adds).
+func (s *Store) SetArticleCVEs(ctx context.Context, url string, ids []string) (bool, error) {
+	if ids == nil {
+		ids = []string{}
+	}
+	tag, err := s.pool.Exec(ctx, `UPDATE feed_article SET cve_ids = $2 WHERE url = $1 AND cve_ids IS DISTINCT FROM $2`, url, ids)
+	return tag.RowsAffected() > 0, err
+}

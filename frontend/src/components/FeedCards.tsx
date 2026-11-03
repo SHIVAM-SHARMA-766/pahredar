@@ -35,13 +35,19 @@ function CveChips({ ids, max = 4 }: { ids: string[]; max?: number }) {
   )
 }
 
-// Dashboard: CVEs mentioned by the most distinct feeds in the last 7 days.
-export function TrendingCard() {
-  const q = useQuery({ queryKey: ['trending'], queryFn: () => api.trending(7, 8), refetchInterval: 10 * 60_000 })
+// Dashboard and news page: CVEs mentioned by the most distinct feeds in the
+// last `days` days.
+// showMore links to the news page.
+export function TrendingCard({ days = 7, limit = 8, className = 'h-full', showMore = true }: { days?: number; limit?: number; className?: string; showMore?: boolean }) {
+  const q = useQuery({ queryKey: ['trending', days, limit], queryFn: () => api.trending(days, limit), refetchInterval: 10 * 60_000 })
   return (
-    <Card title="Trending in security news · 7 days" className="h-full">
+    <Card
+      title={`Trending in security news · ${days === 1 ? '24 hours' : `${days} days`}`}
+      className={className}
+      actions={showMore ? <Link to="/news" className={`text-xs ${link}`}>All news →</Link> : undefined}
+    >
       {q.isPending ? <Spinner /> : q.isError ? <p className="text-sm text-zinc-500">Trending is unavailable.</p> : q.data.items.length === 0 ? (
-        <p className="text-sm text-zinc-500">No CVE mentions yet; feeds are read hourly.</p>
+        <p className="text-sm text-zinc-500">No CVE mentions in this window; feeds are read hourly.</p>
       ) : (
         <ol className="divide-y divide-zinc-800">
           {q.data.items.map((t, i) => (

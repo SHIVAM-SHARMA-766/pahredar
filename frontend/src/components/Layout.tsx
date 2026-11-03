@@ -6,6 +6,7 @@ import {
   ChevronsRight,
   LayoutDashboard,
   Menu,
+  Newspaper,
   RefreshCw,
   Search,
   X,
@@ -43,6 +44,7 @@ const SECTIONS: { title: string; dot: string; items: NavItem[] }[] = [
       // inside the explorer, not separate entries.
       { to: '/cves', label: 'CVE explorer', icon: Bug, active: (l) => l.pathname.startsWith('/cves') },
       { to: '/vendors', label: 'Vendors & products', icon: Building2, active: (l) => l.pathname.startsWith('/vendors') },
+      { to: '/news', label: 'Security news', icon: Newspaper, active: (l) => l.pathname === '/news' },
     ],
   },
   {

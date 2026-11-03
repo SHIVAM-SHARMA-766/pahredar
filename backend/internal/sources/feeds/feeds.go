@@ -17,6 +17,9 @@ import (
 	"time"
 
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/fetch"
+	nethtml "golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
+	neturl "net/url"
 )
 
 // Kind groups feeds for display and for "before NVD" alerting.
@@ -261,16 +264,154 @@ func Fetch(ctx context.Context, c *http.Client, f Feed) ([]Item, error) {
 }
 
 // PageCVEs reads an article page (at most 2 MB) and returns the CVE IDs in
-// it. c must be a fetch.PublicOnlyClient: item links come from third parties.
+// its article text (see ArticleText). c must be a fetch.PublicOnlyClient:
+// item links come from third parties.
 func PageCVEs(ctx context.Context, c *http.Client, url string) ([]string, error) {
 	resp, err := fetch.Get(ctx, c, url, http.Header{"Accept": {"text/html,application/xhtml+xml"}})
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	text, err := ArticleText(io.LimitReader(resp.Body, 2<<20), resp.Request.URL.Hostname())
 	if err != nil {
 		return nil, err
 	}
-	return ExtractCVEs(string(body)), nil
+	return ExtractCVEs(text), nil
+}
+
+// skipTags never hold the article itself.
+var skipTags = map[atom.Atom]bool{
+	atom.Script: true, atom.Style: true, atom.Noscript: true, atom.Template: true, atom.Svg: true,
+	atom.Nav: true, atom.Aside: true, atom.Header: true, atom.Footer: true, atom.Form: true, atom.Iframe: true,
+}
+
+// noiseToken matches one class or id token of page furniture: sidebars,
+// related or popular posts, post navigation, comments. News sites list
+// other stories there, and their CVE IDs used to be attributed to every
+// article on the site. Whole hyphen/underscore-separated words only, so
+// "single-post" or Blogger's "widget Blog" (the post itself) do not match.
+var noiseToken = regexp.MustCompile(`(?i)(^|[-_])(sidebar|related|popular|trending|recent-posts|post-nav|navigation|breadcrumbs?|comments?|share|sharing|social|newsletter|subscribe|footer|menu|dont-miss|read-next|more-stories|main-secondary|promo|advert|banner|tags-wrapper)([-_]|$)`)
+
+// ArticleText returns the text of a page's article: the largest <article>
+// when it holds a good share of the page, else <main>, else <body>,
+// without page furniture. Link targets count only for links to other sites
+// (vendor advisories, NVD): links to the page's own site are mostly other
+// stories.
+func ArticleText(r io.Reader, host string) (string, error) {
+	doc, err := nethtml.Parse(r)
+	if err != nil {
+		return "", err
+	}
+	var articles []*nethtml.Node
+	var main, body *nethtml.Node
+	var find func(*nethtml.Node)
+	find = func(n *nethtml.Node) {
+		if n.Type == nethtml.ElementNode {
+			if skipTags[n.DataAtom] || isNoise(n) {
+				return
+			}
+			switch n.DataAtom {
+			case atom.Article:
+				articles = append(articles, n)
+			case atom.Main:
+				if main == nil {
+					main = n
+				}
+			case atom.Body:
+				body = n
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			find(c)
+		}
+	}
+	find(doc)
+	outer := body
+	if main != nil {
+		outer = main
+	}
+	if outer == nil {
+		outer = doc
+	}
+	host = strings.TrimPrefix(strings.ToLower(host), "www.")
+	textOf := func(n *nethtml.Node) string { return textOf(n, host) }
+	outerText := textOf(outer)
+	// An <article> is the story only if it holds a good share of the page;
+	// otherwise the <article> elements are teasers for other stories and the
+	// story itself sits in a plain <div>.
+	best := ""
+	for _, a := range articles {
+		if t := textOf(a); len(t) > len(best) {
+			best = t
+		}
+	}
+	if len(best)*10 >= len(outerText)*4 {
+		return best, nil
+	}
+	return outerText, nil
+}
+
+func isNoise(n *nethtml.Node) bool {
+	switch n.DataAtom {
+	case atom.Html, atom.Body, atom.Main, atom.Article:
+		return false
+	}
+	for _, a := range n.Attr {
+		switch a.Key {
+		case "role":
+			if a.Val == "complementary" || a.Val == "navigation" {
+				return true
+			}
+		case "class", "id":
+			for _, tok := range strings.Fields(a.Val) {
+				if noiseToken.MatchString(tok) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func textOf(n *nethtml.Node, host string) string {
+	var b strings.Builder
+	var walk func(*nethtml.Node)
+	walk = func(n *nethtml.Node) {
+		switch n.Type {
+		case nethtml.TextNode:
+			b.WriteString(n.Data)
+			b.WriteByte(' ')
+			return
+		case nethtml.ElementNode:
+			if skipTags[n.DataAtom] || isNoise(n) {
+				return
+			}
+			// A link to another site (an advisory, NVD) names its CVE even
+			// when the link text does not ("the router bug").
+			if n.DataAtom == atom.A {
+				for _, a := range n.Attr {
+					if a.Key == "href" && externalLink(a.Val, host) {
+						b.WriteString(a.Val)
+						b.WriteByte(' ')
+					}
+				}
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(n)
+	return b.String()
+}
+
+// externalLink reports whether href is absolute and on a host other than
+// the page's (subdomains of a different name count as other sites, so
+// forums.ivanti.com is external to www.ivanti.com).
+func externalLink(href, host string) bool {
+	u, err := neturl.Parse(strings.TrimSpace(href))
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return false
+	}
+	return strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.") != host
 }

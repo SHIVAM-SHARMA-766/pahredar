@@ -7,6 +7,8 @@ import type {
   DetectionRule,
   FeedArticle,
   FeedInfo,
+  NewsPage,
+  NewsQuery,
   Dashboard,
   ProductDetail,
   ProductSummary,
@@ -51,6 +53,14 @@ export const api = {
     request<{ days: number; items: TrendingItem[] }>(`/api/v1/stats/trending?${new URLSearchParams({ days: String(days), limit: String(limit) })}`),
   latestAdvisories: (limit = 10) => request<{ items: FeedArticle[] }>(`/api/v1/feeds/advisories?limit=${limit}`),
   feeds: () => request<{ items: FeedInfo[] }>('/api/v1/feeds'),
+  news: (q: NewsQuery) => {
+    const p = new URLSearchParams()
+    for (const [k, v] of Object.entries(q)) {
+      if (v === undefined || v === '' || v === false) continue
+      p.set(k, v === true ? '1' : String(v))
+    }
+    return request<NewsPage>(`/api/v1/news?${p}`)
+  },
   getRelated: (id: string) => request<{ groups: RelatedGroup[] }>(`/api/v1/cves/${enc(id)}/related`),
   series: (metric: string, from: string, to: string) =>
     request<Series>(`/api/v1/stats/series?${new URLSearchParams({ metric, from, to })}`),

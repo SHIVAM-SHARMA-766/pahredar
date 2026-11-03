@@ -34,10 +34,13 @@ commands:
   serve                           apply migrations, run the HTTP API and the sync scheduler
   migrate                         apply pending migrations and exit
   sync <source> [--bootstrap]     run one sync in the foreground and exit
-                                  sources: cvelist, nvd, kev, epss, exploitdb, metasploit, nuclei, github, cwe, feeds, stats
+                                  sources: cvelist, nvd, kev, epss, exploitdb, metasploit, nuclei, github, trickest,
+                                  sigma, suricata, nmap, euvd, debian, attack, capec, vulncheck, cwe, feeds, stats
                                   --bootstrap (cvelist, nvd) re-imports everything
   rederive                        rewrite every CVE's derived fields from stored raw records, then refresh stats
                                   (run after changing derivation logic; downloads nothing)
+  recheck-articles                re-read the article pages of page-checked feeds and replace their CVE IDs
+                                  (run after changing how article pages are read)
   healthcheck                     exit 0 if the local API reports healthy (for container health checks)
 `
 
@@ -64,6 +67,8 @@ func main() {
 		})
 	case "rederive":
 		err = withConfig(ctx, rederive)
+	case "recheck-articles":
+		err = withConfig(ctx, recheckArticles)
 	case "healthcheck":
 		err = healthcheck()
 	default:
@@ -164,6 +169,15 @@ func syncOnce(ctx context.Context, cfg config.Config, args []string) error {
 		names = append(names, t.Name)
 	}
 	return fmt.Errorf("unknown source %q; available: %s", args[0], strings.Join(names, ", "))
+}
+
+func recheckArticles(ctx context.Context, cfg config.Config) error {
+	store, closeStore, err := openStore(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer closeStore()
+	return syncer.NewEnrichment(fetch.NewClient(), store, syncer.NewRunner(store)).RecheckArticlePages(ctx)
 }
 
 func rederive(ctx context.Context, cfg config.Config) error {

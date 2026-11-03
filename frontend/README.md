@@ -22,7 +22,7 @@ React Router 8 needs Node ≥ 22.22 and the dev machine has Node 20, so the app 
 | `src/components/MetricWidget.tsx` | CloudWatch-style dashboard chart: metric, time range, period, graph type, legend toggles with sums, crosshair, drag-to-zoom, table. State in the URL. Buckets daily points from `/stats/series` into weeks or calendar months in the browser |
 | `src/components/CveContextCards.tsx` | `AttackCard` (CTID ATT&CK techniques, CAPEC patterns), `HistoryCard` (NVD change log), `CommitsCard` (fix-commit diffs), `DebianCard` (per-release status table) |
 | `src/components/DetectionCard.tsx` | CVE page Detection card: target box, tabs (Am I affected?, Active scan, Network IDS, Logs / SIEM, What to look for), copyable commands, expandable Sigma / Suricata rules. Shares report query keys with the other cards so OSV / Ubuntu / Red Hat / MSRC are fetched once |
-| `src/components/FeedCards.tsx` | Feed-backed pieces: `TrendingCard` and `LatestAdvisoriesCard` (dashboard), `FeedArticleList` and `NotYetPublished` (CVE page; the latter replaces the 404 for IDs not yet in the CVE List), `KindTag` |
+| `src/components/FeedCards.tsx` | Feed-backed pieces: `TrendingCard` (dashboard and news page; `days`, `limit`) and `LatestAdvisoriesCard` (dashboard), `FeedArticleList` and `NotYetPublished` (CVE page; the latter replaces the 404 for IDs not yet in the CVE List), `KindTag` |
 | `src/components/ThreatIntelCard.tsx` | Threat intelligence on the Reports & news tab: actors, malware, targeting, and ATT&CK across AlienVault OTX and ThreatFox; focused OTX pulses; ThreatFox IOC table with copy-all. Shows which `.env` key to set when a source is disabled |
 | `src/components/CveIntelCards.tsx` | CVE page cards loaded on demand: `VendorAdvisoriesCard` (MSRC KB/fixed-build table, advisory page previews), `NewsCard` (Pahredar feeds, Google News, Hacker News, Bluesky), `RelatedCard` (same advisory, same product ±30 days) |
 | `src/components/ReportsCard.tsx` | In-depth reports on the CVE page: one tab per source that has a record (OSV, Red Hat, Ubuntu); advisory text is shown as plain text, never as HTML |
@@ -40,6 +40,7 @@ React Router 8 needs Node ≥ 22.22 and the dev machine has Node 20, so the app 
 | `/vendors` | Vendors and products tabs (`?tab=products`) with search (`?q=`), ranked by CVE count. Names show the display label; links use the canonical key |
 | `/vendors/:vendor` | Vendor stats, CVEs per year, top 200 products |
 | `/vendors/:vendor/products/:product` | Product stats, CVEs per year, and the CVE list fixed to that product |
+| `/news` | Security news (`pages/NewsPage.tsx`): `?kind=&feed=&q=&days=&cves=1&sort=newest&page=`; defaults are all kinds, 7 days, top first |
 | `/sync` | Per-source status with "Run now", and recent runs (polls every 5 s) |
 
 ## Conventions

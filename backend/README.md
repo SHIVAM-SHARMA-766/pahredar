@@ -18,7 +18,7 @@ Go module for the Pahredar backend: one binary that applies database migrations,
 | `internal/sources/attack/` | CTID KEV→ATT&CK mapping files and the MITRE CAPEC CSV parser |
 | `internal/sources/debian/` | Debian Security Tracker JSON, stream-decoded per package |
 | `internal/sources/detection/` | Sigma (repository archive), Suricata ET Open, and Nmap script-index parsers producing rules with the CVEs they name |
-| `internal/sources/feeds/` | The feed list (`All`: key, name, URL, kind, whether to read article pages) and a lenient RSS 2.0 / RDF / Atom parser with CVE ID extraction |
+| `internal/sources/feeds/` | The feed list (`All`: key, name, URL, kind, whether to read article pages) a lenient RSS 2.0 / RDF / Atom parser with CVE ID extraction, and `ArticleText`, which keeps only an article page's own text (uses `golang.org/x/net/html`) |
 | `internal/sources/fetch/` | Shared HTTP client and `Get` (User-Agent, non-200 → `StatusError`). |
 
 Source packages know nothing about the database.
@@ -36,6 +36,7 @@ Dependency direction: `api` and `syncer` → `db`, `cverecord`; `syncer` → `so
 | `pahredar serve` | Applies pending migrations, starts the scheduler (unless `SYNC_ENABLED=false`), listens on `HTTP_ADDR`. Every source runs once at startup; on an empty database that bootstraps everything in the background (~5 min cvelist, ~15 min NVD, seconds for the rest) while the API is already up. |
 | `pahredar migrate` | Applies pending migrations and exits. |
 | `pahredar sync <source> [--bootstrap]` | Runs one sync in the foreground and exits. Sources: `cvelist`, `nvd`, `kev`, `epss`, `exploitdb`, `metasploit`, `nuclei`, `github`, `trickest`, `sigma`, `suricata`, `nmap`, `euvd`, `debian`, `attack`, `capec`, `vulncheck` (only with `VULNCHECK_API_TOKEN`), `cwe`, `feeds`, `stats`. `--bootstrap` (cvelist, nvd) re-imports everything even when a cursor exists; use after changing derivation logic. Safe while `serve` is up: the per-source lock makes one of them skip. |
+| `pahredar recheck-articles` | Re-reads the article pages of `FetchPage` feeds and replaces their CVE IDs. Run after changing how pages are read (`feeds.ArticleText`); under a minute |
 | `pahredar rederive` | Rewrites every CVE's derived fields and affected rows from the stored raw JSON, then refreshes stats. Use after changing anything in `cverecord`. ~10 min on the full corpus; safe while `serve` runs (it takes the cvelist and NVD locks) |
 | `pahredar healthcheck` | GETs `http://127.0.0.1:8080/healthz`; exit 0 on HTTP 200. Used by the Compose health check because the distroless image has no curl. Assumes the default port. |
 
@@ -83,6 +84,7 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `GET /api/v1/cves/{id}/articles` | Feed articles mentioning a CVE (`internal/api/feeds.go`) |
 | `GET /api/v1/stats/trending` | CVEs ranked by distinct feeds mentioning them |
 | `GET /api/v1/feeds`, `/api/v1/feeds/advisories` | Feed list with counts; newest vendor/government advisories |
+| `GET /api/v1/news` | News page list: filters, top/newest sort, paging, and a badge per named CVE (`internal/api/news.go`, `db.NewsArticles`) |
 | `GET /api/v1/vendors` | Vendor ranking/search (`q`, `page_size`) from `vendor_stats` |
 | `GET /api/v1/products` | Product ranking/search across vendors (`q`, `page_size`) from `product_stats` |
 | `GET /api/v1/vendors/{vendor}` | Vendor summary, CVEs per year, top 200 products |

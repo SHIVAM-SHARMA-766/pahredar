@@ -45,3 +45,41 @@ func TestParseFormats(t *testing.T) {
 		t.Fatalf("rdf = %+v, %v", items, err)
 	}
 }
+
+func TestArticleText(t *testing.T) {
+	page := `<html><body>
+		<header><a href="/x">CVE-2020-0001 in the menu</a></header>
+		<div class="col main-secondary"><ul><li><a href="/ivanti-cve-2026-111357/">Ivanti CVE-2026-111357 exploited</a></li></ul></div>
+		<main>
+			<article class="teaser"><p>short</p></article>
+			<article><h1>Botnet disrupted</h1><p>Attackers used CVE-2026-1234 and <a href="https://nvd.nist.gov/vuln/detail/CVE-2026-9999">the router bug</a>, see <a href="/2026/ivanti-cve-2026-7777/">earlier</a> and <a href="https://www.news.example/cve-2026-6666">this</a>.</p>
+				<div class="be__post-nav"><a>Next: CVE-2026-5555 write-up</a></div></article>
+		</main>
+		<aside><p>Don't miss: CVE-2026-118527</p></aside>
+		<footer>CVE-2020-0002</footer>
+	</body></html>`
+	text, err := ArticleText(strings.NewReader(page), "www.news.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(ExtractCVEs(text), ","); got != "CVE-2026-1234,CVE-2026-9999" {
+		t.Fatalf("CVEs = %s; text = %q", got, text)
+	}
+	noArticle, _ := ArticleText(strings.NewReader(`<html><body class="single-post has-sidebar"><main><div class="widget Blog"><p>Fixes CVE-2026-4242</p></div></main><nav>CVE-2026-1</nav></body></html>`), "news.example")
+	if got := strings.Join(ExtractCVEs(noArticle), ","); got != "CVE-2026-4242" {
+		t.Fatalf("main fallback CVEs = %s", got)
+	}
+}
+
+func TestArticleTextTeasers(t *testing.T) {
+	// The story is outside <article>; the <article> elements are teasers.
+	page := `<html><body><main>
+		<div class="article-wrap"><h1>October Security Update</h1><p>` + strings.Repeat("Ivanti fixed issues in Connect Secure. ", 20) + `See the <a href="https://forums.ivanti.com/s/article/Security-Advisory-CVE-2026-104935">advisory</a>.</p></div>
+		<article><a href="/a">Teaser about another update</a></article>
+		<article><a href="/b">Another teaser</a></article>
+	</main></body></html>`
+	text, _ := ArticleText(strings.NewReader(page), "www.ivanti.com")
+	if got := strings.Join(ExtractCVEs(text), ","); got != "CVE-2026-104935" {
+		t.Fatalf("CVEs = %s", got)
+	}
+}

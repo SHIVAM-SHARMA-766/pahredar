@@ -756,6 +756,9 @@ export interface ScanProgress {
     percent: number
     matched: number
   }
+  // Findings recorded so far, sorted by severity — streamed as each check
+  // completes so the UI can show results before the scan finishes.
+  findings?: ScanFinding[]
 }
 
 export interface ScanJob {

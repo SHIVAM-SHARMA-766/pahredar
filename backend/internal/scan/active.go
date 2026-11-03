@@ -103,10 +103,15 @@ func hasTemplates(dir string) bool {
 }
 
 // Run scans targetURL and returns the templates that matched, calling
-// onStats periodically with live progress from Nuclei's statistics.
-func (n *Nuclei) Run(ctx context.Context, targetURL string, onStats func(ActiveProgress)) (*ActiveScan, error) {
+// onStats periodically with live progress from Nuclei's statistics and
+// onFinding once for each template the first time it matches (so results can
+// stream to the UI as they are found).
+func (n *Nuclei) Run(ctx context.Context, targetURL string, onStats func(ActiveProgress), onFinding func(ActiveFinding)) (*ActiveScan, error) {
 	if onStats == nil {
 		onStats = func(ActiveProgress) {}
+	}
+	if onFinding == nil {
+		onFinding = func(ActiveFinding) {}
 	}
 	start := time.Now()
 	if err := n.EnsureTemplates(ctx); err != nil {
@@ -186,13 +191,15 @@ func (n *Nuclei) Run(ctx context.Context, targetURL string, onStats func(ActiveP
 			continue
 		}
 		byTemplate[l.TemplateID] = len(out.Findings)
-		out.Findings = append(out.Findings, ActiveFinding{
+		f := ActiveFinding{
 			TemplateID: l.TemplateID, Name: l.Info.Name, Severity: l.Info.Severity,
 			Tags: l.Info.Tags, CVEs: l.Info.Classification.CVEID, MatchedAt: l.MatchedAt,
 			Reference: l.Info.Reference, Count: 1,
-		})
+		}
+		out.Findings = append(out.Findings, f)
 		matched++
 		mu.Unlock()
+		onFinding(f)
 	}
 	swg.Wait()
 	// Nuclei exits non-zero on some conditions even with results; the parsed

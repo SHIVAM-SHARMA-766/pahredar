@@ -50,10 +50,13 @@ type ActiveProgress struct {
 	Matched   int `json:"matched"`
 }
 
-// Progress is a snapshot of a running scan for the UI.
+// Progress is a snapshot of a running scan for the UI. Findings carries every
+// finding recorded so far, sorted by severity, so the UI can show results
+// stream in as each check completes rather than only at the end.
 type Progress struct {
-	Phases []Phase         `json:"phases"`
-	Active *ActiveProgress `json:"active,omitempty"`
+	Phases   []Phase         `json:"phases"`
+	Active   *ActiveProgress `json:"active,omitempty"`
+	Findings []Finding       `json:"findings"`
 }
 
 // Finding is one observation about the target.
@@ -162,6 +165,8 @@ func (sc *Scanner) Scan(ctx context.Context, target string, active bool, onProgr
 	}
 	var pmu sync.Mutex
 	var activeProg *ActiveProgress
+	var mu sync.Mutex
+	var rep *Report
 	emit := func() {
 		snap := make([]Phase, len(phases))
 		copy(snap, phases)
@@ -170,7 +175,14 @@ func (sc *Scanner) Scan(ctx context.Context, target string, active bool, onProgr
 			c := *activeProg
 			ap = &c
 		}
-		onProgress(Progress{Phases: snap, Active: ap})
+		var fsnap []Finding
+		if rep != nil {
+			mu.Lock()
+			fsnap = append(fsnap, rep.Findings...)
+			mu.Unlock()
+			sortFindings(fsnap)
+		}
+		onProgress(Progress{Phases: snap, Active: ap, Findings: fsnap})
 	}
 	setPhase := func(name, status string) {
 		pmu.Lock()
@@ -203,11 +215,10 @@ func (sc *Scanner) Scan(ctx context.Context, target string, active bool, onProgr
 		return nil, ErrPrivate
 	}
 
-	rep := &Report{Target: target, Host: host, URL: base.String(), IP: dst.String(), ScannedAt: start.UTC(), Errors: []string{}, Findings: []Finding{}}
+	rep = &Report{Target: target, Host: host, URL: base.String(), IP: dst.String(), ScannedAt: start.UTC(), Errors: []string{}, Findings: []Finding{}}
 
 	// Each check appends to rep under its own mutex-guarded slot; run them
 	// concurrently so a slow one does not block the rest.
-	var mu sync.Mutex
 	fail := func(where string, err error) {
 		if err != nil {
 			mu.Lock()
@@ -255,17 +266,22 @@ func (sc *Scanner) Scan(ctx context.Context, target string, active bool, onProgr
 			emit()
 			pmu.Unlock()
 		}
-		if as, err := sc.active.Run(ctx, targetURL, onActive); err != nil {
+		// Each matched template is turned into a finding and streamed to the
+		// UI as it arrives (not only at the end).
+		onFinding := func(f ActiveFinding) {
+			detail := "Verified by Nuclei template " + f.TemplateID + " at " + f.MatchedAt
+			if len(f.CVEs) > 0 {
+				detail = strings.Join(f.CVEs, ", ") + " — " + detail
+			}
+			mu.Lock()
+			rep.add(nucleiSeverity(f.Severity), "active", f.Name, detail)
+			mu.Unlock()
+			emit()
+		}
+		if as, err := sc.active.Run(ctx, targetURL, onActive, onFinding); err != nil {
 			rep.Errors = append(rep.Errors, "active: "+err.Error())
 		} else {
 			rep.Active = as
-			for _, f := range as.Findings {
-				detail := "Verified by Nuclei template " + f.TemplateID + " at " + f.MatchedAt
-				if len(f.CVEs) > 0 {
-					detail = strings.Join(f.CVEs, ", ") + " — " + detail
-				}
-				rep.add(nucleiSeverity(f.Severity), "active", f.Name, detail)
-			}
 		}
 		setPhase("Active checks", "done")
 	}
@@ -281,11 +297,16 @@ func (rep *Report) add(sev, cat, title, detail string) {
 	rep.Findings = append(rep.Findings, Finding{Severity: sev, Category: cat, Title: title, Detail: detail})
 }
 
+// sortFindings orders findings most-severe first (stable).
+func sortFindings(fs []Finding) {
+	sort.SliceStable(fs, func(i, j int) bool {
+		return sevRank[fs[i].Severity] < sevRank[fs[j].Severity]
+	})
+}
+
 // score sorts findings by severity and computes the 0–100 score and grade.
 func score(rep *Report) {
-	sort.SliceStable(rep.Findings, func(i, j int) bool {
-		return sevRank[rep.Findings[i].Severity] < sevRank[rep.Findings[j].Severity]
-	})
+	sortFindings(rep.Findings)
 	s := 100
 	for _, f := range rep.Findings {
 		s -= sevWeight[f.Severity]

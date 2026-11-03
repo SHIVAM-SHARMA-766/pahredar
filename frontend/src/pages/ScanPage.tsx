@@ -173,7 +173,10 @@ function ScanResult({ host, active, scanning, job, report, cached, errMsg, onNew
 }) {
   const grade = report?.grade ?? '?'
   const [copied, setCopied] = useState(false)
-  const counts = (report?.findings ?? []).reduce<Record<string, number>>((a, f) => ((a[f.severity] = (a[f.severity] ?? 0) + 1), a), {})
+  // Findings stream in via job.progress while the scan runs; the final report
+  // supersedes them when it arrives.
+  const live = report?.findings ?? job?.progress.findings ?? []
+  const liveCount = live.filter((f) => f.severity !== 'good').length
   const copyLink = () => {
     navigator.clipboard?.writeText(window.location.href).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200) }).catch(() => {})
   }
@@ -211,29 +214,23 @@ function ScanResult({ host, active, scanning, job, report, cached, errMsg, onNew
         <div className="grid grid-cols-2 divide-x divide-zinc-800 border-t border-zinc-800 sm:grid-cols-4">
           <Stat label="Scanned" value={report ? relativeTime(report.scanned_at) : scanning ? 'running…' : '—'} />
           <Stat label="Duration" value={report?.duration ?? '—'} />
-          <Stat label="Findings" value={report ? String(report.findings.filter((f) => f.severity !== 'good').length) : '—'} />
+          <Stat label="Findings" value={report ? String(report.findings.filter((f) => f.severity !== 'good').length) : liveCount ? String(liveCount) : scanning ? '…' : '—'} />
           <Stat label="Score" value={report ? `${report.score}/100` : '—'} />
         </div>
       </div>
 
       {/* Body */}
       {scanning ? (
-        <div className="mt-6"><ProgressCard job={job} active={active} target={host} /></div>
+        <div className="mt-6 space-y-6">
+          <ProgressCard job={job} active={active} target={host} />
+          {live.length > 0 && <FindingsCard findings={live} live />}
+        </div>
       ) : errMsg ? (
         <div className="mt-6"><ErrorBox error={errMsg} /></div>
       ) : report ? (
         <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_340px]">
           <div className="min-w-0 space-y-6">
-            <Card title="Findings">
-              <div className="mb-3 flex flex-wrap gap-1.5">
-                {(['critical', 'high', 'medium', 'low', 'info', 'good'] as ScanSeverity[]).filter((s) => counts[s]).map((s) => (
-                  <span key={s} className={`rounded px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset ${sevStyle[s].tag}`}>{counts[s]} {sevStyle[s].label.toLowerCase()}</span>
-                ))}
-              </div>
-              {report.findings.length === 0 ? <p className="text-sm text-zinc-500">No findings.</p> : (
-                <ul className="space-y-2">{report.findings.map((f, i) => <FindingRow key={i} f={f} />)}</ul>
-              )}
-            </Card>
+            <FindingsCard findings={report.findings} />
             {report.active?.ran && <ActiveCard active={report.active} />}
             <div className="grid gap-6 xl:grid-cols-2">
               {report.tech.length > 0 && <TechCard tech={report.tech} />}
@@ -276,6 +273,26 @@ function ScanResult({ host, active, scanning, job, report, cached, errMsg, onNew
         </div>
       ) : null}
     </div>
+  )
+}
+
+// FindingsCard shows a severity-count row and the findings list. With `live`
+// it reflects results still streaming in from a running scan.
+function FindingsCard({ findings, live = false }: { findings: ScanFinding[]; live?: boolean }) {
+  const counts = findings.reduce<Record<string, number>>((a, f) => ((a[f.severity] = (a[f.severity] ?? 0) + 1), a), {})
+  return (
+    <Card title={live ? 'Findings so far' : 'Findings'} actions={live ? <span className="inline-flex items-center gap-1.5 text-xs text-cyan-300"><Loader2 className="h-3.5 w-3.5 animate-spin" /> live</span> : undefined}>
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {(['critical', 'high', 'medium', 'low', 'info', 'good'] as ScanSeverity[]).filter((s) => counts[s]).map((s) => (
+          <span key={s} className={`rounded px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset ${sevStyle[s].tag}`}>{counts[s]} {sevStyle[s].label.toLowerCase()}</span>
+        ))}
+      </div>
+      {findings.length === 0 ? (
+        <p className="text-sm text-zinc-500">{live ? 'Checking…' : 'No findings.'}</p>
+      ) : (
+        <ul className="space-y-2">{findings.map((f, i) => <FindingRow key={`${f.category}-${f.title}-${i}`} f={f} />)}</ul>
+      )}
+    </Card>
   )
 }
 

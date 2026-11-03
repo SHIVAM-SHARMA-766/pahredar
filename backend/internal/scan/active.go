@@ -102,9 +102,12 @@ func hasTemplates(dir string) bool {
 	return len(entries) > 3 // the template repo has many top-level folders
 }
 
-// Run scans targetURL and returns the templates that matched. tags, when
-// non-empty, limit the run to those template tags (e.g. a detected product).
-func (n *Nuclei) Run(ctx context.Context, targetURL string) (*ActiveScan, error) {
+// Run scans targetURL and returns the templates that matched, calling
+// onStats periodically with live progress from Nuclei's statistics.
+func (n *Nuclei) Run(ctx context.Context, targetURL string, onStats func(ActiveProgress)) (*ActiveScan, error) {
+	if onStats == nil {
+		onStats = func(ActiveProgress) {}
+	}
 	start := time.Now()
 	if err := n.EnsureTemplates(ctx); err != nil {
 		return &ActiveScan{Engine: "nuclei", Note: "templates unavailable: " + err.Error()}, nil
@@ -118,7 +121,8 @@ func (n *Nuclei) Run(ctx context.Context, targetURL string) (*ActiveScan, error)
 		// Leave out denial-of-service and fuzzing templates: verification, not harm.
 		"-exclude-tags", "dos,fuzz,fuzzing",
 		"-rate-limit", "50", "-concurrency", "25", "-timeout", "10", "-retries", "1", "-max-host-error", "40",
-		"-no-interactsh", // keep the scan self-contained (no out-of-band callbacks)
+		"-no-interactsh",                                // keep the scan self-contained (no out-of-band callbacks)
+		"-stats", "-stats-json", "-stats-interval", "2", // live progress on stderr
 	}
 	cmd := exec.CommandContext(ctx, n.bin, args...)
 	cmd.Env = n.env()
@@ -126,13 +130,44 @@ func (n *Nuclei) Run(ctx context.Context, targetURL string) (*ActiveScan, error)
 	if err != nil {
 		return nil, err
 	}
-	cmd.Stderr = nil
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, err
+	}
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
 
 	out := &ActiveScan{Ran: true, Engine: "nuclei v3", Findings: []ActiveFinding{}}
+	var mu sync.Mutex
+	matched := 0
 	byTemplate := map[string]int{} // template id -> index in out.Findings
+
+	// Statistics (stderr): live progress.
+	var swg sync.WaitGroup
+	swg.Add(1)
+	go func() {
+		defer swg.Done()
+		ss := bufio.NewScanner(stderr)
+		ss.Buffer(make([]byte, 64<<10), 1<<20)
+		for ss.Scan() {
+			var st struct {
+				Templates, Requests, Total, Percent, Matched string
+			}
+			if json.Unmarshal(ss.Bytes(), &st) != nil || st.Percent == "" {
+				continue
+			}
+			mu.Lock()
+			m := matched
+			mu.Unlock()
+			onStats(ActiveProgress{
+				Templates: atoi(st.Templates), Requests: atoi(st.Requests),
+				Total: atoi(st.Total), Percent: atoi(st.Percent), Matched: m,
+			})
+		}
+	}()
+
+	// Findings (stdout).
 	sc := bufio.NewScanner(stdout)
 	sc.Buffer(make([]byte, 64<<10), 4<<20)
 	for sc.Scan() {
@@ -140,11 +175,14 @@ func (n *Nuclei) Run(ctx context.Context, targetURL string) (*ActiveScan, error)
 		if json.Unmarshal(sc.Bytes(), &l) != nil || l.TemplateID == "" {
 			continue
 		}
+		mu.Lock()
 		if i, ok := byTemplate[l.TemplateID]; ok {
 			out.Findings[i].Count++
+			mu.Unlock()
 			continue
 		}
 		if len(out.Findings) >= maxActiveFindings {
+			mu.Unlock()
 			continue
 		}
 		byTemplate[l.TemplateID] = len(out.Findings)
@@ -153,7 +191,10 @@ func (n *Nuclei) Run(ctx context.Context, targetURL string) (*ActiveScan, error)
 			Tags: l.Info.Tags, CVEs: l.Info.Classification.CVEID, MatchedAt: l.MatchedAt,
 			Reference: l.Info.Reference, Count: 1,
 		})
+		matched++
+		mu.Unlock()
 	}
+	swg.Wait()
 	// Nuclei exits non-zero on some conditions even with results; the parsed
 	// output is authoritative, so a wait error is noted, not fatal.
 	if err := cmd.Wait(); err != nil && ctx.Err() == nil && len(out.Findings) == 0 {
@@ -178,6 +219,17 @@ func tail(s string, n int) string {
 		return s[len(s)-n:]
 	}
 	return s
+}
+
+func atoi(s string) int {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			break
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
 }
 
 // nucleiSeverity maps Nuclei's severity to the report's scale.

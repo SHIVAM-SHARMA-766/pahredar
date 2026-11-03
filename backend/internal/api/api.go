@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
@@ -22,14 +23,20 @@ type Server struct {
 	scanner *scan.Scanner
 	// scanSem bounds concurrent endpoint scans.
 	scanSem chan struct{}
+	jobsMu  sync.Mutex
+	jobs    map[int64]*scanJob
+	nextJob int64
 }
 
 func New(store *db.Store, sched *syncer.Scheduler, rc *reports.Client, allowPrivate bool, active *scan.Nuclei) *Server {
-	return &Server{
+	srv := &Server{
 		store: store, sched: sched, reports: rc,
 		scanner: scan.NewScanner(store, allowPrivate, active),
 		scanSem: make(chan struct{}, 3),
+		jobs:    map[int64]*scanJob{},
 	}
+	go srv.reapScanJobs()
+	return srv
 }
 
 func (s *Server) Handler() http.Handler {
@@ -58,6 +65,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/scan", s.runScan)
 	mux.HandleFunc("GET /api/v1/scans", s.listScans)
 	mux.HandleFunc("GET /api/v1/scans/{id}", s.getScan)
+	mux.HandleFunc("GET /api/v1/scan/jobs/{id}", s.scanJobStatus)
 	mux.HandleFunc("GET /api/v1/scan/config", s.scanConfig)
 	return mux
 }

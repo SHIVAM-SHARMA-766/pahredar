@@ -734,10 +734,33 @@ export interface ScanConfig {
   allow_private: boolean
 }
 
-export interface ScanResponse {
+export interface ScanPhase {
+  name: string
+  status: 'pending' | 'running' | 'done'
+}
+
+export interface ScanProgress {
+  phases: ScanPhase[]
+  active?: {
+    templates: number
+    requests: number
+    total: number
+    percent: number
+    matched: number
+  }
+}
+
+export interface ScanJob {
   id: number
+  target: string
+  host: string
+  active: boolean
+  status: 'queued' | 'running' | 'done' | 'error'
+  progress: ScanProgress
+  report?: ScanReport
+  stored_id?: number
+  error?: string
   cached: boolean
-  report: ScanReport
 }
 
 export interface ScanSummary {

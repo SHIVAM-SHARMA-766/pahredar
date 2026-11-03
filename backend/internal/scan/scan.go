@@ -35,6 +35,27 @@ const (
 var sevWeight = map[string]int{SevCritical: 30, SevHigh: 15, SevMedium: 8, SevLow: 3, SevInfo: 0, SevGood: 0}
 var sevRank = map[string]int{SevCritical: 0, SevHigh: 1, SevMedium: 2, SevLow: 3, SevInfo: 4, SevGood: 5}
 
+// Phase is one stage of a scan and its status.
+type Phase struct {
+	Name   string `json:"name"`
+	Status string `json:"status"` // pending, running, done
+}
+
+// ActiveProgress is live progress of the Nuclei phase.
+type ActiveProgress struct {
+	Templates int `json:"templates"`
+	Requests  int `json:"requests"`
+	Total     int `json:"total"`
+	Percent   int `json:"percent"`
+	Matched   int `json:"matched"`
+}
+
+// Progress is a snapshot of a running scan for the UI.
+type Progress struct {
+	Phases []Phase         `json:"phases"`
+	Active *ActiveProgress `json:"active,omitempty"`
+}
+
 // Finding is one observation about the target.
 type Finding struct {
 	Severity string `json:"severity"`
@@ -130,8 +151,38 @@ func ParseTarget(in string) (host string, base *url.URL, err error) {
 // Scan assesses one target. It is bounded by ctx; callers pass a timeout.
 // When active is true and a Nuclei runner is configured, intrusive checks
 // run after the passive phase.
-func (sc *Scanner) Scan(ctx context.Context, target string, active bool) (*Report, error) {
+func (sc *Scanner) Scan(ctx context.Context, target string, active bool, onProgress func(Progress)) (*Report, error) {
 	start := time.Now()
+	if onProgress == nil {
+		onProgress = func(Progress) {}
+	}
+	phases := []Phase{{"DNS", "pending"}, {"TLS & certificate", "pending"}, {"HTTP, headers & technology", "pending"}}
+	if active && sc.active != nil {
+		phases = append(phases, Phase{"Active checks", "pending"})
+	}
+	var pmu sync.Mutex
+	var activeProg *ActiveProgress
+	emit := func() {
+		snap := make([]Phase, len(phases))
+		copy(snap, phases)
+		var ap *ActiveProgress
+		if activeProg != nil {
+			c := *activeProg
+			ap = &c
+		}
+		onProgress(Progress{Phases: snap, Active: ap})
+	}
+	setPhase := func(name, status string) {
+		pmu.Lock()
+		for i := range phases {
+			if phases[i].Name == name {
+				phases[i].Status = status
+			}
+		}
+		emit()
+		pmu.Unlock()
+	}
+	emit()
 	host, base, err := ParseTarget(target)
 	if err != nil {
 		return nil, err
@@ -175,11 +226,19 @@ func (sc *Scanner) Scan(ctx context.Context, target string, active bool) (*Repor
 		}()
 	}
 
-	run("dns", func(c context.Context) error { return sc.checkDNS(c, host, rep, &mu) })
-	run("tls", func(c context.Context) error { return sc.checkTLS(c, host, base, rep, &mu) })
+	phased := func(name, phase string, fn func(context.Context) error) {
+		setPhase(phase, "running")
+		run(name, func(c context.Context) error {
+			err := fn(c)
+			setPhase(phase, "done")
+			return err
+		})
+	}
+	phased("dns", "DNS", func(c context.Context) error { return sc.checkDNS(c, host, rep, &mu) })
+	phased("tls", "TLS & certificate", func(c context.Context) error { return sc.checkTLS(c, host, base, rep, &mu) })
 	// The HTTP checks (headers, cookies, tech, paths, related) share one
 	// fetch of the page, so they run together.
-	run("http", func(c context.Context) error { return sc.checkHTTP(c, host, base, rep, &mu) })
+	phased("http", "HTTP, headers & technology", func(c context.Context) error { return sc.checkHTTP(c, host, base, rep, &mu) })
 
 	wg.Wait()
 
@@ -189,7 +248,14 @@ func (sc *Scanner) Scan(ctx context.Context, target string, active bool) (*Repor
 		if rep.HTTP != nil && rep.HTTP.FinalURL != "" {
 			targetURL = rep.HTTP.FinalURL
 		}
-		if as, err := sc.active.Run(ctx, targetURL); err != nil {
+		setPhase("Active checks", "running")
+		onActive := func(ap ActiveProgress) {
+			pmu.Lock()
+			activeProg = &ap
+			emit()
+			pmu.Unlock()
+		}
+		if as, err := sc.active.Run(ctx, targetURL, onActive); err != nil {
 			rep.Errors = append(rep.Errors, "active: "+err.Error())
 		} else {
 			rep.Active = as
@@ -201,6 +267,7 @@ func (sc *Scanner) Scan(ctx context.Context, target string, active bool) (*Repor
 				rep.add(nucleiSeverity(f.Severity), "active", f.Name, detail)
 			}
 		}
+		setPhase("Active checks", "done")
 	}
 
 	score(rep)

@@ -1,10 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Fingerprint, Lock, Search, ShieldCheck, Zap } from 'lucide-react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { AlertTriangle, CheckCircle2, Circle, Fingerprint, Loader2, Lock, Search, ShieldCheck, Zap } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { api, ApiError } from '../api/client'
-import type { ScanFinding, ScanReport, ScanSeverity, ScanTech } from '../api/types'
-import { Card, ErrorBox, Spinner, Tag } from '../components/ui'
+import type { ScanFinding, ScanJob, ScanReport, ScanSeverity, ScanTech } from '../api/types'
+import { Card, ErrorBox, Tag } from '../components/ui'
 import { relativeTime } from '../lib/format'
 import { useOrigin } from '../lib/origin'
 
@@ -33,25 +33,52 @@ export function ScanPage() {
   const [input, setInput] = useState(params.get('target') ?? '')
   const [active, setActive] = useState(false)
   const [authorized, setAuthorized] = useState(false)
-  const qc = useQueryClient()
+  const [jobId, setJobId] = useState<number | null>(() => {
+    const j = Number(params.get('job'))
+    return Number.isInteger(j) && j > 0 ? j : null
+  })
   const config = useQuery({ queryKey: ['scan-config'], queryFn: api.scanConfig, staleTime: 5 * 60_000 })
 
-  const scan = useMutation({
+  const start = useMutation({
     mutationFn: (v: { target: string; fresh?: boolean; active?: boolean; authorized?: boolean }) => api.scan(v.target, { fresh: v.fresh, active: v.active, authorized: v.authorized }),
-    onSuccess: (_, v) => {
-      setParams({ target: v.target }, { replace: true })
-      qc.invalidateQueries({ queryKey: ['recent-scans'] })
+    onSuccess: (res, v) => {
+      setJobId(res.id)
+      const next = new URLSearchParams(params)
+      next.set('target', v.target)
+      next.set('job', String(res.id))
+      setParams(next, { replace: true })
+    },
+  })
+  // Poll the job while it runs; the scan keeps going on the server even if
+  // this page is closed, so returning with ?job= resumes it.
+  const job = useQuery({
+    queryKey: ['scan-job', jobId],
+    queryFn: () => api.scanJob(jobId as number),
+    enabled: jobId != null,
+    refetchInterval: (q) => {
+      const st = q.state.data?.status
+      return st === 'done' || st === 'error' ? false : 1000
     },
   })
 
   const canActive = config.data?.active_available ?? false
   const runActive = active && canActive
+  const jobData = jobId != null ? job.data : undefined
+  const status = jobData?.status
+  const scanning = start.isPending || status === 'queued' || status === 'running'
+  const report = jobData?.report
+  const errMsg = start.isError
+    ? start.error instanceof ApiError ? start.error.message : String(start.error)
+    : status === 'error' ? jobData?.error ?? 'Scan failed'
+    : jobId != null && job.isError ? 'This scan job expired. Start a new scan.'
+    : null
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     const t = input.trim()
-    if (t && (!runActive || authorized)) scan.mutate({ target: t, active: runActive, authorized })
+    if (t && (!runActive || authorized)) start.mutate({ target: t, active: runActive, authorized })
   }
-  const report = scan.data?.report
+  const rescan = () => report && start.mutate({ target: report.target, fresh: true, active: runActive, authorized })
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -70,42 +97,20 @@ GET /.git/HEAD  404     GET /.env  404     /.well-known/security.txt 200
           Enter a domain. We fingerprint its TLS, DNS, HTTP headers and tech stack, match it against Pahredar's CVE data, and probe for exposed paths — in seconds. No signup, no agent.
         </p>
 
-        {/* Mode tabs */}
         <div className="mt-6 inline-flex rounded-full border border-zinc-800 bg-zinc-900 p-1 text-sm">
-          <button
-            type="button"
-            onClick={() => setActive(false)}
-            className={`rounded-full px-4 py-1.5 font-medium transition-colors ${!active ? 'bg-cyan-500/20 text-cyan-100 ring-1 ring-cyan-400/30' : 'text-zinc-400 hover:text-zinc-200'}`}
-          >
+          <button type="button" onClick={() => setActive(false)} className={`rounded-full px-4 py-1.5 font-medium transition-colors ${!active ? 'bg-cyan-500/20 text-cyan-100 ring-1 ring-cyan-400/30' : 'text-zinc-400 hover:text-zinc-200'}`}>
             Passive check
           </button>
-          <button
-            type="button"
-            disabled={!canActive}
-            onClick={() => setActive(true)}
-            title={canActive ? 'Runs intrusive vulnerability checks' : 'Enable SCAN_ACTIVE_ENABLED on the server to use active scanning'}
-            className={`inline-flex items-center gap-1 rounded-full px-4 py-1.5 font-medium transition-colors disabled:opacity-40 ${active ? 'bg-rose-500/20 text-rose-100 ring-1 ring-rose-400/30' : 'text-zinc-400 hover:text-zinc-200'}`}
-          >
+          <button type="button" disabled={!canActive} onClick={() => setActive(true)} title={canActive ? 'Runs intrusive vulnerability checks' : 'Enable SCAN_ACTIVE_ENABLED on the server to use active scanning'} className={`inline-flex items-center gap-1 rounded-full px-4 py-1.5 font-medium transition-colors disabled:opacity-40 ${active ? 'bg-rose-500/20 text-rose-100 ring-1 ring-rose-400/30' : 'text-zinc-400 hover:text-zinc-200'}`}>
             Active scan <Lock className="h-3.5 w-3.5" />
           </button>
         </div>
 
-        {/* Search pill */}
         <form onSubmit={submit} className={`mx-auto mt-5 flex max-w-xl items-center gap-2 rounded-full border bg-zinc-950 py-1.5 pr-1.5 pl-4 ${active ? 'border-rose-400/30' : 'border-zinc-800 focus-within:border-cyan-400/40'}`}>
           <Search className="h-4 w-4 shrink-0 text-zinc-500" />
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="example.com"
-            autoFocus
-            className="min-w-0 flex-1 bg-transparent py-1.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
-          />
-          <button
-            type="submit"
-            disabled={scan.isPending || !input.trim() || (runActive && !authorized)}
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium text-white disabled:opacity-50 ${active ? 'bg-rose-500 hover:bg-rose-400' : 'bg-cyan-500 hover:bg-cyan-400'}`}
-          >
-            {scan.isPending ? 'Scanning…' : active ? 'Run active scan' : 'Check exposure'} <span aria-hidden>→</span>
+          <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="example.com" autoFocus className="min-w-0 flex-1 bg-transparent py-1.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none" />
+          <button type="submit" disabled={scanning || !input.trim() || (runActive && !authorized)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium text-white disabled:opacity-50 ${active ? 'bg-rose-500 hover:bg-rose-400' : 'bg-cyan-500 hover:bg-cyan-400'}`}>
+            {scanning ? 'Scanning…' : active ? 'Run active scan' : 'Check exposure'} <span aria-hidden>→</span>
           </button>
         </form>
 
@@ -120,33 +125,108 @@ GET /.git/HEAD  404     GET /.env  404     /.well-known/security.txt 200
         </p>
       </div>
 
-      {/* Feature cards */}
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
         <Feature icon={Fingerprint} tone="violet" title="Fingerprint & CVE match" text="Reads TLS, headers, cookies and the tech stack, then matches each product against Pahredar's CVE data, flagging KEV-listed ones." />
         <Feature icon={ShieldCheck} tone="cyan" title="Posture & exposure" text="Grades security headers, certificate health and SPF/DMARC, and probes a safe list of commonly exposed paths (.git, .env, actuator…)." />
         <Feature icon={active ? Zap : AlertTriangle} tone="rose" title="Optional active verification" text="With authorisation, runs Nuclei's vulnerability templates to actually verify issues. No denial-of-service, no exploitation." />
       </div>
 
-      {/* Results */}
       <div className="mt-8 space-y-6">
-        {scan.isPending && (
-          <Card><Spinner label={runActive ? `Active scan of ${input.trim()}… this runs vulnerability templates and can take a few minutes` : `Scanning ${input.trim()}… this takes a few seconds`} /></Card>
-        )}
-        {scan.isError && !scan.isPending && (
-          <ErrorBox error={scan.error instanceof ApiError ? scan.error.message : String(scan.error)} />
-        )}
-        {report && !scan.isPending && (
+        {scanning && <ProgressCard job={jobData} active={runActive} target={jobData?.target ?? input.trim()} />}
+        {errMsg && !scanning && <ErrorBox error={errMsg} />}
+        {report && !scanning && (
           <>
             <div className="flex items-center justify-end">
-              <button type="button" onClick={() => scan.mutate({ target: report.target, fresh: true, active: runActive, authorized })} className="rounded-lg border border-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800">Re-scan</button>
+              <button type="button" onClick={rescan} className="rounded-lg border border-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800">Re-scan</button>
             </div>
-            <ReportView report={report} cached={scan.data?.cached ?? false} />
+            <ReportView report={report} cached={jobData?.cached ?? false} />
           </>
         )}
+        {!report && !scanning && !errMsg && <ScanIntro />}
       </div>
     </div>
   )
 }
+
+function ProgressCard({ job, active, target }: { job?: ScanJob; active: boolean; target: string }) {
+  const phases = job?.progress.phases ?? []
+  const ap = job?.progress.active
+  return (
+    <Card>
+      <div className="flex items-center gap-2 text-sm text-zinc-200">
+        <Loader2 className="h-4 w-4 animate-spin text-cyan-300" />
+        Scanning <span className="font-mono">{target}</span>…
+        {job?.status === 'queued' && <span className="text-xs text-zinc-500">(queued)</span>}
+      </div>
+      <ul className="mt-3 space-y-1.5">
+        {phases.map((ph) => (
+          <li key={ph.name} className="flex items-center gap-2 text-sm">
+            {ph.status === 'done' ? <CheckCircle2 className="h-4 w-4 text-emerald-400" /> : ph.status === 'running' ? <Loader2 className="h-4 w-4 animate-spin text-cyan-300" /> : <Circle className="h-4 w-4 text-zinc-700" />}
+            <span className={ph.status === 'pending' ? 'text-zinc-600' : 'text-zinc-200'}>{ph.name}</span>
+          </li>
+        ))}
+      </ul>
+      {active && ap && (ap.total > 0 || ap.templates > 0) && (
+        <div className="mt-4">
+          <div className="flex justify-between text-xs text-zinc-500">
+            <span>Nuclei · {ap.requests.toLocaleString()} / {ap.total.toLocaleString()} requests</span>
+            <span>{ap.matched} matched</span>
+          </div>
+          <div className="mt-1 h-2 overflow-hidden rounded bg-zinc-800">
+            <div className="h-2 rounded bg-rose-400 transition-all" style={{ width: `${Math.min(ap.percent, 100)}%` }} />
+          </div>
+          <p className="mt-1 text-xs text-zinc-600">Active scans run many requests and can take a few minutes. You can leave this page — the scan keeps running.</p>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+const WHAT_WE_CHECK: { title: string; items: string[] }[] = [
+  { title: 'TLS & certificate', items: ['Protocol versions (flags TLS 1.0/1.1)', 'Certificate expiry, issuer, hostname match', 'Self-signed and weak keys'] },
+  { title: 'HTTP headers & cookies', items: ['HSTS, CSP, X-Frame-Options, nosniff', 'Referrer- and Permissions-Policy', 'Cookie Secure / HttpOnly / SameSite'] },
+  { title: 'DNS & email', items: ['A / AAAA / MX / NS records', 'SPF and DMARC policy', 'Spoofing exposure'] },
+  { title: 'Technology & CVEs', items: ['Server, framework and JS library versions', 'Match against Pahredar\'s per-product CVEs', 'KEV-listed vulnerabilities flagged'] },
+  { title: 'Exposed paths', items: ['.git, .env, actuator, server-status…', 'security.txt and robots.txt', 'Safe GET probes, no payloads'] },
+  { title: 'Active (optional)', items: ['Nuclei vulnerability templates', 'Verifies issues by probing', 'No DoS, no exploitation'] },
+]
+
+const FAQ: { q: string; a: string }[] = [
+  { q: 'Is this intrusive?', a: 'The passive check only sends the requests a browser or crawler would. The optional active scan runs Nuclei\'s vulnerability templates, which actively probe the target to verify issues — enable it only for targets you are authorised to test.' },
+  { q: 'How are CVEs matched?', a: 'The detected product and version are matched against Pahredar\'s per-product CVE data. It is product-level (not matched to the exact version), so treat the CVE counts as "worth checking" and confirm the running version.' },
+  { q: 'Can I scan internal hosts?', a: 'Only when the server has SCAN_ALLOW_PRIVATE enabled. From the container, use host.docker.internal or a LAN IP to reach services on your network.' },
+  { q: 'What happens if I close the page?', a: 'Nothing is lost. The scan runs on the server; progress is polled from a job. Reopening the scanner with the same link resumes it, and finished scans are kept for a while.' },
+]
+
+function ScanIntro() {
+  return (
+    <>
+      <Card title="What this checks">
+        <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+          {WHAT_WE_CHECK.map((g) => (
+            <div key={g.title}>
+              <h4 className="text-sm font-semibold text-zinc-200">{g.title}</h4>
+              <ul className="mt-1 space-y-0.5 text-xs text-zinc-500">
+                {g.items.map((it) => <li key={it} className="flex gap-1.5"><span className="text-cyan-500/70">·</span>{it}</li>)}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </Card>
+      <Card title="FAQ">
+        <div className="divide-y divide-zinc-800/70">
+          {FAQ.map((f) => (
+            <details key={f.q} className="py-2">
+              <summary className="cursor-pointer list-none text-sm font-medium text-zinc-200 marker:content-none">{f.q}</summary>
+              <p className="mt-1.5 text-sm text-zinc-500">{f.a}</p>
+            </details>
+          ))}
+        </div>
+      </Card>
+    </>
+  )
+}
+
 
 function GradeChip({ grade, small }: { grade: string; small?: boolean }) {
   return (

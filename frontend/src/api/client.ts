@@ -10,7 +10,8 @@ import type {
   NewsPage,
   NewsQuery,
   ScanConfig,
-  ScanResponse,
+  ScanJob,
+  ScanReport,
   ScanSummary,
   Dashboard,
   ProductDetail,
@@ -65,14 +66,15 @@ export const api = {
     return request<NewsPage>(`/api/v1/news?${p}`)
   },
   scan: (target: string, opts: { fresh?: boolean; active?: boolean; authorized?: boolean } = {}) =>
-    request<ScanResponse>('/api/v1/scan', {
+    request<{ id: number }>('/api/v1/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ target, ...opts }),
     }),
+  scanJob: (id: number) => request<ScanJob>(`/api/v1/scan/jobs/${id}`),
   scanConfig: () => request<ScanConfig>('/api/v1/scan/config'),
   recentScans: () => request<{ items: ScanSummary[] }>('/api/v1/scans'),
-  getScan: (id: number) => request<ScanResponse>(`/api/v1/scans/${id}`),
+  getScan: (id: number) => request<ScanReport>(`/api/v1/scans/${id}`),
   setBookmark: (url: string, bookmarked: boolean) =>
     request<{ url: string; bookmarked: boolean }>('/api/v1/news/bookmark', {
       method: 'PUT',

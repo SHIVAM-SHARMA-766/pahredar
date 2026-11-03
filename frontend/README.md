@@ -28,7 +28,7 @@ React Router 8 needs Node ≥ 22.22 and the dev machine has Node 20, so the app 
 | `src/components/CveIntelCards.tsx` | CVE page cards loaded on demand: `VendorAdvisoriesCard` (MSRC KB/fixed-build table, advisory page previews), `NewsCard` (Pahredar feeds, Google News, Hacker News, Bluesky, Mastodon), `RelatedCard` (same advisory, same product ±30 days) |
 | `src/components/ReportsCard.tsx` | In-depth reports on the CVE page: one tab per source that has a record (OSV, Red Hat, Ubuntu); advisory text is shown as plain text, never as HTML |
 | `src/components/charts.tsx` | Year bar chart and EPSS history line chart. |
-| `src/components/Layout.tsx` | App shell: collapsible left sidebar (brand, search box that jumps to a CVE when given an ID, sectioned navigation, sync-health card), mobile top bar with a slide-in drawer, and the page frame. |
+| `src/components/Layout.tsx` | App shell: collapsible left sidebar (brand, sectioned navigation, sync-health card), mobile top bar with a slide-in drawer, and the page frame. |
 | `src/pages/` | One component per route (below). |
 
 ## Routes

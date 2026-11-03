@@ -8,17 +8,14 @@ import {
   Menu,
   Newspaper,
   RefreshCw,
-  Search,
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { useEffect, useState, type FormEvent } from 'react'
-import { Link, Outlet, useLocation, useNavigate, type Location } from 'react-router'
+import { useEffect, useState } from 'react'
+import { Link, Outlet, useLocation, type Location } from 'react-router'
 import { api } from '../api/client'
 import { relativeTime } from '../lib/format'
-import { explorerLink } from '../lib/query'
 
-const CVE_ID = /^cve-\d{4}-\d{4,}$/i
 const COLLAPSE_KEY = 'pahredar.sidebar.collapsed'
 
 interface NavItem {
@@ -147,10 +144,6 @@ function Sidebar({ collapsed, location, onToggle, onClose, drawer }: {
         )}
       </div>
 
-      <div className="px-3 pt-4">
-        <SearchBox collapsed={collapsed} />
-      </div>
-
       <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
         {SECTIONS.map((section) => (
           <div key={section.title}>
@@ -203,38 +196,6 @@ function NavRow({ item, active, collapsed }: { item: NavItem; active: boolean; c
       <Icon className={`h-[18px] w-[18px] shrink-0 ${active ? 'text-cyan-300' : 'text-zinc-400'}`} />
       {!collapsed && <span className="truncate">{item.label}</span>}
     </Link>
-  )
-}
-
-// The search box jumps straight to a CVE when given an ID, otherwise it
-// opens the explorer with a full-text query.
-function SearchBox({ collapsed }: { collapsed: boolean }) {
-  const navigate = useNavigate()
-  const [q, setQ] = useState('')
-  function submit(e: FormEvent) {
-    e.preventDefault()
-    const term = q.trim()
-    if (!term) return
-    navigate(CVE_ID.test(term) ? `/cves/${term.toUpperCase()}` : explorerLink(term))
-    setQ('')
-  }
-  if (collapsed) {
-    return (
-      <Link to="/cves" title="Search CVEs" className="flex justify-center rounded-lg px-3 py-2 text-zinc-400 hover:bg-zinc-800 hover:text-white">
-        <Search className="h-[18px] w-[18px]" />
-      </Link>
-    )
-  }
-  return (
-    <form onSubmit={submit} className="relative">
-      <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="CVE ID or keywords…"
-        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 py-2 pr-3 pl-9 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/25 focus:outline-none"
-      />
-    </form>
   )
 }
 

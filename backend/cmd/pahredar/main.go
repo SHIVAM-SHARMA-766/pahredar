@@ -35,7 +35,7 @@ commands:
   migrate                         apply pending migrations and exit
   sync <source> [--bootstrap]     run one sync in the foreground and exit
                                   sources: cvelist, nvd, kev, epss, exploitdb, metasploit, nuclei, github, trickest,
-                                  sigma, suricata, nmap, splunk, elastic, snort, yara, euvd, debian, attack, capec, vulncheck, cwe, feeds, stats
+                                  sigma, suricata, nmap, splunk, elastic, snort, yara, greenbone, euvd, debian, attack, capec, vulncheck, cwe, feeds, stats
                                   --bootstrap (cvelist, nvd) re-imports everything
   rederive                        rewrite every CVE's derived fields from stored raw records, then refresh stats
                                   (run after changing derivation logic; downloads nothing)
@@ -126,6 +126,8 @@ func syncTasks(cfg config.Config, store *db.Store, bootstrap bool) ([]syncer.Tas
 		tasks = append(tasks, syncer.Task{Name: src, Interval: cfg.Intervals.Detection,
 			Fn: func(ctx context.Context) error { return enrich.SyncDetection(ctx, src) }})
 	}
+	tasks = append(tasks, syncer.Task{Name: detection.SourceGreenbone, Interval: cfg.Intervals.Greenbone,
+		Fn: func(ctx context.Context) error { return enrich.SyncDetection(ctx, detection.SourceGreenbone) }})
 	tasks = append(tasks,
 		syncer.Task{Name: syncer.SourceEUVD, Interval: cfg.Intervals.Context, Fn: enrich.SyncEUVD},
 		syncer.Task{Name: syncer.SourceDebian, Interval: cfg.Intervals.Context, Fn: enrich.SyncDebian},

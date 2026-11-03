@@ -28,6 +28,7 @@ const SOURCES: [string, string][] = [
   ['elastic', 'Elastic detection rules'],
   ['snort', 'Snort 3 community rules'],
   ['yara', 'YARA rules (signature-base)'],
+  ['greenbone', 'Greenbone Community Feed tests (weekly)'],
   ['cwe', 'MITRE CWE names'],
   ['feeds', 'News, research, PSIRT & CISA feeds'],
   ['stats', 'Vendor/product stats'],

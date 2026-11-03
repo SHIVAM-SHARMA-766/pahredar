@@ -84,7 +84,7 @@ export interface Exploit {
 }
 
 export interface DetectionRule {
-  source: 'sigma' | 'suricata' | 'nmap' | 'splunk' | 'elastic' | 'snort' | 'yara'
+  source: 'sigma' | 'suricata' | 'nmap' | 'splunk' | 'elastic' | 'snort' | 'yara' | 'greenbone'
   rule_id: string
   title: string
   url: string | null
@@ -129,6 +129,14 @@ export interface DetectionRule {
     // its condition needs (dependencies first).
     imports?: string[]
     requires?: string[]
+    // Greenbone: test family, how it checks (remote: over the network;
+    // authenticated: needs SSH / SMB credentials), quality-of-detection type.
+    family?: string
+    check?: 'remote' | 'authenticated'
+    qod_type?: string
+    solution_type?: string
+    cvss_vector?: string
+    modified?: string
   }
   cve_ids: string[]
 }

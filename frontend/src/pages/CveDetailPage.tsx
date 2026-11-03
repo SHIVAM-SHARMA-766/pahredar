@@ -224,7 +224,7 @@ function AtAGlance({ c, onOpen }: { c: CveDetail; onOpen: (tab: TabKey) => void 
   const vendors = new Set(c.affected.map((a) => a.vendor_label || a.vendor).filter(Boolean))
   const products = [...new Set(c.affected.map((a) => a.product_label || a.product).filter(Boolean))]
   const rules = det.data?.rules ?? []
-  const scanCount = c.exploits.filter((e) => e.source === 'nuclei' || (e.source === 'metasploit' && (e.meta?.check || e.source_ref.includes('/scanner/')))).length + rules.filter((r) => r.source === 'nmap').length
+  const scanCount = c.exploits.filter((e) => e.source === 'nuclei' || (e.source === 'metasploit' && (e.meta?.check || e.source_ref.includes('/scanner/')))).length + rules.filter((r) => r.source === 'nmap' || r.source === 'greenbone').length
   const ids = rules.filter((r) => r.source === 'suricata' || r.source === 'snort').length
   const sigma = rules.filter((r) => r.source === 'sigma' || r.source === 'splunk' || r.source === 'elastic').length
   const yara = rules.filter((r) => r.source === 'yara').length

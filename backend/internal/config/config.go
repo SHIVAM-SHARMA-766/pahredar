@@ -45,6 +45,8 @@ type Intervals struct {
 	CWE       time.Duration
 	Feeds     time.Duration
 	Detection time.Duration
+	// Greenbone is weekly by default: each run downloads a ~230 MB layer.
+	Greenbone time.Duration
 	// Context covers EUVD, Debian, and VulnCheck KEV (daily) and is multiplied by 7 for
 	// the slow-moving ATT&CK mappings and CAPEC.
 	Context time.Duration
@@ -88,6 +90,7 @@ func Load() (Config, error) {
 		{"FEEDS_SYNC_INTERVAL", &cfg.Intervals.Feeds, time.Hour},
 		{"DETECTION_SYNC_INTERVAL", &cfg.Intervals.Detection, 24 * time.Hour},
 		{"CONTEXT_SYNC_INTERVAL", &cfg.Intervals.Context, 24 * time.Hour},
+		{"GREENBONE_SYNC_INTERVAL", &cfg.Intervals.Greenbone, 7 * 24 * time.Hour},
 	} {
 		if *d.dst, err = duration(d.key, d.fallback); err != nil {
 			return Config{}, err

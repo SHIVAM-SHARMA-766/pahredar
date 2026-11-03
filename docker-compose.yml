@@ -42,6 +42,7 @@ services:
       FEEDS_SYNC_INTERVAL: ${FEEDS_SYNC_INTERVAL:-1h}
       DETECTION_SYNC_INTERVAL: ${DETECTION_SYNC_INTERVAL:-24h}
       CONTEXT_SYNC_INTERVAL: ${CONTEXT_SYNC_INTERVAL:-24h}
+      GREENBONE_SYNC_INTERVAL: ${GREENBONE_SYNC_INTERVAL:-}
       DATA_DIR: /var/lib/pahredar
     volumes:
       # Scratch space for downloads; the bootstrap needs ~700 MB temporarily.

@@ -192,6 +192,60 @@ function SnortRule({ r }: { r: DetectionRule }) {
   )
 }
 
+// GreenboneTests lists Greenbone Community Feed tests for the CVE. They run
+// only inside a Greenbone scanner (GVM), so this explains how to run them
+// rather than offering a single command.
+function GreenboneTests({ tests, target }: { tests: DetectionRule[]; target: string }) {
+  const [all, setAll] = useState(false)
+  const remote = tests.filter((t) => t.meta.check !== 'authenticated')
+  const auth = tests.filter((t) => t.meta.check === 'authenticated')
+  const shown = (list: DetectionRule[]) => (all ? list : list.slice(0, 6))
+  const row = (t: DetectionRule) => (
+    <li key={t.rule_id} className="border-b border-zinc-800/60 py-1.5 last:border-0">
+      <details>
+        <summary className="flex cursor-pointer list-none flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="min-w-0 flex-1 text-zinc-200">{t.title}</span>
+          {t.meta.family && <span className="text-xs text-zinc-500">{t.meta.family}</span>}
+        </summary>
+        <div className="mt-2 space-y-1.5 text-xs">
+          <div className="flex items-center gap-1 font-mono text-zinc-400">OID {t.rule_id} <CopyButton text={t.rule_id} /></div>
+          {t.body && <p className="whitespace-pre-line text-zinc-400">{t.body}</p>}
+          <p className="text-zinc-600">{[t.meta.qod_type && `Detection: ${t.meta.qod_type}`, t.meta.modified && `updated ${t.meta.modified}`, 'GPL-2.0'].filter(Boolean).join(' · ')}</p>
+        </div>
+      </details>
+    </li>
+  )
+  const oids = tests.map((t) => t.rule_id).join('\n')
+  return (
+    <Section title={`Greenbone / OpenVAS tests (${tests.length})`} hint="Vulnerability tests from the Greenbone Community Feed. They run inside Greenbone Community Edition (free, self-hosted), whose Full and fast scan config already includes them.">
+      <div className="space-y-4">
+        {remote.length > 0 && (
+          <div>
+            <div className="mb-1 flex items-center gap-2 text-xs text-zinc-400"><Tag tone="cyan">Remote</Tag> {remote.length} over the network, no credentials</div>
+            <ul>{shown(remote).map(row)}</ul>
+          </div>
+        )}
+        {auth.length > 0 && (
+          <div>
+            <div className="mb-1 flex items-center gap-2 text-xs text-zinc-400"><Tag>Authenticated</Tag> {auth.length} need SSH (Linux, macOS) or SMB (Windows) credentials on the target</div>
+            <ul>{shown(auth).map(row)}</ul>
+          </div>
+        )}
+        {!all && (remote.length > 6 || auth.length > 6) && <button className={`text-sm ${link}`} onClick={() => setAll(true)}>Show all {tests.length} tests</button>}
+        <Commands items={[
+          { label: 'Start Greenbone Community Edition (Docker)', cmd: 'curl -fLO https://greenbone.github.io/docs/latest/_static/docker-compose.yml && docker compose -f docker-compose.yml -p greenbone-community-edition up -d', note: 'The first feed sync takes a while. The web UI is at http://127.0.0.1:9392 (default user admin; set its password as the Greenbone docs describe).' },
+        ]} />
+        <ol className="list-decimal space-y-0.5 pl-5 text-xs text-zinc-400">
+          <li>Configuration → Targets: add <span className="font-mono text-zinc-300">{target}</span>{auth.length > 0 && ', with SSH or SMB credentials for the authenticated tests'}.</li>
+          <li>Scans → Tasks: new task on that target with the <span className="text-zinc-300">Full and fast</span> scan config, then start it.</li>
+          <li>To run only these tests, clone the scan config and keep the OIDs below.</li>
+        </ol>
+        <div className="flex items-center gap-2 text-xs text-zinc-400">Copy all {tests.length} OIDs <CopyButton text={oids} /></div>
+      </div>
+    </Section>
+  )
+}
+
 function snortCommands(rules: DetectionRule[]): Command[] {
   const sids = rules.map((r) => r.rule_id).slice(0, 40)
   return [
@@ -408,6 +462,8 @@ export function DetectionCard({ c }: { c: CveDetail }) {
   const splunk = rules.filter((r) => r.source === 'splunk')
   const elastic = rules.filter((r) => r.source === 'elastic')
   const yara = rules.filter((r) => r.source === 'yara')
+  const greenbone = rules.filter((r) => r.source === 'greenbone')
+  const scanCount = scans.length + greenbone.length
   const networkRules = suricata.length + snort.length
   const logRules = sigma.length + splunk.length + elastic.length
   const hints = weaknessHints(c.cwes.map((w) => w.id))
@@ -424,7 +480,7 @@ export function DetectionCard({ c }: { c: CveDetail }) {
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'exposure', label: 'Am I affected?', count: versionChecks.length || undefined },
-    { key: 'scan', label: 'Active scan', count: scans.length },
+    { key: 'scan', label: 'Active scan', count: scanCount },
     { key: 'network', label: 'Network IDS', count: networkRules },
     { key: 'logs', label: 'Logs / SIEM', count: logRules },
     { key: 'files', label: 'Files (YARA)', count: yara.length },
@@ -440,6 +496,7 @@ export function DetectionCard({ c }: { c: CveDetail }) {
   const steps: [string, Tab][] = []
   if (versionChecks.length) steps.push([`check the installed version (${versionChecks.join(', ')})`, 'exposure'])
   if (scans.length) steps.push([`scan exposed hosts with ${scans.length === 1 ? 'the ready-made check' : `${scans.length} ready-made checks`}`, 'scan'])
+  else if (greenbone.length) steps.push([`scan with ${greenbone.length} Greenbone test${greenbone.length > 1 ? 's' : ''}`, 'scan'])
   if (networkRules) steps.push([`watch traffic with ${networkRules} network rule${networkRules > 1 ? 's' : ''}`, 'network'])
   if (logRules) steps.push([`alert on logs with ${logRules} SIEM rule${logRules > 1 ? 's' : ''}`, 'logs'])
   if (yara.length) steps.push([`scan files with ${yara.length} YARA rule${yara.length > 1 ? 's' : ''}`, 'files'])
@@ -447,7 +504,7 @@ export function DetectionCard({ c }: { c: CveDetail }) {
 
   const coverage: [string, boolean, string, Tab][] = [
     ['Version check', versionChecks.length > 0, versionChecks.join(' · ') || (pending ? 'loading…' : 'none'), 'exposure'],
-    ['Remote scan', scans.length > 0, scans.length ? String(scans.length) : 'none', 'scan'],
+    ['Scan', scanCount > 0, scanCount ? [scans.length && String(scans.length), greenbone.length && `${greenbone.length} Greenbone`].filter(Boolean).join(' · ') : 'none', 'scan'],
     ['Network IDS', networkRules > 0, networkRules ? String(networkRules) : 'none', 'network'],
     ['Logs / SIEM', logRules > 0, logRules ? String(logRules) : 'none', 'logs'],
     ['Files (YARA)', yara.length > 0, yara.length ? String(yara.length) : 'none', 'files'],
@@ -528,12 +585,17 @@ export function DetectionCard({ c }: { c: CveDetail }) {
         )}
 
         {current === 'scan' && (
-          scans.length > 0 ? (
-            <Section title="Active checks" hint="Run these only against systems you own or are authorised to test. Set the target above. Update Nuclei templates first with nuclei -update-templates.">
-              <Commands items={scans} />
-            </Section>
+          scanCount > 0 ? (
+            <>
+              {scans.length > 0 && (
+                <Section title="Active checks" hint="Run these only against systems you own or are authorised to test. Set the target above. Update Nuclei templates first with nuclei -update-templates.">
+                  <Commands items={scans} />
+                </Section>
+              )}
+              {greenbone.length > 0 && <GreenboneTests tests={greenbone} target={host} />}
+            </>
           ) : (
-            <p className="text-zinc-500">No Nuclei template, Nmap script, or Metasploit check module exists for this CVE. Use the version check under <em>Am I affected?</em></p>
+            <p className="text-zinc-500">No Nuclei template, Nmap script, Metasploit check module, or Greenbone test exists for this CVE. Use the version check under <em>Am I affected?</em></p>
           )
         )}
 

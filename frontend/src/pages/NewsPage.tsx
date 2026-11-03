@@ -3,12 +3,12 @@ import { Bookmark, BookmarkCheck, ExternalLink, Search, X } from 'lucide-react'
 import { useDeferredValue } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { api } from '../api/client'
-import type { CveBadge, FeedKind, NewsArticle } from '../api/types'
+import type { CveBadge, FeedKind, NewsArticle, TrendingItem } from '../api/types'
 import { KIND_LABEL, KindTag, TrendingCard } from '../components/FeedCards'
-import { Card, ErrorBox, PageHeader, Spinner, Tag } from '../components/ui'
+import { Card, ErrorBox, Spinner, Tag } from '../components/ui'
 import { fmtDate, fmtNumber, relativeTime } from '../lib/format'
 import { useOrigin } from '../lib/origin'
-import { severityText } from '../lib/severity'
+import { bestScore, severityText } from '../lib/severity'
 
 // Security news from Pahredar's own feeds (GET /api/v1/news). Every filter
 // lives in the URL: kind, feed, q, days, cves, saved, sort, page. Saved
@@ -47,6 +47,7 @@ export function NewsPage() {
   }
 
   const feeds = useQuery({ queryKey: ['feeds'], queryFn: api.feeds, staleTime: 10 * 60_000 })
+  const trending = useQuery({ queryKey: ['trending', 7, 10], queryFn: () => api.trending(7, 10), staleTime: 5 * 60_000 })
   const news = useQuery({
     queryKey: ['news', kind, feed, deferredQ, saved ? 0 : days, cves, saved, sort, page],
     queryFn: () => api.news({ kind: kind || undefined, feed: feed || undefined, q: deferredQ, days: saved ? 0 : days, cves, bookmarked: saved, sort, page, limit: PAGE_SIZE }),
@@ -60,16 +61,7 @@ export function NewsPage() {
   const seg = (on: boolean) => `rounded-md px-3 py-1.5 text-sm whitespace-nowrap ${on ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200'}`
   return (
     <>
-      <PageHeader
-        title="Security news"
-        subtitle={
-          <>
-            {feeds.data ? `${feeds.data.items.length} vendor, government, research, and news feeds` : 'Vendor, government, research, and news feeds'}, read hourly
-            {latest && <> · newest article {relativeTime(latest)}</>}. <b className="font-medium text-zinc-300">Top</b> ranks stories by the CVEs they cover: exploited first, then critical, then how many sources cover them.
-            {' '}Government advisories are kept 60 days, vendor advisories 30, news and research 7; bookmark an article to keep it.
-          </>
-        }
-      />
+      <NewsBrief feeds={feeds.data?.items.length} latest={latest} trending={trending.data?.items} />
 
       <div className="mb-4 space-y-3">
         <div className="flex flex-wrap items-center gap-3">
@@ -227,5 +219,45 @@ function CveChip({ id, b }: { id: string; b?: CveBadge }) {
       {b?.score != null && <span className={`text-[11px] font-semibold tabular-nums ${severityText[b.severity]}`}>{b.score.toFixed(1)}</span>}
       {b?.kev ? <Tag tone="red">KEV</Tag> : b?.exploited ? <Tag tone="red">Exploited</Tag> : null}
     </Link>
+  )
+}
+
+function NewsBrief({ feeds, latest, trending }: { feeds?: number; latest?: string | null; trending?: TrendingItem[] }) {
+  const items = trending ?? []
+  const top = items[0]
+  const exploited = items.filter((t) => t.cve?.kev).length
+  const stats: [string, string][] = [
+    ['Trending CVEs', String(items.length || 0)],
+    ['Exploited (KEV)', String(exploited)],
+    ['Feeds', feeds ? String(feeds) : '—'],
+    ['Updated', latest ? relativeTime(latest) : '—'],
+  ]
+  return (
+    <div className="mb-6 overflow-hidden rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900/80 to-zinc-950">
+      <div className="p-5 sm:p-6">
+        <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Security Brief</h1>
+        <p className="mt-1 text-sm text-zinc-400">Vendor, government, research, and news feeds, read hourly and ranked by the CVEs each story covers — exploited first, then critical, then how many sources cover them.</p>
+        {top && (
+          <Link to={`/cves/${top.id}`} className="mt-4 block rounded-xl border border-zinc-800 bg-zinc-950/50 p-4 transition-colors hover:border-zinc-700">
+            <div className="text-[11px] font-semibold tracking-wider text-cyan-300/80 uppercase">Top story · last 7 days</div>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="font-mono text-sm font-semibold text-cyan-300">{top.id}</span>
+              {top.cve && bestScore(top.cve) != null && <span className={`text-sm font-semibold ${severityText[top.cve.severity]}`}>{bestScore(top.cve)!.toFixed(1)}</span>}
+              {top.cve?.kev && <Tag tone="red">KEV</Tag>}
+              <span className="text-xs text-zinc-500">{top.sources} sources · {top.articles} articles</span>
+            </div>
+            <p className="mt-1 text-sm text-zinc-200">{top.headline}</p>
+          </Link>
+        )}
+      </div>
+      <div className="grid grid-cols-2 divide-x divide-zinc-800 border-t border-zinc-800 sm:grid-cols-4">
+        {stats.map(([label, value]) => (
+          <div key={label} className="px-4 py-3 text-center">
+            <div className="font-mono text-lg font-semibold text-zinc-100">{value}</div>
+            <div className="text-[11px] tracking-wider text-zinc-500 uppercase">{label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }

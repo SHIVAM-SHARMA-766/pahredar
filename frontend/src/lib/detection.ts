@@ -1,7 +1,7 @@
 // Detection commands and hints built from data Pahredar already has: exploit
 // modules (Metasploit, Nuclei), detection rules (Nmap, Suricata, Sigma),
 // affected packages (OSV, Ubuntu, Red Hat), Windows KBs (MSRC), and CWEs.
-import type { CveReports, DebianStatus, DetectionRule, Exploit } from '../api/types'
+import type { CveReports, DetectionRule, Exploit } from '../api/types'
 
 export interface Command {
   label: string
@@ -10,7 +10,7 @@ export interface Command {
 }
 
 // Package version checks per OSV ecosystem (the part before any ":").
-const ecosystemCheck: Record<string, (pkg: string) => string> = {
+const ecosystemCheck: Partial<Record<string, (pkg: string) => string>> = {
   PyPI: (p) => `pip show ${p} 2>/dev/null | grep -i '^version'`,
   npm: (p) => `npm ls ${p} --all`,
   // Servers rarely have the build; look for the jar itself.
@@ -34,54 +34,36 @@ const ecosystemCheck: Record<string, (pkg: string) => string> = {
   Linux: () => 'uname -r',
 }
 
-export interface PackageCheck {
-  ecosystem: string
-  pkg: string
-  cmd: string
-  fixed: string[]
-}
-
-// One version check per distinct command across OSV, Ubuntu, and Red Hat;
-// packages sharing a command (Maven forks with the same jar name) merge.
-export function packageChecks(r: CveReports['reports'] | undefined, debian: DebianStatus[] = []): PackageCheck[] {
-  const out = new Map<string, PackageCheck>()
-  const add = (ecosystem: string, pkg: string, fixed: string[] = []) => {
-    const base = ecosystem.split(':')[0]
-    const check = ecosystemCheck[base]
-    if (!check || !pkg) return
-    const cmd = check(pkg)
-    const prev = out.get(cmd)
-    if (prev) {
-      prev.fixed = [...new Set([...prev.fixed, ...fixed])]
-      if (!prev.pkg.split(', ').includes(pkg)) prev.pkg += `, ${pkg}`
-      return
-    }
-    out.set(cmd, { ecosystem: base, pkg, cmd, fixed })
-  }
-  for (const adv of r?.osv ?? []) for (const a of adv.affected) add(a.ecosystem, a.package, a.fixed)
-  for (const d of debian) add('Debian', d.package, d.status === 'resolved' && d.fixed_version && d.fixed_version !== '0' ? [`${d.fixed_version} (${d.release})`] : [])
-  for (const p of r?.ubuntu?.packages ?? []) add('Ubuntu', p.name)
-  for (const f of r?.redhat?.fixed_in ?? []) if (f.package) add('Red Hat', f.package.replace(/-\d.*$/, ''))
-  return [...out.values()]
+// versionCommand shows the installed version of a package, or null when
+// Pahredar has no command for the ecosystem.
+export function versionCommand(ecosystem: string, pkg: string): string | null {
+  const check = ecosystemCheck[ecosystem.split(':')[0]]
+  return check && pkg ? check(pkg) : null
 }
 
 // Distribution and scanner commands that look up the CVE directly.
-export function cveLookups(id: string, r: CveReports['reports'] | undefined, checks: PackageCheck[]): Command[] {
-  const eco = new Set(checks.map((c) => c.ecosystem))
+// `eco` holds the ecosystems the CVE affects (OSV, plus Debian / Ubuntu /
+// Red Hat when the distros track it).
+export function cveLookups(id: string, eco: Set<string>): Command[] {
   const out: Command[] = []
-  if (r?.ubuntu || eco.has('Ubuntu')) out.push({ label: 'Ubuntu', cmd: `sudo pro fix ${id} --dry-run`, note: 'Reports whether this machine is affected and what the fix would install.' })
+  if (eco.has('Ubuntu')) out.push({ label: 'Ubuntu', cmd: `sudo pro fix ${id} --dry-run`, note: 'Reports whether this machine is affected and what the fix would install.' })
   if (eco.has('Debian')) out.push({ label: 'Debian', cmd: `debsecan --format detail | grep -A3 ${id}` })
-  if (r?.redhat || eco.has('Red Hat') || eco.has('AlmaLinux') || eco.has('Rocky Linux')) {
+  if (eco.has('Red Hat') || eco.has('AlmaLinux') || eco.has('Rocky Linux')) {
     out.push({ label: 'RHEL / Alma / Rocky', cmd: `sudo dnf updateinfo info --cve ${id}`, note: 'Lists the advisory and packages fixing this CVE that are not yet installed.' })
   }
   const appEcosystems = [...eco].filter((e) => !['Ubuntu', 'Debian', 'Red Hat', 'AlmaLinux', 'Rocky Linux', 'SUSE', 'openSUSE', 'Alpine', 'Linux'].includes(e))
   if (appEcosystems.length) {
     out.push({ label: 'Source tree (OSV-Scanner)', cmd: `osv-scanner scan -r . | grep ${id}` })
   }
-  if (checks.length) {
+  if (eco.size) {
     out.push(
       { label: 'Filesystem or repo (Trivy)', cmd: `trivy fs --scanners vuln . 2>/dev/null | grep ${id}` },
-      { label: 'Container image (Trivy)', cmd: `trivy image IMAGE 2>/dev/null | grep ${id}` },
+      {
+        label: 'Every running container (Trivy)',
+        cmd: `docker ps --format '{{.Image}}' | sort -u | while read -r img; do trivy image -q --scanners vuln "$img" 2>/dev/null | grep -q ${id} && echo "AFFECTED  $img"; done`,
+        note: 'Prints only the images that contain the vulnerable package.',
+      },
+      { label: 'Kubernetes cluster (Trivy)', cmd: `trivy k8s --scanners vuln --report all 2>/dev/null | grep ${id}` },
       { label: 'Host (Grype)', cmd: `grype dir:/ 2>/dev/null | grep ${id}` },
     )
   }

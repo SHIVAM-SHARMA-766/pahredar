@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Menu,
   Newspaper,
+  Radar,
   RefreshCw,
   X,
   type LucideIcon,
@@ -34,6 +35,7 @@ const SECTIONS: { title: string; dot: string; items: NavItem[] }[] = [
     items: [
       { to: '/', label: 'Dashboard', icon: LayoutDashboard, active: (l) => l.pathname === '/' },
       { to: '/news', label: 'Security news', icon: Newspaper, active: (l) => l.pathname === '/news' },
+      { to: '/scan', label: 'Endpoint scanner', icon: Radar, active: (l) => l.pathname === '/scan' },
     ],
   },
   {

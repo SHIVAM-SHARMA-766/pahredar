@@ -9,6 +9,8 @@ import type {
   FeedInfo,
   NewsPage,
   NewsQuery,
+  ScanResponse,
+  ScanSummary,
   Dashboard,
   ProductDetail,
   ProductSummary,
@@ -61,6 +63,14 @@ export const api = {
     }
     return request<NewsPage>(`/api/v1/news?${p}`)
   },
+  scan: (target: string, fresh = false) =>
+    request<ScanResponse>('/api/v1/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target, fresh }),
+    }),
+  recentScans: () => request<{ items: ScanSummary[] }>('/api/v1/scans'),
+  getScan: (id: number) => request<ScanResponse>(`/api/v1/scans/${id}`),
   setBookmark: (url: string, bookmarked: boolean) =>
     request<{ url: string; bookmarked: boolean }>('/api/v1/news/bookmark', {
       method: 'PUT',

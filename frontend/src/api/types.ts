@@ -625,3 +625,105 @@ export interface FeedInfo {
   with_cve: number
   latest: string | null
 }
+
+// --- Endpoint scanner (POST /api/v1/scan) ------------------------------------
+
+export type ScanSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info' | 'good'
+
+export interface ScanFinding {
+  severity: ScanSeverity
+  category: string
+  title: string
+  detail?: string
+}
+
+export interface ScanTechCve {
+  id: string
+  severity: string
+  kev: boolean
+}
+
+export interface ScanTech {
+  name: string
+  version?: string
+  from: string
+  cves?: {
+    vendor: string
+    product: string
+    total: number
+    kev: number
+    critical: number
+    examples: ScanTechCve[]
+  }
+}
+
+export interface ScanReport {
+  target: string
+  url: string
+  host: string
+  ip: string
+  scanned_at: string
+  duration: string
+  grade: string
+  score: number
+  findings: ScanFinding[]
+  dns: {
+    a: string[]
+    aaaa: string[]
+    mx: string[]
+    ns: string[]
+    txt: string[]
+    spf: string
+    dmarc: string
+  } | null
+  tls: {
+    supported: boolean
+    version: string
+    min_observed: string
+    cipher: string
+    issuer: string
+    subject: string
+    sans: string[]
+    not_before: string
+    not_after: string
+    days_left: number
+    key_type: string
+    self_signed: boolean
+    host_match: boolean
+  } | null
+  http: {
+    final_url: string
+    status: number
+    server: string
+    powered_by: string
+    https_redirect: boolean
+    methods: string[]
+  } | null
+  headers: { name: string; present: boolean; value?: string }[]
+  cookies: { name: string; secure: boolean; http_only: boolean; same_site: string }[]
+  tech: ScanTech[]
+  paths: { path: string; status: number; exposed: boolean }[]
+  related: {
+    security_txt: boolean
+    contacts: string[]
+    subdomains: string[]
+    assets: string[]
+    disallowed: string[]
+  } | null
+  errors: string[]
+}
+
+export interface ScanResponse {
+  id: number
+  cached: boolean
+  report: ScanReport
+}
+
+export interface ScanSummary {
+  id: number
+  target: string
+  host: string
+  grade: string
+  score: number
+  created_at: string
+}

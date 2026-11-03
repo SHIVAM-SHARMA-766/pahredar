@@ -17,6 +17,7 @@ Go module for the Pahredar backend: one binary that applies database migrations,
 | `internal/sources/euvd/` | ENISA EUVD exploited-list client (paged search API) |
 | `internal/sources/attack/` | CTID KEV→ATT&CK mapping files and the MITRE CAPEC CSV parser |
 | `internal/sources/debian/` | Debian Security Tracker JSON, stream-decoded per package |
+| `internal/scan/` | Non-intrusive endpoint scanner: public-only networking, DNS/TLS/HTTP/headers/cookies checks, technology fingerprint, exposed-path probes, related resources, scoring |
 | `internal/sources/greenbone/` | Greenbone Community Feed reader: registry token, manifest, streamed feed layer, NASL description-block parser (`Parse`), newest feed version only |
 | `internal/sources/detection/` | Sigma (repository archive), Suricata ET Open, and Nmap script-index parsers (`detection.go`); Splunk security_content, Elastic detection-rules, Snort 3 community, and YARA signature-base parsers (`more.go`, YAML via go.yaml.in/yaml/v3, TOML via BurntSushi/toml). All produce rules with the CVEs they name |
 | `internal/sources/feeds/` | The feed list (`All`: key, name, URL, kind, whether to read article pages) a lenient RSS 2.0 / RDF / Atom parser with CVE ID extraction, readers for GitHub security advisories (`FormatGitHub`, per repository or the global database), CERT-In's note list (`FormatCERTIn`), and NVIDIA's bulletin table (`FormatNVIDIA`), and `ArticleText`, which keeps only an article page's own text (uses `golang.org/x/net/html`) |
@@ -87,6 +88,7 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `GET /api/v1/stats/trending` | CVEs ranked by distinct feeds mentioning them |
 | `GET /api/v1/feeds`, `/api/v1/feeds/advisories` | Feed list with counts; newest vendor/government advisories |
 | `GET /api/v1/news` | News page list: filters, top/newest sort, `bookmarked=1`, paging, and a badge per named CVE (`internal/api/news.go`, `db.NewsArticles`) |
+| `POST /api/v1/scan`, `GET /api/v1/scans[/{id}]` | Run an endpoint scan, list recent scans, fetch one (`internal/api/scan.go`, `internal/scan`, `db.MatchTech`/`SaveScan`) |
 | `PUT /api/v1/news/bookmark` | Bookmark or un-bookmark an article (`{"url", "bookmarked"}`); bookmarked articles are not pruned |
 | `GET /api/v1/vendors` | Vendor ranking/search (`q`, `page_size`) from `vendor_stats` |
 | `GET /api/v1/products` | Product ranking/search across vendors (`q`, `page_size`) from `product_stats` |
@@ -112,6 +114,7 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `00003_sort_indexes.sql` | Sort indexes rebuilt as `DESC NULLS LAST, id DESC` (and a COALESCE CVSS expression index) to match the list API's `ORDER BY` |
 | `00004_enrichment.sql` | `kev.forensic_triage`; `cve.exploit_ref` with a backfill from `refs` (~10 s on the full corpus); `kev (date_added DESC, cve_id)` index |
 | `00005_vendor_stats.sql` | Materialized views `vendor_stats`, `product_stats`, `vendor_year_stats` with unique indexes (required for `REFRESH … CONCURRENTLY`); ~12 s to create on the full corpus |
+| `00018_scan.sql` | `scan` table (endpoint scan history) |
 | `00017_greenbone.sql` | `detection_rule.source` allows `greenbone` |
 | `00016_more_detection.sql` | `detection_rule.source` allows `splunk`, `elastic`, `snort`, `yara` |
 | `00015_article_bookmark.sql` | `feed_article.bookmarked_at` |

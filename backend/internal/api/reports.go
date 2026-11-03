@@ -19,7 +19,7 @@ import (
 const (
 	// How long cached third-party reports are served before refetching. A
 	// "not found" is retried sooner because sources add CVEs over time, and
-	// news is refreshed daily.
+	// news, social posts, and threat intel are refreshed daily.
 	reportTTL         = 7 * 24 * time.Hour
 	reportNotFoundTTL = 24 * time.Hour
 	newsTTL           = 24 * time.Hour
@@ -68,7 +68,7 @@ func referenceURLs(refs json.RawMessage) []string {
 
 type reportStatus struct {
 	Source    string     `json:"source"`
-	Status    string     `json:"status"` // ok, not_found, error
+	Status    string     `json:"status"` // ok, not_found, error, disabled (key not set)
 	FetchedAt *time.Time `json:"fetched_at"`
 	Error     string     `json:"error,omitempty"`
 }
@@ -129,6 +129,10 @@ func (s *Server) cveReports(w http.ResponseWriter, r *http.Request) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for i, src := range wanted {
+		if !s.reports.Configured(src) {
+			resp.Sources[i] = reportStatus{Source: src, Status: "disabled"}
+			continue
+		}
 		if c, ok := cached[src]; ok && fresh(c) {
 			at := c.FetchedAt
 			resp.Sources[i] = reportStatus{Source: src, Status: c.Status, FetchedAt: &at}
@@ -158,10 +162,10 @@ func fresh(c db.CachedReport) bool {
 	if c.Status == "not_found" {
 		ttl = reportNotFoundTTL
 	}
-	if c.Source == reports.SourceNews || c.Source == reports.SourceDiscussions {
+	switch c.Source {
+	case reports.SourceNews, reports.SourceDiscussions, reports.SourceBluesky, reports.SourceOTX, reports.SourceThreatFox:
 		ttl = newsTTL
-	}
-	if c.Source == reports.SourceHistory {
+	case reports.SourceHistory:
 		ttl = historyTTL
 	}
 	return time.Since(c.FetchedAt) < ttl

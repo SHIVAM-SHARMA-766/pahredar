@@ -18,6 +18,9 @@
 //     the CVE, such as score, CPE, and reference changes (history.go).
 //   - Fix commits (GitHub API): message, author, and per-file diff of the
 //     GitHub commits the CVE references (commits.go).
+//   - Threat intelligence with a free key (intel.go): AlienVault OTX pulses
+//     (campaigns, adversaries, malware, ATT&CK), abuse.ch ThreatFox IOCs
+//     tagged with the CVE, and Bluesky posts mentioning it.
 //
 // Coverage is best for open-source and Linux software; closed-source vendor
 // products are usually absent. Fetches happen on demand (see the API's
@@ -47,6 +50,9 @@ const (
 	SourceDiscussions = "discussions"
 	SourceHistory     = "history"
 	SourceCommits     = "commits"
+	SourceOTX         = "otx"
+	SourceThreatFox   = "threatfox"
+	SourceBluesky     = "bluesky"
 
 	osvURL    = "https://api.osv.dev/v1/vulns/"
 	redHatURL = "https://access.redhat.com/hydra/rest/securitydata/cve/"
@@ -58,7 +64,7 @@ const (
 )
 
 // Sources lists every report source in display order.
-var Sources = []string{SourceOSV, SourceRedHat, SourceUbuntu, SourceMSRC, SourceAdvisories, SourceNews, SourceDiscussions, SourceHistory, SourceCommits}
+var Sources = []string{SourceOSV, SourceRedHat, SourceUbuntu, SourceMSRC, SourceAdvisories, SourceNews, SourceDiscussions, SourceHistory, SourceCommits, SourceOTX, SourceThreatFox, SourceBluesky}
 
 // Request carries what a fetcher may need beyond the CVE ID.
 type Request struct {
@@ -165,13 +171,33 @@ type Client struct {
 	// pages fetches arbitrary advisory URLs taken from CVE data; it refuses
 	// non-public addresses (see fetch.PublicOnlyClient).
 	pages *http.Client
-	// Optional keys: NVD raises the history API's rate limit, GitHub the
-	// commits API's (60 requests an hour without one).
-	nvdKey, githubToken string
+	keys  Keys
+	bsky  blueskyAuth
 }
 
-func New(c *http.Client, nvdKey, githubToken string) *Client {
-	return &Client{http: c, pages: fetch.PublicOnlyClient(previewTimeout), nvdKey: nvdKey, githubToken: githubToken}
+// Keys are the optional API keys. NVD raises the history API's rate limit
+// and GitHub the commits API's (60 requests an hour without one); OTX,
+// abuse.ch, and Bluesky enable their sources.
+type Keys struct {
+	NVD, GitHub, OTX, AbuseCH      string
+	BlueskyHandle, BlueskyPassword string
+}
+
+func New(c *http.Client, keys Keys) *Client {
+	return &Client{http: c, pages: fetch.PublicOnlyClient(previewTimeout), keys: keys}
+}
+
+// Configured reports whether a source can run with the keys provided.
+func (c *Client) Configured(source string) bool {
+	switch source {
+	case SourceOTX:
+		return c.keys.OTX != ""
+	case SourceThreatFox:
+		return c.keys.AbuseCH != ""
+	case SourceBluesky:
+		return c.keys.BlueskyHandle != "" && c.keys.BlueskyPassword != ""
+	}
+	return true
 }
 
 // Fetch returns the normalized report for one source, or ErrNotFound.
@@ -195,6 +221,12 @@ func (c *Client) Fetch(ctx context.Context, source string, req Request) (any, er
 		return c.history(ctx, req.CVEID)
 	case SourceCommits:
 		return c.commits(ctx, req.CommitURLs)
+	case SourceOTX:
+		return c.otx(ctx, req.CVEID)
+	case SourceThreatFox:
+		return c.threatFox(ctx, req.CVEID)
+	case SourceBluesky:
+		return c.bluesky(ctx, req.CVEID)
 	}
 	return nil, fmt.Errorf("unknown report source %q", source)
 }

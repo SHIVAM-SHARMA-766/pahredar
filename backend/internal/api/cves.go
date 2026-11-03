@@ -213,9 +213,11 @@ type cveDetailResponse struct {
 	References      json.RawMessage    `json:"references"`
 	Affected        []db.AffectedOut   `json:"affected"`
 	// Aliases are nicknames such as "Log4Shell" (from Metasploit notes).
-	Aliases []string       `json:"aliases"`
-	EUVD    *db.EUVDOut    `json:"euvd"`
-	Debian  []db.DebianOut `json:"debian"`
+	Aliases []string    `json:"aliases"`
+	EUVD    *db.EUVDOut `json:"euvd"`
+	// VulnCheck is the VulnCheck KEV entry (only when VULNCHECK_API_TOKEN is set).
+	VulnCheck *db.VulnCheckOut `json:"vulncheck"`
+	Debian    []db.DebianOut   `json:"debian"`
 }
 
 type cweOut struct {
@@ -255,6 +257,9 @@ func assess(d *db.CVEDetail, best *cverecord.Metric, ssvc *cverecord.SSVC) asses
 	case d.EUVD != nil:
 		a.Exploitation = "active"
 		a.Reasons = append(a.Reasons, "listed in ENISA EUVD as exploited")
+	case d.VulnCheck != nil:
+		a.Exploitation = "active"
+		a.Reasons = append(a.Reasons, "listed in VulnCheck KEV (exploitation reported)")
 	case len(d.Exploits) > 0 || d.ExploitRef || (ssvc != nil && strings.EqualFold(ssvc.Exploitation, "poc")):
 		a.Exploitation = "poc"
 		switch {
@@ -374,7 +379,7 @@ func (s *Server) getCVE(w http.ResponseWriter, r *http.Request) {
 		Metrics:   metrics,
 		SSVC:      ssvc,
 		NVDStatus: d.NVDStatus, NVDLastModified: d.NVDLastModified,
-		HasExploit: d.ExploitRef || d.KEV != nil || d.EUVD != nil || len(d.Exploits) > 0,
+		HasExploit: d.ExploitRef || d.KEV != nil || d.EUVD != nil || d.VulnCheck != nil || len(d.Exploits) > 0,
 		Assessment: assess(d, best, ssvc),
 		Advisory:   cverecord.CNAAdvisory(rec),
 		KEV:        d.KEV,
@@ -385,6 +390,7 @@ func (s *Server) getCVE(w http.ResponseWriter, r *http.Request) {
 		Affected:   d.Affected,
 		Aliases:    aliases(d.Exploits),
 		EUVD:       d.EUVD,
+		VulnCheck:  d.VulnCheck,
 		Debian:     orEmpty(d.Debian),
 	})
 }

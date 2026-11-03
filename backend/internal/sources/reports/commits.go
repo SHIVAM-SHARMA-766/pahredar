@@ -139,8 +139,8 @@ func (c *Client) commits(ctx context.Context, urls []string) ([]Commit, error) {
 }
 
 func (c *Client) getGitHub(ctx context.Context, url string, v any) error {
-	if c.githubToken == "" {
+	if c.keys.GitHub == "" {
 		return c.getJSON(ctx, url, v)
 	}
-	return c.getJSONWithHeader(ctx, url, http.Header{"Authorization": {"Bearer " + c.githubToken}}, v)
+	return c.getJSONWithHeader(ctx, url, http.Header{"Authorization": {"Bearer " + c.keys.GitHub}}, v)
 }

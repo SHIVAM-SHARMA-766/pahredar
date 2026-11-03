@@ -8,13 +8,15 @@ import (
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/attack"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/debian"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/euvd"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/vulncheck"
 )
 
 const (
-	SourceEUVD   = "euvd"
-	SourceAttack = "attack"
-	SourceCAPEC  = "capec"
-	SourceDebian = "debian"
+	SourceEUVD      = "euvd"
+	SourceAttack    = "attack"
+	SourceCAPEC     = "capec"
+	SourceDebian    = "debian"
+	SourceVulnCheck = "vulncheck"
 )
 
 // snapshotRun wraps a snapshot sync: fetch, replace, record the run time
@@ -89,5 +91,21 @@ func (e *Enrichment) SyncDebian(ctx context.Context) error {
 			rows[i] = db.DebianRow{CVEID: s.CVEID, Package: s.Package, Release: s.Release, Status: s.Status, FixedVersion: s.FixedVersion, Urgency: s.Urgency}
 		}
 		return e.store.ReplaceDebian(ctx, rows)
+	})
+}
+
+// SyncVulnCheck snapshots VulnCheck KEV; it needs a (free) API token.
+func (e *Enrichment) SyncVulnCheck(ctx context.Context, token string) error {
+	return e.snapshotRun(ctx, SourceVulnCheck, func(ctx context.Context) (int, int, int, error) {
+		entries, err := vulncheck.Fetch(ctx, e.http, token)
+		if err != nil {
+			return 0, 0, 0, err
+		}
+		rows := make([]db.VulnCheckRow, len(entries))
+		for i, en := range entries {
+			rows[i] = db.VulnCheckRow{CVEID: en.CVEID, Name: en.Name, Vendor: en.Vendor, Product: en.Product, DateAdded: en.DateAdded,
+				Ransomware: en.Ransomware, Canary: en.Canary, Reported: en.Reported, XDB: en.XDB}
+		}
+		return e.store.ReplaceVulnCheckKEV(ctx, rows)
 	})
 }

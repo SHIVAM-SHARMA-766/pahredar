@@ -10,6 +10,7 @@ import { AttackCard, CommitsCard, DebianCard, HistoryCard, useAttack } from '../
 import { DetectionCard, useDetection } from '../components/DetectionCard'
 import { NotYetPublished, useArticles } from '../components/FeedCards'
 import { ReportsCard } from '../components/ReportsCard'
+import { ThreatIntelCard } from '../components/ThreatIntelCard'
 import { Card, ErrorBox, ExploitTag, KevTag, RansomwareTag, SeverityBadge, Spinner, Tag } from '../components/ui'
 import { parseVector } from '../lib/cvss'
 import { fmtDate, fmtEpss, fmtPercentile, productPath, vendorPath } from '../lib/format'
@@ -105,6 +106,7 @@ function CveTabs({ c }: { c: CveDetail }) {
                 </dl>
               </Card>
             )}
+            {c.vulncheck && <VulnCheckCard c={c} />}
             <EpssCard c={c} />
             {c.ssvc && (
               <Card title="CISA SSVC">
@@ -154,6 +156,7 @@ function CveTabs({ c }: { c: CveDetail }) {
       {tab === 'exploits' && <ExploitsCard c={c} />}
       {tab === 'intel' && (
         <div className="space-y-6">
+          <ThreatIntelCard id={c.id} />
           <ReportsCard id={c.id} />
           <NewsCard id={c.id} />
           <RelatedCard id={c.id} />
@@ -205,7 +208,7 @@ function AtAGlance({ c, onOpen }: { c: CveDetail; onOpen: (tab: TabKey) => void 
   const rows: [string, ReactNode, TabKey][] = [
     ['What', <>{c.cwes.length ? c.cwes.map((w) => w.name ?? w.id).join('; ') : 'Weakness not classified'}{how && <div className="text-xs text-zinc-500">{how}</div>}</>, 'technical'],
     ['Affected', products.length ? <>{products.slice(0, 4).join(', ')}{products.length > 4 && <span className="text-zinc-500"> +{products.length - 4} more</span>}<span className="text-zinc-500"> · {vendors.size} vendor{vendors.size === 1 ? '' : 's'}</span></> : 'No products listed', 'technical'],
-    ['Exploitation', <>{exploitationLabel[c.assessment.exploitation]}{c.kev && <> · in CISA KEV since {fmtDate(c.kev.date_added)}</>}{c.euvd && <> · ENISA EUVD exploited{c.euvd.exploited_since && <> since {fmtDate(c.euvd.exploited_since)}</>}</>}{c.kev?.known_ransomware_use === 'Known' && <> · used by ransomware</>}{(modules || pocs) ? <span className="text-zinc-500"> · {modules} module{modules === 1 ? '' : 's'}, {pocs} GitHub PoC{pocs === 1 ? '' : 's'}</span> : null}</>, 'exploits'],
+    ['Exploitation', <>{exploitationLabel[c.assessment.exploitation]}{c.kev && <> · in CISA KEV since {fmtDate(c.kev.date_added)}</>}{c.euvd && <> · ENISA EUVD exploited{c.euvd.exploited_since && <> since {fmtDate(c.euvd.exploited_since)}</>}</>}{!c.kev && !c.euvd && c.vulncheck && <> · in VulnCheck KEV{c.vulncheck.date_added && <> since {fmtDate(c.vulncheck.date_added)}</>}</>}{(c.kev?.known_ransomware_use === 'Known' || c.vulncheck?.ransomware) && <> · used by ransomware</>}{(modules || pocs) ? <span className="text-zinc-500"> · {modules} module{modules === 1 ? '' : 's'}, {pocs} GitHub PoC{pocs === 1 ? '' : 's'}</span> : null}</>, 'exploits'],
     ['ATT&CK', attackSummary, 'attack'],
     ['Detect', det.isPending ? 'Loading…' : (scanCount || ids || sigma) ? [scanCount && `${scanCount} active check${scanCount === 1 ? '' : 's'}`, ids && `${ids} Suricata rule${ids === 1 ? '' : 's'}`, sigma && `${sigma} Sigma rule${sigma === 1 ? '' : 's'}`].filter(Boolean).join(' · ') : 'No ready-made rule; version checks and hunting hints available', 'detection'],
     ['Fix', fixes.length ? `Fixed versions listed for ${fixes.length} product${fixes.length === 1 ? '' : 's'}` : c.advisory.solutions.length ? 'Vendor solution published' : c.advisory.workarounds.length ? 'Workaround only' : 'No fix listed in the record; check vendor advisories', 'remediation'],
@@ -245,6 +248,8 @@ function Header({ c }: { c: CveDetail }) {
         {c.kev && <KevTag />}
         {c.kev?.known_ransomware_use === 'Known' && <RansomwareTag />}
         {c.euvd && !c.kev && <Tag tone="red" title="Listed as exploited in ENISA's EU Vulnerability Database">EUVD exploited</Tag>}
+        {c.vulncheck && !c.kev && !c.euvd && <Tag tone="red" title="Listed in VulnCheck KEV: exploitation reported publicly or seen by VulnCheck's canaries">VulnCheck KEV</Tag>}
+        {c.vulncheck?.ransomware && c.kev?.known_ransomware_use !== 'Known' && <RansomwareTag />}
         {c.has_exploit && <ExploitTag />}
       </div>
       {c.aliases.length > 0 && (
@@ -512,11 +517,15 @@ const exploitSource = { exploitdb: 'Exploit-DB', metasploit: 'Metasploit', nucle
 function ExploitsCard({ c }: { c: CveDetail }) {
   const [showAllPocs, setShowAllPocs] = useState(false)
   const [showAllRefs, setShowAllRefs] = useState(false)
+  const [showAllXdb, setShowAllXdb] = useState(false)
   const modules = c.exploits.filter((e) => e.source !== 'github' && e.source !== 'trickest')
   const pocs = c.exploits.filter((e) => e.source === 'github')
   const writeups = c.exploits.filter((e) => e.source === 'trickest')
+  // VulnCheck XDB repositories that PoC-in-GitHub does not already list.
+  const known = new Set(pocs.map((e) => `https://github.com/${e.source_ref}`.toLowerCase()))
+  const xdb = (c.vulncheck?.xdb ?? []).filter((x) => !x.repo || !known.has(x.repo.toLowerCase()))
   const statements = c.advisory.exploit_statements
-  if (!modules.length && !pocs.length && !writeups.length && !statements.length) {
+  if (!modules.length && !pocs.length && !writeups.length && !xdb.length && !statements.length) {
     return (
       <Card title="Exploits and proofs of concept">
         <p className="text-sm text-zinc-500">No public exploit, Metasploit module, Nuclei template, or GitHub proof of concept is indexed for this CVE.</p>
@@ -558,6 +567,23 @@ function ExploitsCard({ c }: { c: CveDetail }) {
             {pocs.length > shownPocs.length && (
               <button className={`mt-2 text-sm ${link}`} onClick={() => setShowAllPocs(true)}>Show all {pocs.length}</button>
             )}
+          </div>
+        )}
+        {xdb.length > 0 && (
+          <div>
+            <div className="mb-1 text-xs font-semibold tracking-wider text-zinc-500 uppercase">VulnCheck XDB exploit repositories ({xdb.length})</div>
+            <p className="mb-2 text-xs text-zinc-500">Exploit code VulnCheck indexed and classified, not already listed above. Unvetted like any public PoC.</p>
+            <ul className="space-y-1">
+              {(showAllXdb ? xdb : xdb.slice(0, 10)).map((x) => (
+                <li key={x.id} className="flex gap-3">
+                  <span className="w-24 shrink-0 text-zinc-500">{x.type ?? 'exploit'}</span>
+                  <a href={x.repo || x.url} target="_blank" rel="noreferrer" className={`min-w-0 truncate font-mono text-xs ${link}`}>{x.repo ? x.repo.replace(/^https:\/\/(www\.)?github\.com\//, '') : x.id}</a>
+                  <a href={x.url} target="_blank" rel="noreferrer" className={`shrink-0 text-xs ${link}`}>XDB</a>
+                  {x.date_added && <span className="ml-auto shrink-0 text-zinc-500 tabular-nums">{fmtDate(x.date_added)}</span>}
+                </li>
+              ))}
+            </ul>
+            {!showAllXdb && xdb.length > 10 && <button className={`mt-2 text-sm ${link}`} onClick={() => setShowAllXdb(true)}>Show all {xdb.length}</button>}
           </div>
         )}
         {writeups.length > 0 && (
@@ -698,6 +724,45 @@ function KevCard({ c }: { c: CveDetail }) {
           )}
         </dl>
         {k.short_description && <p className="text-zinc-400">{k.short_description}</p>}
+      </div>
+    </Card>
+  )
+}
+
+// VulnCheckCard: VulnCheck KEV's view, which lists the public reports of
+// exploitation behind the listing.
+function VulnCheckCard({ c }: { c: CveDetail }) {
+  const v = c.vulncheck!
+  const [all, setAll] = useState(false)
+  const reports = all ? v.reported : v.reported.slice(0, 5)
+  return (
+    <Card title="VulnCheck KEV">
+      <div className="space-y-3 text-sm">
+        <dl className="grid grid-cols-2 gap-y-1">
+          <dt className="text-zinc-500">Added</dt>
+          <dd>{fmtDate(v.date_added)}</dd>
+          <dt className="text-zinc-500">Ransomware use</dt>
+          <dd className={v.ransomware ? 'font-semibold text-red-300' : ''}>{v.ransomware ? 'Known' : 'Unknown'}</dd>
+          <dt className="text-zinc-500" title="VulnCheck's own sensors observed exploitation attempts">Seen by canaries</dt>
+          <dd className={v.canary ? 'font-semibold text-red-300' : ''}>{v.canary ? 'Yes' : 'No'}</dd>
+          <dt className="text-zinc-500">Exploit repos (XDB)</dt>
+          <dd>{v.xdb.length}</dd>
+        </dl>
+        {v.reported.length > 0 && (
+          <div>
+            <div className="mb-1 text-xs font-semibold tracking-wider text-zinc-500 uppercase">Exploitation reported by ({v.reported.length})</div>
+            <ul className="space-y-1">
+              {reports.map((r) => (
+                <li key={r.url} className="flex gap-2">
+                  <span className="w-20 shrink-0 text-xs text-zinc-500 tabular-nums">{r.date_added ? fmtDate(r.date_added) : ''}</span>
+                  <a href={r.url} target="_blank" rel="noreferrer" className={`min-w-0 truncate text-xs ${link}`} title={r.url}>{r.url.replace(/^https?:\/\/(www\.)?/, '')}</a>
+                </li>
+              ))}
+            </ul>
+            {v.reported.length > reports.length && <button className={`mt-1 text-xs ${link}`} onClick={() => setAll(true)}>Show all {v.reported.length}</button>}
+          </div>
+        )}
+        <a href={`https://vulncheck.com/browse/cve/${c.id}`} target="_blank" rel="noreferrer" className={`inline-block text-xs ${link}`}>VulnCheck →</a>
       </div>
     </Card>
   )

@@ -20,6 +20,7 @@ const SOURCES: [string, string][] = [
   ['attack', 'ATT&CK mappings (CTID, KEV)'],
   ['capec', 'MITRE CAPEC attack patterns'],
   ['debian', 'Debian Security Tracker'],
+  ['vulncheck', 'VulnCheck KEV (needs VULNCHECK_API_TOKEN)'],
   ['sigma', 'Sigma rules (SigmaHQ)'],
   ['suricata', 'Suricata rules (ET Open)'],
   ['nmap', 'Nmap NSE scripts'],

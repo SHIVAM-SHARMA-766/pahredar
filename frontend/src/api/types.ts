@@ -184,7 +184,19 @@ export interface CveDetail {
   aliases: string[]
   // ENISA EUVD's exploited list.
   euvd: { euvd_id: string; exploited_since: string | null } | null
+  // VulnCheck KEV (only when VULNCHECK_API_TOKEN is set).
+  vulncheck: VulnCheckKev | null
   debian: DebianStatus[]
+}
+
+export interface VulnCheckKev {
+  name: string | null
+  date_added: string | null
+  ransomware: boolean
+  // VulnCheck's own canaries saw exploitation.
+  canary: boolean
+  reported: { url: string; date_added?: string }[]
+  xdb: { id: string; url: string; type?: string; repo?: string; date_added?: string }[]
 }
 
 export interface DebianStatus {
@@ -365,11 +377,12 @@ export interface Series {
   points: { date: string; values: Record<string, number> }[]
 }
 
-export type ReportSource = 'osv' | 'redhat' | 'ubuntu' | 'msrc' | 'advisories' | 'news' | 'discussions' | 'history' | 'commits'
+export type ReportSource = 'osv' | 'redhat' | 'ubuntu' | 'msrc' | 'advisories' | 'news' | 'discussions' | 'history' | 'commits' | 'otx' | 'threatfox' | 'bluesky'
 
 export interface ReportStatus {
   source: ReportSource
-  status: 'ok' | 'not_found' | 'error'
+  // disabled: the source's key is not set in .env.
+  status: 'ok' | 'not_found' | 'error' | 'disabled'
   fetched_at: string | null
   error?: string
 }
@@ -423,7 +436,46 @@ export interface CveReports {
     discussions?: NewsItem[]
     history?: HistoryChange[]
     commits?: Commit[]
+    otx?: OtxReport
+    threatfox?: ThreatFoxReport
+    bluesky?: NewsItem[]
   }
+}
+
+export interface OtxReport {
+  pulse_count: number
+  // Pulses naming more than 10 CVEs (daily digests, scanner lists); not shown.
+  bulk_pulses: number
+  pulses: OtxPulse[]
+  adversaries: string[]
+  malware: string[]
+  industries: string[]
+  countries: string[]
+  techniques: { id: string; name: string }[]
+  url: string
+}
+
+export interface OtxPulse {
+  id: string
+  name: string
+  url: string
+  created: string
+  modified: string
+  author: string
+  adversary?: string
+  malware: string[]
+  industries: string[]
+  countries: string[]
+  techniques: string[]
+  tags: string[]
+  indicators: number
+  references: string[]
+}
+
+export interface ThreatFoxReport {
+  iocs: { ioc: string; type: string; threat_type: string; malware: string; confidence: number; first_seen: string; last_seen?: string; reporter?: string; reference?: string; tags: string[]; url: string }[]
+  malware: { name: string; malpedia?: string; iocs: number }[]
+  url: string
 }
 
 export interface MsrcReport {

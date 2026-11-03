@@ -18,6 +18,13 @@ type Config struct {
 	LogLevel    slog.Level
 	NVDAPIKey   string
 	GitHubToken string
+	// Optional free-signup keys. A source whose key is missing is skipped
+	// (sync) or reported as disabled (on-demand reports).
+	VulnCheckToken     string
+	OTXKey             string
+	AbuseCHKey         string
+	BlueskyHandle      string
+	BlueskyAppPassword string
 	// DataDir holds temporary download artifacts (the extracted cvelist
 	// baseline needs ~700 MB during a bootstrap).
 	DataDir     string
@@ -38,18 +45,23 @@ type Intervals struct {
 	CWE       time.Duration
 	Feeds     time.Duration
 	Detection time.Duration
-	// Context covers EUVD and Debian (daily) and is multiplied by 7 for
+	// Context covers EUVD, Debian, and VulnCheck KEV (daily) and is multiplied by 7 for
 	// the slow-moving ATT&CK mappings and CAPEC.
 	Context time.Duration
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		HTTPAddr:    getenv("HTTP_ADDR", ":8080"),
-		NVDAPIKey:   os.Getenv("NVD_API_KEY"),
-		GitHubToken: os.Getenv("GITHUB_TOKEN"),
-		DataDir:     getenv("DATA_DIR", os.TempDir()),
+		DatabaseURL:        os.Getenv("DATABASE_URL"),
+		HTTPAddr:           getenv("HTTP_ADDR", ":8080"),
+		NVDAPIKey:          os.Getenv("NVD_API_KEY"),
+		GitHubToken:        os.Getenv("GITHUB_TOKEN"),
+		VulnCheckToken:     os.Getenv("VULNCHECK_API_TOKEN"),
+		OTXKey:             os.Getenv("OTX_API_KEY"),
+		AbuseCHKey:         os.Getenv("ABUSECH_AUTH_KEY"),
+		BlueskyHandle:      strings.TrimPrefix(os.Getenv("BLUESKY_HANDLE"), "@"),
+		BlueskyAppPassword: os.Getenv("BLUESKY_APP_PASSWORD"),
+		DataDir:            getenv("DATA_DIR", os.TempDir()),
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, errors.New("DATABASE_URL is required")

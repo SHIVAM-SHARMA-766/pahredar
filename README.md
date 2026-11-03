@@ -7,10 +7,15 @@ A personal, self-hosted CVE tracker. Pahredar keeps a local copy of every publis
 ## Features
 
 - Full CVE corpus from the official CVE List (cvelistV5), kept current hourly
-- Enrichment from NVD, CISA KEV, EPSS, Exploit-DB, Metasploit, and Nuclei templates
+- Enrichment from NVD, CISA KEV, EPSS, Exploit-DB, Metasploit, Nuclei templates, PoC-in-GitHub, and trickest/cve
+- Exploitation evidence beyond CISA KEV: ENISA EUVD, and VulnCheck KEV with a free token
+- Detection guidance per CVE: version-check commands, Nuclei / Nmap / Metasploit checks, Suricata (ET Open) and Sigma rules, hunting hints
+- Attack context: CTID ATT&CK mappings, MITRE CAPEC patterns; threat intelligence from AlienVault OTX pulses and ThreatFox IOCs (free keys)
+- Remediation: fixed versions, Debian per-release status, fix-commit diffs, vendor advisories (MSRC, Red Hat, Ubuntu, OSV)
+- News and research: 26 security feeds synced hourly, plus Google News, Hacker News, and Bluesky per CVE
 - Dashboard: critical CVEs this week, publish volume by severity over 90 days, newest critical, recently added to KEV, likely-exploited CVEs not yet in KEV, biggest EPSS increases
 - Full-text search and filters (severity, KEV, exploit available, vendor, product, CWE, dates, EPSS)
-- CVE detail page with CVSS breakdown, EPSS history, KEV info, affected products, references, exploits, and a timeline
+- CVE detail page in tabs: overview, detection, ATT&CK, remediation, exploits, reports & news, CVSS & affected, NVD change history, references
 - Vendor and product pages with severity mix and CVEs-per-year charts
 - Sync status page with per-source run history
 
@@ -23,7 +28,7 @@ Go backend (API and sync worker in one binary), Postgres, React + Vite frontend,
 ## Running locally
 
 ```bash
-cp .env.example .env        # set POSTGRES_PASSWORD and NVD_API_KEY
+cp .env.example .env        # set POSTGRES_PASSWORD and NVD_API_KEY; the other keys are optional
 docker compose up -d --build
 ```
 

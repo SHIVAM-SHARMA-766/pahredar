@@ -26,9 +26,19 @@ func NewClient() *http.Client {
 }
 
 // Get issues a GET and returns the response only for HTTP 200; any other
-// status becomes an error carrying the start of the body.
+// status becomes an error carrying the start of the body (never the
+// request headers, which may hold API keys).
 func Get(ctx context.Context, c *http.Client, url string, header http.Header) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	return Do(ctx, c, http.MethodGet, url, header, nil)
+}
+
+// Do is Get for any method and an optional body.
+func Do(ctx context.Context, c *http.Client, method, url string, header http.Header, body []byte) (*http.Response, error) {
+	var r io.Reader
+	if body != nil {
+		r = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, r)
 	if err != nil {
 		return nil, err
 	}
@@ -42,8 +52,8 @@ func Get(ctx context.Context, c *http.Client, url string, header http.Header) (*
 	}
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return nil, &StatusError{URL: url, Code: resp.StatusCode, Status: resp.Status, Body: string(bytes.TrimSpace(body))}
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, &StatusError{URL: url, Code: resp.StatusCode, Status: resp.Status, Body: string(bytes.TrimSpace(msg))}
 	}
 	return resp, nil
 }

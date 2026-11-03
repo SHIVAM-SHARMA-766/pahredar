@@ -21,6 +21,8 @@ func TestAssess(t *testing.T) {
 	}{
 		{"kev", db.CVEDetail{State: "PUBLISHED", KEV: &db.KEVOut{DateAdded: time.Now()}}, low, nil, "active", "P1"},
 		{"ssvc active", db.CVEDetail{State: "PUBLISHED"}, low, &cverecord.SSVC{Exploitation: "active"}, "active", "P1"},
+		{"euvd", db.CVEDetail{State: "PUBLISHED", EUVD: &db.EUVDOut{}}, low, nil, "active", "P1"},
+		{"vulncheck kev", db.CVEDetail{State: "PUBLISHED", VulnCheck: &db.VulnCheckOut{}}, low, nil, "active", "P1"},
 		{"high epss", db.CVEDetail{State: "PUBLISHED", EPSS: &db.EPSSOut{Score: 0.2}}, low, nil, "none", "P2"},
 		{"poc and high cvss", db.CVEDetail{State: "PUBLISHED", Exploits: []db.ExploitOut{{Source: "github"}}}, high, nil, "poc", "P2"},
 		{"poc low cvss", db.CVEDetail{State: "PUBLISHED", ExploitRef: true}, low, nil, "poc", "P3"},

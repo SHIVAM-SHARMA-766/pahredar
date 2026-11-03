@@ -32,8 +32,8 @@ type HistoryDetail struct {
 // history returns NVD's change log for the CVE, newest first.
 func (c *Client) history(ctx context.Context, cveID string) ([]HistoryChange, error) {
 	h := http.Header{"Accept": {"application/json"}}
-	if c.nvdKey != "" {
-		h.Set("apiKey", c.nvdKey)
+	if c.keys.NVD != "" {
+		h.Set("apiKey", c.keys.NVD)
 	}
 	resp, err := fetch.Get(ctx, c.http, nvdHistoryURL+url.QueryEscape(cveID), h)
 	if err != nil {
@@ -51,8 +51,8 @@ func (c *Client) history(ctx context.Context, cveID string) ([]HistoryChange, er
 				Created          string `json:"created"`
 				SourceIdentifier string `json:"sourceIdentifier"`
 				Details          []struct {
-					Action   string `json:"action"`
-					Type     string `json:"type"`
+					Action string `json:"action"`
+					Type   string `json:"type"`
 					// Usually strings, but some change types carry objects.
 					OldValue json.RawMessage `json:"oldValue"`
 					NewValue json.RawMessage `json:"newValue"`

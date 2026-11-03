@@ -117,21 +117,24 @@ function Msrc({ r }: { r: MsrcReport }) {
 
 // --- News and discussions ----------------------------------------------------
 
-// Three tabs: articles from Pahredar's own feeds (vendor, government,
-// research, news; ingested hourly), Google News search, and Hacker News.
+// Four tabs: articles from Pahredar's own feeds (vendor, government,
+// research, news; ingested hourly), Google News search, Hacker News, and
+// Bluesky posts (needs BLUESKY_HANDLE and BLUESKY_APP_PASSWORD).
 export function NewsCard({ id }: { id: string }) {
-  const q = useQuery({ queryKey: ['reports', id, 'news'], queryFn: () => api.getCveReports(id, ['news', 'discussions']), staleTime: 10 * 60_000 })
+  const q = useQuery({ queryKey: ['reports', id, 'news'], queryFn: () => api.getCveReports(id, ['news', 'discussions', 'bluesky']), staleTime: 10 * 60_000 })
   const own = useArticles(id)
-  const [tab, setTab] = useState<'feeds' | 'news' | 'discussions' | null>(null)
+  const [tab, setTab] = useState<'feeds' | 'news' | 'discussions' | 'bluesky' | null>(null)
   if (q.isPending && own.isPending) return <Card title="News & research"><Spinner label="Searching news and discussions…" /></Card>
   const feedItems = own.data?.items ?? []
   const news = q.data?.reports.news ?? []
   const disc = q.data?.reports.discussions ?? []
-  if (!feedItems.length && !news.length && !disc.length) {
+  const bsky = q.data?.reports.bluesky ?? []
+  const bskyOff = q.data?.sources.find((s) => s.source === 'bluesky')?.status === 'disabled'
+  if (!feedItems.length && !news.length && !disc.length && !bsky.length) {
     return <Card title="News & research"><p className="text-sm text-zinc-500">{q.isError ? 'News is unavailable right now.' : 'No articles or discussions mention this CVE ID yet.'}</p></Card>
   }
-  const counts = { feeds: feedItems.length, news: news.length, discussions: disc.length }
-  const active = tab && counts[tab] ? tab : feedItems.length ? 'feeds' : news.length ? 'news' : 'discussions'
+  const counts = { feeds: feedItems.length, news: news.length, discussions: disc.length, bluesky: bsky.length }
+  const active = tab && counts[tab] ? tab : feedItems.length ? 'feeds' : news.length ? 'news' : disc.length ? 'discussions' : 'bluesky'
   const btn = (on: boolean) => `rounded-md px-3 py-1 text-sm ${on ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-zinc-200'}`
   return (
     <Card
@@ -141,16 +144,19 @@ export function NewsCard({ id }: { id: string }) {
           <button className={btn(active === 'feeds')} onClick={() => setTab('feeds')} disabled={!feedItems.length}>Security feeds ({feedItems.length})</button>
           <button className={btn(active === 'news')} onClick={() => setTab('news')} disabled={!news.length}>Google News ({news.length})</button>
           <button className={btn(active === 'discussions')} onClick={() => setTab('discussions')} disabled={!disc.length}>Hacker News ({disc.length})</button>
+          <button className={btn(active === 'bluesky')} onClick={() => setTab('bluesky')} disabled={!bsky.length} title={bskyOff ? 'Set BLUESKY_HANDLE and BLUESKY_APP_PASSWORD in .env' : undefined}>Bluesky ({bskyOff ? 'off' : bsky.length})</button>
         </div>
       }
     >
-      {active === 'feeds' ? <FeedArticleList items={feedItems} current={id} /> : active === 'news' ? <NewsList items={news} /> : <DiscussionList items={disc} />}
+      {active === 'feeds' ? <FeedArticleList items={feedItems} current={id} /> : active === 'news' ? <NewsList items={news} /> : active === 'bluesky' ? <DiscussionList items={bsky} social /> : <DiscussionList items={disc} />}
       <p className="mt-3 text-xs text-zinc-500">
         {active === 'feeds'
           ? 'Vendor PSIRT, CISA and CERT/CC, research blogs, and security news that Pahredar reads hourly.'
           : active === 'news'
             ? 'Google News results for the exact CVE ID, refreshed daily.'
-            : 'Hacker News stories mentioning the CVE ID, by points, refreshed daily.'}
+            : active === 'bluesky'
+              ? 'Bluesky posts mentioning the CVE ID, most engaged first (likes + reposts), refreshed daily.'
+              : 'Hacker News stories mentioning the CVE ID, by points, refreshed daily.'}
       </p>
     </Card>
   )
@@ -175,14 +181,15 @@ function NewsList({ items }: { items: NewsItem[] }) {
   )
 }
 
-function DiscussionList({ items }: { items: NewsItem[] }) {
+// social: Bluesky posts, whose "title" is the post text.
+function DiscussionList({ items, social = false }: { items: NewsItem[]; social?: boolean }) {
   return (
     <ul className="divide-y divide-zinc-800">
       {items.map((n) => (
         <li key={n.discussion_url ?? n.url} className="flex items-baseline gap-3 py-2 text-sm">
-          <span className="w-14 shrink-0 text-right text-xs text-zinc-400 tabular-nums">▲ {fmtNumber(n.points ?? 0)}</span>
+          <span className="w-14 shrink-0 text-right text-xs text-zinc-400 tabular-nums">{social ? '♥' : '▲'} {fmtNumber(n.points ?? 0)}</span>
           <div className="min-w-0 flex-1">
-            <Ext href={n.url}>{n.title}</Ext>
+            {social ? <p className="break-words whitespace-pre-line text-zinc-200">{n.title}</p> : <Ext href={n.url}>{n.title}</Ext>}
             <div className="text-xs text-zinc-500">{n.source} · {n.published ? fmtDate(n.published) : ''}</div>
           </div>
           {n.discussion_url && (

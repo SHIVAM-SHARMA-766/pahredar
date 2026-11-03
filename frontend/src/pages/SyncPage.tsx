@@ -53,7 +53,7 @@ export function SyncPage() {
       {trigger.isError && <ErrorBox error={trigger.error} />}
       <Card title="Sources">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 uppercase dark:border-zinc-800">
                 <th className="py-2 pr-3 font-medium">Source</th>
@@ -73,7 +73,7 @@ export function SyncPage() {
                       <div className="font-medium">{name}</div>
                       <div className="text-xs text-zinc-500">{label}</div>
                     </td>
-                    <td className="py-2 pr-3" title={fmtDateTime(state?.last_success_at)}>{relativeTime(state?.last_success_at)}</td>
+                    <td className="py-2 pr-3 whitespace-nowrap" title={fmtDateTime(state?.last_success_at)}>{relativeTime(state?.last_success_at)}</td>
                     <td className="py-2 pr-3">{run ? <RunStatus run={run} /> : <span className="text-zinc-500">—</span>}</td>
                     <td className="py-2 pr-3 font-mono text-xs text-zinc-500">{state?.cursor ?? '—'}</td>
                     <td className="py-2 text-right">
@@ -97,7 +97,7 @@ export function SyncPage() {
 
       <Card title="Recent runs">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500 uppercase dark:border-zinc-800">
                 <th className="py-2 pr-3 font-medium">#</th>
@@ -150,7 +150,7 @@ function FeedsCard() {
   return (
     <Card title={`Feeds (${q.data.items.length})`}>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[560px] text-sm">
           <thead>
             <tr className="border-b border-zinc-800 text-left text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">
               <th className="py-2 pr-3">Feed</th>
@@ -167,7 +167,7 @@ function FeedsCard() {
                 <td className="py-1.5 pr-3"><KindTag kind={f.kind} /></td>
                 <td className="py-1.5 pr-3 text-right tabular-nums">{fmtNumber(f.articles)}</td>
                 <td className="py-1.5 pr-3 text-right tabular-nums text-zinc-400">{fmtNumber(f.with_cve)}</td>
-                <td className={`py-1.5 ${f.articles === 0 ? 'text-amber-200' : 'text-zinc-500'}`}>{f.articles === 0 ? 'no items yet' : relativeTime(f.latest)}</td>
+                <td className={`py-1.5 whitespace-nowrap ${f.articles === 0 ? 'text-amber-200' : 'text-zinc-500'}`}>{f.articles === 0 ? 'no items yet' : relativeTime(f.latest)}</td>
               </tr>
             ))}
           </tbody>

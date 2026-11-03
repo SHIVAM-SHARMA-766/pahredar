@@ -18,14 +18,75 @@ const muted = <span className="text-zinc-600">n/a</span>
 
 const ssvcTone: Record<string, 'red' | 'amber' | 'zinc'> = { active: 'red', poc: 'amber', none: 'zinc' }
 
+const SORTS: [SortKey, string][] = [['published', 'Published'], ['kev_added', 'KEV listed'], ['epss', 'EPSS'], ['cvss', 'CVSS']]
+
 // Compact one-line-per-CVE table. Long titles and vendors truncate with the
-// full text in a tooltip.
+// full text in a tooltip. Below the md breakpoint each CVE is a card
+// instead, with a sort picker standing in for the column headers.
 export function CveTable({ items, sort }: { items: CveSummary[]; sort: SortState }) {
   if (items.length === 0) {
     return <p className="py-12 text-center text-sm text-zinc-500">No CVEs match this query.</p>
   }
   return (
-    <div className="overflow-x-auto">
+    <>
+      <CveCards items={items} sort={sort} />
+      <CveRows items={items} sort={sort} />
+    </>
+  )
+}
+
+function CveCards({ items, sort }: { items: CveSummary[]; sort: SortState }) {
+  const current = SORTS.find(([k]) => k === sort.sort)?.[0] ?? 'published'
+  const Arrow = sort.desc ? ArrowDown : ArrowUp
+  return (
+    <div className="md:hidden">
+      <div className="mb-1 flex items-center gap-2 text-sm text-zinc-400">
+        <label htmlFor="cve-sort">Sort</label>
+        <select
+          id="cve-sort"
+          value={current}
+          onChange={(e) => sort.onSort(e.target.value as SortKey)}
+          className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1 text-sm text-zinc-200"
+        >
+          {SORTS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+        </select>
+        <button onClick={() => sort.onSort(current)} className="rounded-md border border-zinc-800 p-1.5 text-zinc-300" aria-label={sort.desc ? 'Descending; switch to ascending' : 'Ascending; switch to descending'}>
+          <Arrow className="h-4 w-4" />
+        </button>
+      </div>
+      <ul className="divide-y divide-zinc-800/70">
+        {items.map((c) => {
+          const score = bestScore(c)
+          const title = c.state === 'REJECTED' ? `Rejected · ${c.description ?? ''}` : c.title ?? c.description
+          return (
+            <li key={c.id}>
+              <Link to={`/cves/${c.id}`} className="block py-3 active:bg-white/[0.03]">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-mono text-[13px] font-semibold text-cyan-300">{c.id}</span>
+                  {score != null && <span className={`text-sm font-semibold tabular-nums ${severityText[c.severity]}`}>{score.toFixed(1)}</span>}
+                  {c.kev && <Tag tone="red">KEV</Tag>}
+                  {c.ransomware && <RansomwareTag />}
+                  {c.has_exploit && <ExploitTag />}
+                </div>
+                <p className={`mt-1 line-clamp-2 text-sm ${c.title ? 'text-zinc-200' : 'text-zinc-400'}`}>{title ?? <span className="text-zinc-600 italic">no title filed</span>}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500">
+                  {c.vendor && <span className="max-w-[12rem] truncate text-zinc-400">{c.vendor}</span>}
+                  <span>{fmtDate(c.date_published)}</span>
+                  {c.epss_score != null && <span>EPSS {fmtEpss(c.epss_score)}</span>}
+                  {c.ssvc_exploitation && <Tag tone={ssvcTone[c.ssvc_exploitation] ?? 'zinc'}>SSVC {c.ssvc_exploitation}</Tag>}
+                </div>
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+function CveRows({ items, sort }: { items: CveSummary[]; sort: SortState }) {
+  return (
+    <div className="hidden overflow-x-auto md:block">
       <table className="w-full min-w-[1000px] table-fixed text-sm">
         <colgroup>
           <col className="w-36" />

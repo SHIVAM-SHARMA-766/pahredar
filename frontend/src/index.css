@@ -5,6 +5,15 @@
    <html>, so the light classes are inert. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* no-scrollbar: a row that scrolls sideways (tab strips on phones) without
+   showing a scrollbar. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 /* The neutral scale is redefined as near-neutral graphite grays, so every
    zinc-* class in the app takes the theme. 950 = page, 900 = cards/sidebar,
    800 = borders. */

@@ -51,19 +51,19 @@ export function CveListPage() {
   return (
     <>
       <PageHeader title="CVE explorer" subtitle="Search every CVE in the CVE List, enriched with NVD, CISA KEV, EPSS, and public exploits." />
-      <div className="mb-4 flex flex-wrap items-end gap-1 border-b border-zinc-800" role="tablist" aria-label="Saved views">
+      <div className="no-scrollbar mb-4 flex items-end gap-1 overflow-x-auto overflow-y-hidden border-b border-zinc-800" role="tablist" aria-label="Saved views">
         {VIEWS.map((v) => (
           <button
             key={v.key}
             role="tab"
             aria-selected={view?.key === v.key}
             onClick={() => pickView(v)}
-            className={`-mb-px border-b-2 px-3.5 py-2 text-sm font-medium transition-colors ${view?.key === v.key ? 'border-cyan-400 text-white' : 'border-transparent text-zinc-400 hover:border-zinc-600 hover:text-zinc-200'}`}
+            className={`-mb-px shrink-0 border-b-2 px-3.5 py-2 text-sm font-medium whitespace-nowrap transition-colors ${view?.key === v.key ? 'border-cyan-400 text-white' : 'border-transparent text-zinc-400 hover:border-zinc-600 hover:text-zinc-200'}`}
           >
             {v.label}
           </button>
         ))}
-        {!view && <span className="-mb-px border-b-2 border-cyan-400/60 px-3.5 py-2 text-sm font-medium text-zinc-200">Custom search</span>}
+        {!view && <span className="-mb-px shrink-0 border-b-2 border-cyan-400/60 px-3.5 py-2 text-sm font-medium whitespace-nowrap text-zinc-200">Custom search</span>}
       </div>
       {view && <p className="-mt-2 mb-3 text-xs text-zinc-500">{view.hint}</p>}
       <div className="space-y-4">

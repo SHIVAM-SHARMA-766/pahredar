@@ -94,7 +94,7 @@ function CveTabs({ c }: { c: CveDetail }) {
         {stuck && <StuckIdentity c={c} />}
         {/* Tabs scroll sideways on narrow screens; the scrollbar is hidden
             and vertical overflow clipped so no stray scrollbar appears. */}
-        <nav className="flex min-w-0 flex-1 gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <nav className="no-scrollbar flex min-w-0 flex-1 gap-1 overflow-x-auto overflow-y-hidden">
           {TABS.map(([k, label]) => (
             <button
               key={k}
@@ -112,7 +112,7 @@ function CveTabs({ c }: { c: CveDetail }) {
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="min-w-0 space-y-6 lg:col-span-2">
             <Card title="Description">
-              <p className="leading-relaxed whitespace-pre-line text-zinc-200">{c.description ?? 'No description.'}</p>
+              <p className="leading-relaxed whitespace-pre-line text-zinc-200">{c.description?.trim().replace(/\n\s*\n\s*(\n\s*)+/g, '\n\n') ?? 'No description.'}</p>
             </Card>
             {c.state !== 'REJECTED' && <AtAGlance c={c} onOpen={open} />}
             <TimelineCard c={c} />
@@ -244,9 +244,10 @@ function AtAGlance({ c, onOpen }: { c: CveDetail; onOpen: (tab: TabKey) => void 
     <Card title="At a glance">
       <dl className="divide-y divide-zinc-800/70 text-sm">
         {rows.map(([label, value, target]) => (
-          <div key={label} className="grid grid-cols-[6.5rem_1fr_auto] items-baseline gap-3 py-2 first:pt-0 last:pb-0">
+          // Phones: label and "Details" on one line, the value below.
+          <div key={label} className="grid grid-cols-[1fr_auto] items-baseline gap-x-3 gap-y-0.5 py-2 first:pt-0 last:pb-0 sm:grid-cols-[6.5rem_1fr_auto]">
             <dt className="text-xs font-semibold tracking-wider text-zinc-500 uppercase">{label}</dt>
-            <dd className="min-w-0 text-zinc-200">{value}</dd>
+            <dd className="col-span-2 min-w-0 text-zinc-200 max-sm:order-last sm:col-span-1">{value}</dd>
             <button className={`text-xs ${link}`} onClick={() => onOpen(target)}>Details →</button>
           </div>
         ))}
@@ -516,7 +517,7 @@ function AffectedCard({ affected }: { affected: Affected[] }) {
   return (
     <Card title={`Affected products (${affected.length})`}>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="border-b border-zinc-800 text-left text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">
               <th className="py-1.5 pr-3">Source</th>

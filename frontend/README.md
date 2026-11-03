@@ -76,3 +76,12 @@ Set `PAHREDAR_API` to point the dev proxy at a different backend.
 ## Production image
 
 `Dockerfile`: builds with Node 22 and npm 11, then serves `dist/` from `nginx:1.29-alpine` using `nginx.conf`, which proxies `/api/` and `/healthz` to `backend:8080`, serves `index.html` for every client-side route (`no-cache`), and caches fingerprinted `/assets/` for a year. Compose publishes it on `127.0.0.1:${FRONTEND_HOST_PORT:-3001}`.
+
+## Phone layout
+
+Every page is checked at 390 px wide; none may scroll sideways. Patterns used:
+
+- Lists that are tables on desktop become cards below `md` (`CveTable`: `CveCards` / `CveRows`).
+- Tab strips scroll sideways in one row with the `no-scrollbar` utility (`index.css`) and `overflow-y-hidden`, instead of wrapping onto several lines.
+- Wide tables sit in an `overflow-x-auto` wrapper and carry a `min-w-[…]` so columns scroll rather than squeeze.
+- Label / value grids stack below `sm` (CVE page "At a glance").

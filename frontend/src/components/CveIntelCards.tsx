@@ -93,7 +93,7 @@ function Msrc({ r }: { r: MsrcReport }) {
       </div>
       {r.products.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[600px] text-sm">
             <thead><tr className="border-b border-zinc-800"><th className={th}>Product</th><th className={th}>Update</th><th className={th}>Fixed build</th><th className={th}>Download</th></tr></thead>
             <tbody>
               {shown.map((p) =>

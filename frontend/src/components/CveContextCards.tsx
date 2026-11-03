@@ -263,7 +263,7 @@ export function DebianCard({ c }: { c: CveDetail }) {
   return (
     <Card title="Debian" actions={<a href={`https://security-tracker.debian.org/tracker/${c.id}`} target="_blank" rel="noreferrer" className={`text-xs ${link}`}>Security tracker</a>}>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[520px] text-sm">
           <thead>
             <tr className="border-b border-zinc-800 text-left text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">
               <th className="py-1.5 pr-3">Source package</th>

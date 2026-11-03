@@ -73,7 +73,7 @@ export function NewsPage() {
 
       <div className="mb-4 space-y-3">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex flex-wrap rounded-lg border border-zinc-800 bg-zinc-900 p-0.5">
+          <div className="no-scrollbar flex max-w-full overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-900 p-0.5">
             {KINDS.map(([k, label]) => (
               <button key={label} className={seg(!feed && kind === k)} onClick={() => set({ kind: k, feed: '' })}>{label}</button>
             ))}

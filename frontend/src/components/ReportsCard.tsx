@@ -123,7 +123,7 @@ function OsvReport({ advisories }: { advisories: OsvAdvisory[] }) {
           {a.affected.length > 0 && (
             <Section label="Affected packages">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full min-w-[520px] text-sm">
                   <thead><tr className="border-b border-zinc-800"><th className={th}>Ecosystem</th><th className={th}>Package</th><th className={th}>Introduced</th><th className={th}>Fixed in</th></tr></thead>
                   <tbody>
                     {a.affected.map((p, i) => (
@@ -217,7 +217,7 @@ function Ubuntu({ r }: { r: UbuntuReport }) {
       {r.packages.length > 0 && (
         <Section label="Package status by release">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[520px] text-sm">
               <thead><tr className="border-b border-zinc-800"><th className={th}>Package</th><th className={th}>Release</th><th className={th}>Status</th><th className={th}>Detail</th></tr></thead>
               <tbody>
                 {r.packages.flatMap((p) =>

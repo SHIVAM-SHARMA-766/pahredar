@@ -148,7 +148,7 @@ function Iocs({ r }: { r: ThreatFoxReport }) {
         <CopyButton text={r.iocs.map((i) => i.ioc).join('\n')} />
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[600px] text-sm">
           <thead>
             <tr className="border-b border-zinc-800">
               <th className={th}>IOC</th>

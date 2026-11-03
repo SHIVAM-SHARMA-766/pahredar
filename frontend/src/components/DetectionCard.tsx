@@ -46,7 +46,7 @@ function CommandRow({ c }: { c: Command }) {
     <li>
       <div className="text-xs text-zinc-400">{c.label}</div>
       <div className="mt-0.5 flex items-start gap-1 rounded-md border border-zinc-800 bg-zinc-950 px-2.5 py-1.5">
-        <code className="min-w-0 flex-1 font-mono text-xs break-all whitespace-pre-wrap text-zinc-200">{c.cmd}</code>
+        <code className="min-w-0 flex-1 font-mono text-xs whitespace-pre-wrap text-zinc-200 [overflow-wrap:anywhere]">{c.cmd}</code>
         <CopyButton text={c.cmd} />
       </div>
       {c.note && <div className="mt-0.5 text-xs text-zinc-500">{c.note}</div>}
@@ -172,12 +172,12 @@ export function DetectionCard({ c }: { c: CveDetail }) {
         </label>
       }
     >
-      <div className="mb-4 flex flex-wrap gap-1 border-b border-zinc-800">
+      <div className="no-scrollbar mb-4 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-zinc-800">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`-mb-px border-b-2 px-3 py-1.5 text-sm ${current === t.key ? 'border-cyan-400 text-zinc-100' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
+            className={`-mb-px shrink-0 border-b-2 px-3 py-1.5 text-sm whitespace-nowrap ${current === t.key ? 'border-cyan-400 text-zinc-100' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}
           >
             {t.label}
             {t.count !== undefined && <span className={`ml-1.5 text-xs ${t.count ? 'text-zinc-400' : 'text-zinc-600'}`}>{t.count}</span>}

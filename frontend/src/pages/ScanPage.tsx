@@ -81,7 +81,7 @@ export function ScanPage() {
   const rescan = () => report && start.mutate({ target: report.target, fresh: true, active: runActive, authorized })
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div>
       {/* Hero */}
       <div className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900/80 to-zinc-950 px-5 py-10 text-center sm:px-8 sm:py-14">
         <pre aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden p-4 text-left font-mono text-[11px] leading-5 whitespace-pre-wrap text-zinc-500/10 select-none">
@@ -202,7 +202,7 @@ function ScanIntro() {
   return (
     <>
       <Card title="What this checks">
-        <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+        <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
           {WHAT_WE_CHECK.map((g) => (
             <div key={g.title}>
               <h4 className="text-sm font-semibold text-zinc-200">{g.title}</h4>

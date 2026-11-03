@@ -43,7 +43,7 @@ React Router 8 needs Node ≥ 22.22 and the dev machine has Node 20, so the app 
 | `/vendors/:vendor` | Vendor stats, CVEs per year, top 200 products |
 | `/vendors/:vendor/products/:product` | Product stats, CVEs per year, and the CVE list fixed to that product |
 | `/news` | Security news (`pages/NewsPage.tsx`): `?kind=&feed=&q=&days=&cves=1&saved=1&sort=newest&page=`; defaults are all kinds, 7 days, top first; each article has a bookmark button (`PUT /api/v1/news/bookmark`), and `saved=1` lists bookmarked articles whatever their date |
-| `/scan` | Endpoint scanner (`pages/ScanPage.tsx`): `?target=`. Posts to `/api/v1/scan`, renders the report (grade, findings, TLS/headers/DNS/tech/paths/related cards) and a recent-scans list. An active-checks toggle (with an authorisation confirmation) appears when the server enables it (`/api/v1/scan/config`); it is in its own Offensive nav section |
+| `/scan` | Endpoint scanner (`pages/ScanPage.tsx`): `?target=`. Posts to `/api/v1/scan`, renders the report (grade, findings, TLS/headers/DNS/tech/paths/related cards); a hero with a Passive/Active mode toggle. An active-checks toggle (with an authorisation confirmation) appears when the server enables it (`/api/v1/scan/config`); it is in its own Offensive nav section |
 | `/sync` | Per-source status with "Run now", and recent runs (polls every 5 s) |
 
 ## Conventions

@@ -20,7 +20,7 @@ const (
 	feedTimeout  = 30 * time.Second
 	// Article pages read per run to find CVE IDs a feed omits. New items
 	// beyond this are picked up on later runs.
-	maxPageChecks = 80
+	maxPageChecks = 150
 	pageParallel  = 4
 	pageTimeout   = 8 * time.Second
 )

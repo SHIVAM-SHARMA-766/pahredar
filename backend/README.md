@@ -18,7 +18,7 @@ Go module for the Pahredar backend: one binary that applies database migrations,
 | `internal/sources/attack/` | CTID KEV→ATT&CK mapping files and the MITRE CAPEC CSV parser |
 | `internal/sources/debian/` | Debian Security Tracker JSON, stream-decoded per package |
 | `internal/sources/detection/` | Sigma (repository archive), Suricata ET Open, and Nmap script-index parsers producing rules with the CVEs they name |
-| `internal/sources/feeds/` | The feed list (`All`: key, name, URL, kind, whether to read article pages) a lenient RSS 2.0 / RDF / Atom parser with CVE ID extraction, and `ArticleText`, which keeps only an article page's own text (uses `golang.org/x/net/html`) |
+| `internal/sources/feeds/` | The feed list (`All`: key, name, URL, kind, whether to read article pages) a lenient RSS 2.0 / RDF / Atom parser with CVE ID extraction, readers for GitHub repository security advisories (`FormatGitHub`) and CERT-In's note list (`FormatCERTIn`), and `ArticleText`, which keeps only an article page's own text (uses `golang.org/x/net/html`) |
 | `internal/sources/fetch/` | Shared HTTP client and `Get` (User-Agent, non-200 → `StatusError`). |
 
 Source packages know nothing about the database.

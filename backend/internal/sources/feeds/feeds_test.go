@@ -1,6 +1,7 @@
 package feeds
 
 import (
+	neturl "net/url"
 	"strings"
 	"testing"
 )
@@ -81,5 +82,39 @@ func TestArticleTextTeasers(t *testing.T) {
 	text, _ := ArticleText(strings.NewReader(page), "www.ivanti.com")
 	if got := strings.Join(ExtractCVEs(text), ","); got != "CVE-2026-104935" {
 		t.Fatalf("CVEs = %s", got)
+	}
+}
+
+func TestParseGitHub(t *testing.T) {
+	items, err := parseGitHub(strings.NewReader(`[
+		{"ghsa_id":"GHSA-w8hw-w9fx-j79w","cve_id":"CVE-2026-109618","html_url":"https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w","summary":"RCE via OOM corruption","description":"Fixed in 8.4.9","severity":"critical","published_at":"2026-10-21T10:00:00Z","identifiers":[{"type":"GHSA","value":"GHSA-w8hw-w9fx-j79w"}]},
+		{"ghsa_id":"GHSA-p3m5-59mp-jv5r","cve_id":null,"html_url":"https://github.com/vercel/next.js/security/advisories/GHSA-p3m5-59mp-jv5r","summary":"Denial of Service","description":"No CVE yet","severity":"high","published_at":"2026-10-14T00:00:00Z","identifiers":[]}
+	]`))
+	if err != nil || len(items) != 2 {
+		t.Fatalf("items = %+v, err = %v", items, err)
+	}
+	if items[0].Title != "CVE-2026-109618: RCE via OOM corruption" || strings.Join(items[0].CVEIDs, ",") != "CVE-2026-109618" || items[0].Published == nil {
+		t.Fatalf("first = %+v", items[0])
+	}
+	if items[1].Title != "Denial of Service" || len(items[1].CVEIDs) != 0 || !strings.HasPrefix(items[1].Summary, "High severity.") {
+		t.Fatalf("second = %+v", items[1])
+	}
+}
+
+func TestParseCERTIn(t *testing.T) {
+	page := `<table><tr><td class=contentTD><li><a href="/s2cMainServlet?pageid=PUBVLNOTES01&VLCODE=CIVN-2026-0534"><span class="verblue2">CERT-In Vulnerability Note CIVN-2026-0534</span></a></li></td></tr>
+		<tr><td class=contentTD ><span class="DateContent"> &nbsp;&nbsp;(November  02, 2026) </span></td></tr>
+		<tr><td class=contentTD><DIV style="height:30px; overflow: hidden"><span style="padding-left:15px">Denial of Service Vulnerability in Cisco products</span></DIV></td></tr></table>`
+	base, _ := neturl.Parse("https://www.cert-in.org.in/s2cMainServlet?pageid=VLNLIST02")
+	items, err := parseCERTIn(strings.NewReader(page), base)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items = %+v, err = %v", items, err)
+	}
+	it := items[0]
+	if it.URL != "https://www.cert-in.org.in/s2cMainServlet?pageid=PUBVLNOTES01&VLCODE=CIVN-2026-0534" || it.Title != "CIVN-2026-0534: Denial of Service Vulnerability in Cisco products" || it.Published == nil || it.Published.Format("2006-01-02") != "2026-11-02" {
+		t.Fatalf("item = %+v", it)
+	}
+	if _, err := parseCERTIn(strings.NewReader("<html>redesigned</html>"), base); err == nil {
+		t.Fatal("want an error when the layout changes")
 	}
 }

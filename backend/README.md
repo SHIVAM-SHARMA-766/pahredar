@@ -12,7 +12,7 @@ Go module for the Pahredar backend: one binary that applies database migrations,
 | `internal/sources/cvelist/` | GitHub client for CVEProject/cvelistV5 releases: release lookup (latest, by tag, recent) and record iteration over the baseline (streamed, nested zip) and delta zips. |
 | `internal/sources/nvd/` | NVD CVE API 2.0 pager: request spacing for the rate limit, concurrent page fetches, retry with backoff on 403/429/5xx/network errors. |
 | `internal/sources/kev/`, `epss/`, `exploits/`, `cwe/` | Single-file feeds: CISA KEV JSON, EPSS gzip CSV, the Exploit-DB / Metasploit / Nuclei / PoC-in-GitHub indexes (each mapped to `(CVE, source_ref)` entries), and MITRE's CWE CSV. |
-| `internal/sources/reports/` | On-demand per-CVE fetchers, normalized into Pahredar's own shapes: OSV (CVE plus GHSA/PYSEC/GO/… aliases, at most 4), Red Hat, Ubuntu (`reports.go`); MSRC, vendor advisory page previews, Google News, Hacker News (`news.go`); NVD history (`history.go`); GitHub fix commits (`commits.go`); AlienVault OTX, ThreatFox, Bluesky (`intel.go`, each needs its key and otherwise returns `ErrNotConfigured`). Advisory previews use `safeClient`, which refuses non-public IPs after DNS resolution. Not a sync source |
+| `internal/sources/reports/` | On-demand per-CVE fetchers, normalized into Pahredar's own shapes: OSV (CVE plus GHSA/PYSEC/GO/… aliases, at most 4), Red Hat, Ubuntu (`reports.go`); MSRC, vendor advisory page previews, Google News, Hacker News (`news.go`); NVD history (`history.go`); GitHub fix commits (`commits.go`); AlienVault OTX, ThreatFox, Bluesky (`intel.go`, each needs its key and otherwise returns `ErrNotConfigured`), and Mastodon hashtag timelines (`intel.go`, no key). Advisory previews use `safeClient`, which refuses non-public IPs after DNS resolution. Not a sync source |
 | `internal/sources/vulncheck/` | VulnCheck KEV client (cursor-paged index API, needs a free token) |
 | `internal/sources/euvd/` | ENISA EUVD exploited-list client (paged search API) |
 | `internal/sources/attack/` | CTID KEV→ATT&CK mapping files and the MITRE CAPEC CSV parser |
@@ -109,6 +109,7 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `00003_sort_indexes.sql` | Sort indexes rebuilt as `DESC NULLS LAST, id DESC` (and a COALESCE CVSS expression index) to match the list API's `ORDER BY` |
 | `00004_enrichment.sql` | `kev.forensic_triage`; `cve.exploit_ref` with a backfill from `refs` (~10 s on the full corpus); `kev (date_added DESC, cve_id)` index |
 | `00005_vendor_stats.sql` | Materialized views `vendor_stats`, `product_stats`, `vendor_year_stats` with unique indexes (required for `REFRESH … CONCURRENTLY`); ~12 s to create on the full corpus |
+| `00014_mastodon.sql` | `mastodon` report source |
 | `00013_vulncheck_threat_intel.sql` | `vulncheck_kev`; `otx` / `threatfox` / `bluesky` report sources |
 | `00012_attack_exploited_debian.sql` | `euvd_exploited`, `attack_mapping`, `capec`, `debian_status`; `trickest` exploit source; `history` / `commits` report sources |
 | `00011_detection.sql` | `detection_rule` (Sigma / Suricata / Nmap rules; GIN on `cve_ids`); `exploit.meta` (Metasploit and Nuclei fields for scan commands) |

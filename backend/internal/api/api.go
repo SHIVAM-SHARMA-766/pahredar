@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/scan"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/reports"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/syncer"
 )
@@ -18,10 +19,17 @@ type Server struct {
 	// sched is nil when the scheduler is disabled.
 	sched   *syncer.Scheduler
 	reports *reports.Client
+	scanner *scan.Scanner
+	// scanSem bounds concurrent endpoint scans.
+	scanSem chan struct{}
 }
 
 func New(store *db.Store, sched *syncer.Scheduler, rc *reports.Client) *Server {
-	return &Server{store: store, sched: sched, reports: rc}
+	return &Server{
+		store: store, sched: sched, reports: rc,
+		scanner: scan.NewScanner(store),
+		scanSem: make(chan struct{}, 3),
+	}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -47,6 +55,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/vendors/{vendor}/products/{product}", s.getProduct)
 	mux.HandleFunc("GET /api/v1/sync/status", s.syncStatus)
 	mux.HandleFunc("POST /api/v1/sync/{source}", s.triggerSync)
+	mux.HandleFunc("POST /api/v1/scan", s.runScan)
+	mux.HandleFunc("GET /api/v1/scans", s.listScans)
+	mux.HandleFunc("GET /api/v1/scans/{id}", s.getScan)
 	return mux
 }
 

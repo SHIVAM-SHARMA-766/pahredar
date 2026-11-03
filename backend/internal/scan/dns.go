@@ -1,0 +1,86 @@
+package scan
+
+import (
+	"context"
+	"net"
+	"strings"
+	"sync"
+)
+
+// DNSInfo holds the records the scan looked up.
+type DNSInfo struct {
+	A     []string `json:"a"`
+	AAAA  []string `json:"aaaa"`
+	MX    []string `json:"mx"`
+	NS    []string `json:"ns"`
+	TXT   []string `json:"txt"`
+	CAA   []string `json:"caa"`
+	SPF   string   `json:"spf"`
+	DMARC string   `json:"dmarc"`
+}
+
+// checkDNS looks up the common records and flags email- and
+// certificate-issuance hardening that is missing.
+func (sc *Scanner) checkDNS(ctx context.Context, host string, rep *Report, mu *sync.Mutex) error {
+	r := net.DefaultResolver
+	info := &DNSInfo{A: []string{}, AAAA: []string{}, MX: []string{}, NS: []string{}, TXT: []string{}, CAA: []string{}}
+
+	if ips, err := r.LookupIP(ctx, "ip", host); err == nil {
+		for _, ip := range ips {
+			if ip.To4() != nil {
+				info.A = append(info.A, ip.String())
+			} else {
+				info.AAAA = append(info.AAAA, ip.String())
+			}
+		}
+	}
+	if mx, err := r.LookupMX(ctx, host); err == nil {
+		for _, m := range mx {
+			info.MX = append(info.MX, strings.TrimSuffix(m.Host, "."))
+		}
+	}
+	if ns, err := r.LookupNS(ctx, host); err == nil {
+		for _, n := range ns {
+			info.NS = append(info.NS, strings.TrimSuffix(n.Host, "."))
+		}
+	}
+	if txt, err := r.LookupTXT(ctx, host); err == nil {
+		info.TXT = txt
+		for _, t := range txt {
+			if strings.HasPrefix(strings.ToLower(t), "v=spf1") {
+				info.SPF = t
+			}
+		}
+	}
+	if dmarc, err := r.LookupTXT(ctx, "_dmarc."+host); err == nil {
+		for _, t := range dmarc {
+			if strings.HasPrefix(strings.ToLower(t), "v=dmarc1") {
+				info.DMARC = t
+			}
+		}
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	rep.DNS = info
+
+	// Email hardening matters when the domain sends mail (has MX) or is a
+	// bare apex a brand would protect; flag it as low/medium either way.
+	sev := SevLow
+	if len(info.MX) > 0 {
+		sev = SevMedium
+	}
+	if info.SPF == "" {
+		rep.add(sev, "dns", "No SPF record", "Without an SPF record, anyone can send email claiming to be from this domain. Publish a TXT record starting v=spf1.")
+	} else if strings.Contains(strings.ToLower(info.SPF), "+all") {
+		rep.add(SevHigh, "dns", "SPF allows any sender (+all)", "The SPF record ends in +all, which authorises every host to send as this domain. Use -all or ~all.")
+	}
+	if info.DMARC == "" {
+		rep.add(sev, "dns", "No DMARC record", "Without DMARC, receivers cannot tell how to handle mail that fails SPF/DKIM. Publish _dmarc."+host+" TXT with v=DMARC1.")
+	} else if strings.Contains(strings.ToLower(info.DMARC), "p=none") {
+		rep.add(SevLow, "dns", "DMARC policy is p=none", "DMARC is in monitor-only mode; spoofed mail is still delivered. Move to p=quarantine or p=reject once reports look clean.")
+	} else {
+		rep.add(SevGood, "dns", "DMARC enforced", info.DMARC)
+	}
+	return nil
+}

@@ -17,7 +17,7 @@ Go module for the Pahredar backend: one binary that applies database migrations,
 | `internal/sources/euvd/` | ENISA EUVD exploited-list client (paged search API) |
 | `internal/sources/attack/` | CTID KEV→ATT&CK mapping files and the MITRE CAPEC CSV parser |
 | `internal/sources/debian/` | Debian Security Tracker JSON, stream-decoded per package |
-| `internal/scan/` | Non-intrusive endpoint scanner: public-only networking, DNS/TLS/HTTP/headers/cookies checks, technology fingerprint, exposed-path probes, related resources, scoring |
+| `internal/scan/` | Non-intrusive endpoint scanner: public-only networking, DNS/TLS/HTTP/headers/cookies checks, technology fingerprint, exposed-path probes, related resources, scoring; `active.go` runs bundled Nuclei for intrusive checks |
 | `internal/sources/greenbone/` | Greenbone Community Feed reader: registry token, manifest, streamed feed layer, NASL description-block parser (`Parse`), newest feed version only |
 | `internal/sources/detection/` | Sigma (repository archive), Suricata ET Open, and Nmap script-index parsers (`detection.go`); Splunk security_content, Elastic detection-rules, Snort 3 community, and YARA signature-base parsers (`more.go`, YAML via go.yaml.in/yaml/v3, TOML via BurntSushi/toml). All produce rules with the CVEs they name |
 | `internal/sources/feeds/` | The feed list (`All`: key, name, URL, kind, whether to read article pages) a lenient RSS 2.0 / RDF / Atom parser with CVE ID extraction, readers for GitHub security advisories (`FormatGitHub`, per repository or the global database), CERT-In's note list (`FormatCERTIn`), and NVIDIA's bulletin table (`FormatNVIDIA`), and `ArticleText`, which keeps only an article page's own text (uses `golang.org/x/net/html`) |
@@ -63,6 +63,9 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `FEEDS_SYNC_INTERVAL` | no | `1h` | News, research, PSIRT, and government feeds |
 | `DETECTION_SYNC_INTERVAL` | no | `24h` | Sigma, Suricata (ET Open), Nmap, Splunk, Elastic, Snort 3, and YARA rules |
 | `GREENBONE_SYNC_INTERVAL` | no | `168h` | Greenbone Community Feed tests; each run downloads a ~230 MB layer |
+| `SCAN_ALLOW_PRIVATE` | no | `false` | Let the endpoint scanner reach private/internal addresses |
+| `SCAN_ACTIVE_ENABLED` | no | `false` | Enable active (Nuclei) scanning |
+| `NUCLEI_PATH`, `NUCLEI_TEMPLATES_DIR` | no | bundled | Nuclei binary and templates (bundled in the image) |
 | `CONTEXT_SYNC_INTERVAL` | no | `24h` | ENISA EUVD, Debian tracker, and VulnCheck KEV; ATT&CK mappings and CAPEC run every 7× this |
 | `NVD_API_KEY` | strongly recommended | none | Without it requests are spaced 6.5 s apart instead of 0.7 s |
 | `GITHUB_TOKEN` | no | none | Raises the GitHub API limit above 60 requests/hour (cvelist downloads, fix-commit diffs) |
@@ -88,7 +91,7 @@ Inside Compose: `docker compose exec backend /pahredar sync cvelist`.
 | `GET /api/v1/stats/trending` | CVEs ranked by distinct feeds mentioning them |
 | `GET /api/v1/feeds`, `/api/v1/feeds/advisories` | Feed list with counts; newest vendor/government advisories |
 | `GET /api/v1/news` | News page list: filters, top/newest sort, `bookmarked=1`, paging, and a badge per named CVE (`internal/api/news.go`, `db.NewsArticles`) |
-| `POST /api/v1/scan`, `GET /api/v1/scans[/{id}]` | Run an endpoint scan, list recent scans, fetch one (`internal/api/scan.go`, `internal/scan`, `db.MatchTech`/`SaveScan`) |
+| `POST /api/v1/scan`, `GET /api/v1/scans[/{id}]` | Run an endpoint scan, list recent scans, fetch one, report capabilities (`internal/api/scan.go`, `internal/scan`, `db.MatchTech`/`SaveScan`) |
 | `PUT /api/v1/news/bookmark` | Bookmark or un-bookmark an article (`{"url", "bookmarked"}`); bookmarked articles are not pruned |
 | `GET /api/v1/vendors` | Vendor ranking/search (`q`, `page_size`) from `vendor_stats` |
 | `GET /api/v1/products` | Product ranking/search across vendors (`q`, `page_size`) from `product_stats` |

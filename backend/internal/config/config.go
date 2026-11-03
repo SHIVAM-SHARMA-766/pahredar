@@ -25,6 +25,11 @@ type Config struct {
 	AbuseCHKey         string
 	BlueskyHandle      string
 	BlueskyAppPassword string
+	// Endpoint scanner settings.
+	ScanAllowPrivate   bool   // allow scanning private/internal addresses
+	ScanActiveEnabled  bool   // allow active (Nuclei) scanning
+	NucleiPath         string // nuclei binary, "" disables active scanning
+	NucleiTemplatesDir string
 	// DataDir holds temporary download artifacts (the extracted cvelist
 	// baseline needs ~700 MB during a bootstrap).
 	DataDir     string
@@ -63,6 +68,8 @@ func Load() (Config, error) {
 		AbuseCHKey:         os.Getenv("ABUSECH_AUTH_KEY"),
 		BlueskyHandle:      strings.TrimPrefix(os.Getenv("BLUESKY_HANDLE"), "@"),
 		BlueskyAppPassword: os.Getenv("BLUESKY_APP_PASSWORD"),
+		NucleiPath:         getenv("NUCLEI_PATH", "nuclei"),
+		NucleiTemplatesDir: getenv("NUCLEI_TEMPLATES_DIR", "/opt/nuclei-templates"),
 		DataDir:            getenv("DATA_DIR", os.TempDir()),
 	}
 	if cfg.DatabaseURL == "" {
@@ -74,6 +81,12 @@ func Load() (Config, error) {
 	var err error
 	if cfg.SyncEnabled, err = strconv.ParseBool(getenv("SYNC_ENABLED", "true")); err != nil {
 		return Config{}, errors.New("SYNC_ENABLED must be true or false")
+	}
+	if cfg.ScanAllowPrivate, err = strconv.ParseBool(getenv("SCAN_ALLOW_PRIVATE", "false")); err != nil {
+		return Config{}, errors.New("SCAN_ALLOW_PRIVATE must be true or false")
+	}
+	if cfg.ScanActiveEnabled, err = strconv.ParseBool(getenv("SCAN_ACTIVE_ENABLED", "false")); err != nil {
+		return Config{}, errors.New("SCAN_ACTIVE_ENABLED must be true or false")
 	}
 	for _, d := range []struct {
 		key      string

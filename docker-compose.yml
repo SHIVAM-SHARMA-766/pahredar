@@ -44,9 +44,20 @@ services:
       CONTEXT_SYNC_INTERVAL: ${CONTEXT_SYNC_INTERVAL:-24h}
       GREENBONE_SYNC_INTERVAL: ${GREENBONE_SYNC_INTERVAL:-}
       DATA_DIR: /var/lib/pahredar
+      # Endpoint scanner. Active (Nuclei) scanning and scanning private /
+      # internal targets are both off by default; enable on a trusted,
+      # single-user instance only.
+      SCAN_ALLOW_PRIVATE: ${SCAN_ALLOW_PRIVATE:-false}
+      SCAN_ACTIVE_ENABLED: ${SCAN_ACTIVE_ENABLED:-false}
+      NUCLEI_PATH: /usr/local/bin/nuclei
+      NUCLEI_TEMPLATES_DIR: ${NUCLEI_TEMPLATES_DIR:-/opt/nuclei-templates}
     volumes:
       # Scratch space for downloads; the bootstrap needs ~700 MB temporarily.
       - workdir:/var/lib/pahredar
+    # Lets the scanner reach services on the Docker host as host.docker.internal
+    # (only useful with SCAN_ALLOW_PRIVATE=true).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy

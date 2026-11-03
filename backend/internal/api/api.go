@@ -24,10 +24,10 @@ type Server struct {
 	scanSem chan struct{}
 }
 
-func New(store *db.Store, sched *syncer.Scheduler, rc *reports.Client) *Server {
+func New(store *db.Store, sched *syncer.Scheduler, rc *reports.Client, allowPrivate bool, active *scan.Nuclei) *Server {
 	return &Server{
 		store: store, sched: sched, reports: rc,
-		scanner: scan.NewScanner(store),
+		scanner: scan.NewScanner(store, allowPrivate, active),
 		scanSem: make(chan struct{}, 3),
 	}
 }
@@ -58,6 +58,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/scan", s.runScan)
 	mux.HandleFunc("GET /api/v1/scans", s.listScans)
 	mux.HandleFunc("GET /api/v1/scans/{id}", s.getScan)
+	mux.HandleFunc("GET /api/v1/scan/config", s.scanConfig)
 	return mux
 }
 

@@ -17,7 +17,9 @@ func TestParseTarget(t *testing.T) {
 			t.Errorf("%q -> %q %v (err %v)", c.in, host, base, err)
 		}
 	}
-	for _, bad := range []string{"", "ftp://x", "not a host", "http://127.0.0.1", "https://10.0.0.1"} {
+	// ParseTarget accepts private hosts (the Scanner decides whether to scan
+	// them, based on its allowPrivate setting); it rejects only malformed input.
+	for _, bad := range []string{"", "ftp://x", "not a host", "https://"} {
 		if _, _, err := ParseTarget(bad); err == nil {
 			t.Errorf("%q should be rejected", bad)
 		}

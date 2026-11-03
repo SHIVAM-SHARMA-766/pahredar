@@ -710,7 +710,28 @@ export interface ScanReport {
     assets: string[]
     disallowed: string[]
   } | null
+  active: {
+    ran: boolean
+    engine: string
+    duration: string
+    note?: string
+    findings: {
+      template_id: string
+      name: string
+      severity: string
+      tags: string[]
+      cves: string[]
+      matched_at: string
+      reference?: string[]
+      count: number
+    }[]
+  } | null
   errors: string[]
+}
+
+export interface ScanConfig {
+  active_available: boolean
+  allow_private: boolean
 }
 
 export interface ScanResponse {

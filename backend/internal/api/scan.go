@@ -19,19 +19,31 @@ const scanReuse = 60 * time.Second
 // non-intrusive (see package scan). A recent scan of the same host is reused.
 func (s *Server) runScan(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Target string `json:"target"`
-		Fresh  bool   `json:"fresh"`
+		Target     string `json:"target"`
+		Fresh      bool   `json:"fresh"`
+		Active     bool   `json:"active"`
+		Authorized bool   `json:"authorized"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body); err != nil || body.Target == "" {
 		writeError(w, http.StatusBadRequest, `body must be {"target": "example.com"}`)
 		return
+	}
+	if body.Active {
+		if !s.scanner.ActiveAvailable() {
+			writeError(w, http.StatusBadRequest, "active scanning is not enabled on this server (set SCAN_ACTIVE_ENABLED=true and provide Nuclei)")
+			return
+		}
+		if !body.Authorized {
+			writeError(w, http.StatusForbidden, "active scanning sends intrusive requests; confirm you are authorised to test this target")
+			return
+		}
 	}
 	host, _, err := scan.ParseTarget(body.Target)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if !body.Fresh {
+	if !body.Fresh && !body.Active {
 		if id, payload, ok, err := s.store.LatestScanFor(r.Context(), host, time.Now().Add(-scanReuse)); err == nil && ok {
 			writeJSON(w, http.StatusOK, scanResponse{ID: id, Cached: true, Report: payload})
 			return
@@ -52,10 +64,17 @@ func (s *Server) runScan(w http.ResponseWriter, r *http.Request) {
 	if rc := http.NewResponseController(w); rc != nil {
 		_ = rc.SetWriteDeadline(time.Now().Add(60 * time.Second))
 	}
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 40*time.Second)
+	timeout := 40 * time.Second
+	if body.Active {
+		timeout = 5 * time.Minute
+		if rc := http.NewResponseController(w); rc != nil {
+			_ = rc.SetWriteDeadline(time.Now().Add(timeout + 30*time.Second))
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), timeout)
 	defer cancel()
 
-	rep, err := s.scanner.Scan(ctx, body.Target)
+	rep, err := s.scanner.Scan(ctx, body.Target, body.Active)
 	if err != nil {
 		if errors.Is(err, scan.ErrPrivate) || errors.Is(err, scan.ErrNoResolve) || errors.Is(err, scan.ErrBadTarget) {
 			writeError(w, http.StatusBadRequest, err.Error())
@@ -102,4 +121,12 @@ func (s *Server) getScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, scanResponse{ID: id, Cached: time.Since(at) > scanReuse, Report: payload})
+}
+
+// scanConfig tells the UI which scanner capabilities the server enables.
+func (s *Server) scanConfig(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"active_available": s.scanner.ActiveAvailable(),
+		"allow_private":    s.scanner.AllowsPrivate(),
+	})
 }

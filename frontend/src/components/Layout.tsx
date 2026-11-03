@@ -35,7 +35,6 @@ const SECTIONS: { title: string; dot: string; items: NavItem[] }[] = [
     items: [
       { to: '/', label: 'Dashboard', icon: LayoutDashboard, active: (l) => l.pathname === '/' },
       { to: '/news', label: 'Security news', icon: Newspaper, active: (l) => l.pathname === '/news' },
-      { to: '/scan', label: 'Endpoint scanner', icon: Radar, active: (l) => l.pathname === '/scan' },
     ],
   },
   {
@@ -47,6 +46,11 @@ const SECTIONS: { title: string; dot: string; items: NavItem[] }[] = [
       { to: '/cves', label: 'CVE explorer', icon: Bug, active: (l) => l.pathname.startsWith('/cves') },
       { to: '/vendors', label: 'Vendors & products', icon: Building2, active: (l) => l.pathname.startsWith('/vendors') },
     ],
+  },
+  {
+    title: 'Offensive',
+    dot: 'bg-rose-400',
+    items: [{ to: '/scan', label: 'Endpoint scanner', icon: Radar, active: (l) => l.pathname === '/scan' }],
   },
   {
     title: 'System',

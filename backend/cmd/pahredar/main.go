@@ -19,6 +19,7 @@ import (
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/api"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/config"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/scan"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/cvelist"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/detection"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/exploits"
@@ -79,6 +80,14 @@ func main() {
 		slog.Error("fatal", "command", os.Args[1], "err", err)
 		os.Exit(1)
 	}
+}
+
+// nucleiRunner enables active scanning only when configured.
+func nucleiRunner(cfg config.Config) *scan.Nuclei {
+	if !cfg.ScanActiveEnabled {
+		return nil
+	}
+	return scan.NewNuclei(cfg.NucleiPath, cfg.NucleiTemplatesDir, cfg.DataDir)
 }
 
 func withConfig(ctx context.Context, fn func(context.Context, config.Config) error) error {
@@ -231,7 +240,7 @@ func serve(ctx context.Context, cfg config.Config) error {
 		Handler: api.New(store, sched, reports.New(fetch.NewClient(), reports.Keys{
 			NVD: cfg.NVDAPIKey, GitHub: cfg.GitHubToken, OTX: cfg.OTXKey, AbuseCH: cfg.AbuseCHKey,
 			BlueskyHandle: cfg.BlueskyHandle, BlueskyPassword: cfg.BlueskyAppPassword,
-		})).Handler(),
+		}), cfg.ScanAllowPrivate, nucleiRunner(cfg)).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,

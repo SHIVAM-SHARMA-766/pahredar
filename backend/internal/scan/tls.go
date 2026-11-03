@@ -46,7 +46,7 @@ func (sc *Scanner) checkTLS(ctx context.Context, host string, base *url.URL, rep
 	addr := net.JoinHostPort(host, port)
 
 	// Full handshake, verified, to read the chain and negotiated version.
-	state, verifyErr, err := handshake(ctx, addr, host, tls.VersionTLS13, false)
+	state, verifyErr, err := sc.handshake(ctx, addr, host, tls.VersionTLS13, false)
 	if err != nil {
 		mu.Lock()
 		defer mu.Unlock()
@@ -79,7 +79,7 @@ func (sc *Scanner) checkTLS(ctx context.Context, host string, base *url.URL, rep
 
 	// Lowest protocol version that still completes a handshake.
 	for _, v := range []uint16{tls.VersionTLS10, tls.VersionTLS11, tls.VersionTLS12} {
-		if _, _, err := handshake(ctx, addr, host, v, true); err == nil {
+		if _, _, err := sc.handshake(ctx, addr, host, v, true); err == nil {
 			info.MinObserved = tlsVersions[v]
 			break
 		}
@@ -128,9 +128,8 @@ func (sc *Scanner) checkTLS(ctx context.Context, host string, base *url.URL, rep
 // insecure is true it skips verification (for probing old protocol support);
 // otherwise it returns the verification error separately so the caller can
 // still read the chain.
-func handshake(ctx context.Context, addr, serverName string, max uint16, insecure bool) (tls.ConnectionState, error, error) {
-	d := &net.Dialer{Timeout: 6 * time.Second}
-	raw, err := dialPublic(ctx, d, "tcp", addr)
+func (sc *Scanner) handshake(ctx context.Context, addr, serverName string, max uint16, insecure bool) (tls.ConnectionState, error, error) {
+	raw, err := sc.dial(ctx, "tcp", addr)
 	if err != nil {
 		return tls.ConnectionState{}, nil, err
 	}

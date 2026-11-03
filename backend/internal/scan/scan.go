@@ -62,6 +62,7 @@ type Report struct {
 	Tech      []TechOut   `json:"tech"`
 	Paths     []PathOut   `json:"paths"`
 	Related   *Related    `json:"related"`
+	Active    *ActiveScan `json:"active"`
 	Errors    []string    `json:"errors"`
 }
 
@@ -70,15 +71,32 @@ type TechMatcher interface {
 	MatchTech(ctx context.Context, vendor, product string) (*TechCVEs, error)
 }
 
-// Scanner runs scans. It holds a public-only HTTP client and the CVE matcher.
+// Scanner runs scans. It holds an HTTP client, the CVE matcher, and the
+// optional active (Nuclei) runner.
 type Scanner struct {
-	client  *http.Client
-	matcher TechMatcher
+	client       *http.Client
+	matcher      TechMatcher
+	active       *Nuclei
+	allowPrivate bool
 }
 
-func NewScanner(m TechMatcher) *Scanner {
-	return &Scanner{client: publicClient(10 * time.Second), matcher: m}
+// NewScanner builds a scanner. allowPrivate lets it reach private/internal
+// addresses (for assessing one's own infrastructure); active, when non-nil,
+// enables intrusive Nuclei checks.
+func NewScanner(m TechMatcher, allowPrivate bool, active *Nuclei) *Scanner {
+	sc := &Scanner{matcher: m, active: active, allowPrivate: allowPrivate}
+	sc.client = sc.newClient(10 * time.Second)
+	return sc
 }
+
+// ActiveAvailable reports whether intrusive scanning is configured.
+func (sc *Scanner) ActiveAvailable() bool { return sc.active != nil }
+
+// AllowsPrivate reports whether private targets are permitted.
+func (sc *Scanner) AllowsPrivate() bool { return sc.allowPrivate }
+
+// allowed reports whether sc may connect to ip.
+func (sc *Scanner) allowed(ip net.IP) bool { return sc.allowPrivate || isPublicIP(ip) }
 
 var (
 	// ErrPrivate means the target does not resolve to a public address.
@@ -106,37 +124,35 @@ func ParseTarget(in string) (host string, base *url.URL, err error) {
 	// Keep only scheme, host, port; drop any path/query/fragment and userinfo.
 	base = &url.URL{Scheme: u.Scheme, Host: u.Host}
 	host = u.Hostname()
-	// Reject IP literals that are already non-public, and obvious junk.
-	if ip := net.ParseIP(host); ip != nil && !isPublicIP(ip) {
-		return "", nil, ErrPrivate
-	}
 	return host, base, nil
 }
 
 // Scan assesses one target. It is bounded by ctx; callers pass a timeout.
-func (sc *Scanner) Scan(ctx context.Context, target string) (*Report, error) {
+// When active is true and a Nuclei runner is configured, intrusive checks
+// run after the passive phase.
+func (sc *Scanner) Scan(ctx context.Context, target string, active bool) (*Report, error) {
 	start := time.Now()
 	host, base, err := ParseTarget(target)
 	if err != nil {
 		return nil, err
 	}
-	// Resolve and require a public address before any connection.
+	// Resolve and require an allowed address before any connection.
 	ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
 	if err != nil || len(ips) == 0 {
 		return nil, ErrNoResolve
 	}
-	var pub net.IP
+	var dst net.IP
 	for _, ip := range ips {
-		if isPublicIP(ip) {
-			pub = ip
+		if sc.allowed(ip) {
+			dst = ip
 			break
 		}
 	}
-	if pub == nil {
+	if dst == nil {
 		return nil, ErrPrivate
 	}
 
-	rep := &Report{Target: target, Host: host, URL: base.String(), IP: pub.String(), ScannedAt: start.UTC(), Errors: []string{}, Findings: []Finding{}}
+	rep := &Report{Target: target, Host: host, URL: base.String(), IP: dst.String(), ScannedAt: start.UTC(), Errors: []string{}, Findings: []Finding{}}
 
 	// Each check appends to rep under its own mutex-guarded slot; run them
 	// concurrently so a slow one does not block the rest.
@@ -166,6 +182,27 @@ func (sc *Scanner) Scan(ctx context.Context, target string) (*Report, error) {
 	run("http", func(c context.Context) error { return sc.checkHTTP(c, host, base, rep, &mu) })
 
 	wg.Wait()
+
+	if active && sc.active != nil {
+		// Scan the resolved final URL from the passive phase when available.
+		targetURL := rep.URL
+		if rep.HTTP != nil && rep.HTTP.FinalURL != "" {
+			targetURL = rep.HTTP.FinalURL
+		}
+		if as, err := sc.active.Run(ctx, targetURL); err != nil {
+			rep.Errors = append(rep.Errors, "active: "+err.Error())
+		} else {
+			rep.Active = as
+			for _, f := range as.Findings {
+				detail := "Verified by Nuclei template " + f.TemplateID + " at " + f.MatchedAt
+				if len(f.CVEs) > 0 {
+					detail = strings.Join(f.CVEs, ", ") + " — " + detail
+				}
+				rep.add(nucleiSeverity(f.Severity), "active", f.Name, detail)
+			}
+		}
+	}
+
 	score(rep)
 	rep.Duration = time.Since(start).Round(time.Millisecond).String()
 	nilEmpty(rep)
@@ -231,13 +268,10 @@ func isPublicIP(ip net.IP) bool {
 	return true
 }
 
-func publicClient(timeout time.Duration) *http.Client {
-	d := &net.Dialer{Timeout: 6 * time.Second}
+func (sc *Scanner) newClient(timeout time.Duration) *http.Client {
 	tr := &http.Transport{
-		Proxy: nil,
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			return dialPublic(ctx, d, network, addr)
-		},
+		Proxy:                  nil,
+		DialContext:            sc.dial,
 		TLSClientConfig:        &tls.Config{MinVersion: tls.VersionTLS10},
 		ResponseHeaderTimeout:  timeout,
 		MaxResponseHeaderBytes: 64 << 10,
@@ -258,9 +292,9 @@ func publicClient(timeout time.Duration) *http.Client {
 	}
 }
 
-// dialPublic resolves addr, connects to the first public IP, and refuses the
-// rest, so the connection cannot be redirected to an internal address.
-func dialPublic(ctx context.Context, d *net.Dialer, network, addr string) (net.Conn, error) {
+// dial resolves addr, connects to the first allowed IP, and refuses the
+// rest, so the connection cannot be redirected to a disallowed address.
+func (sc *Scanner) dial(ctx context.Context, network, addr string) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, err
@@ -269,10 +303,11 @@ func dialPublic(ctx context.Context, d *net.Dialer, network, addr string) (net.C
 	if err != nil {
 		return nil, err
 	}
+	d := &net.Dialer{Timeout: 6 * time.Second}
 	for _, ip := range ips {
-		if isPublicIP(ip) {
+		if sc.allowed(ip) {
 			return d.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
 		}
 	}
-	return nil, fmt.Errorf("refusing to connect to non-public address %s", host)
+	return nil, fmt.Errorf("refusing to connect to non-allowed address %s", host)
 }

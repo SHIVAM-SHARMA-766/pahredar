@@ -31,10 +31,13 @@ export function ScanPage() {
   useOrigin('Endpoint scan')
   const [params, setParams] = useSearchParams()
   const [input, setInput] = useState(params.get('target') ?? '')
+  const [active, setActive] = useState(false)
+  const [authorized, setAuthorized] = useState(false)
   const qc = useQueryClient()
+  const config = useQuery({ queryKey: ['scan-config'], queryFn: api.scanConfig, staleTime: 5 * 60_000 })
 
   const scan = useMutation({
-    mutationFn: ({ target, fresh }: { target: string; fresh: boolean }) => api.scan(target, fresh),
+    mutationFn: (v: { target: string; fresh?: boolean; active?: boolean; authorized?: boolean }) => api.scan(v.target, { fresh: v.fresh, active: v.active, authorized: v.authorized }),
     onSuccess: (_, v) => {
       setParams({ target: v.target }, { replace: true })
       qc.invalidateQueries({ queryKey: ['recent-scans'] })
@@ -42,10 +45,12 @@ export function ScanPage() {
   })
   const recent = useQuery({ queryKey: ['recent-scans'], queryFn: api.recentScans, staleTime: 30_000 })
 
+  const canActive = config.data?.active_available ?? false
+  const runActive = active && canActive
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     const t = input.trim()
-    if (t) scan.mutate({ target: t, fresh: false })
+    if (t && (!runActive || authorized)) scan.mutate({ target: t, active: runActive, authorized })
   }
   const report = scan.data?.report
 
@@ -53,7 +58,7 @@ export function ScanPage() {
     <>
       <PageHeader
         title="Endpoint scanner"
-        subtitle="A non-intrusive external security check of a public endpoint: TLS, DNS, HTTP security headers, technology and its known CVEs, exposed paths, and related resources. It only sends the requests a browser would — no exploitation."
+        subtitle="An external security check of a public endpoint: TLS, DNS, HTTP security headers, technology and its known CVEs, exposed paths, and related resources. Passive by default (only the requests a browser would send); optional active checks run Nuclei's vulnerability templates to verify issues."
       />
 
       <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-400/20 bg-amber-500/[0.06] px-3 py-2 text-xs text-amber-200/90">
@@ -77,19 +82,37 @@ export function ScanPage() {
           disabled={scan.isPending || !input.trim()}
           className="rounded-lg bg-cyan-500/15 px-5 py-2.5 text-sm font-medium text-cyan-100 ring-1 ring-cyan-400/30 hover:bg-cyan-500/25 disabled:opacity-50"
         >
-          {scan.isPending ? 'Scanning…' : 'Scan'}
+          {scan.isPending ? (runActive ? 'Scanning (active)…' : 'Scanning…') : runActive ? 'Active scan' : 'Scan'}
         </button>
         {report && !scan.isPending && (
-          <button type="button" onClick={() => scan.mutate({ target: report.target, fresh: true })} className="rounded-lg border border-zinc-800 px-3 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800">
+          <button type="button" onClick={() => scan.mutate({ target: report.target, fresh: true, active: runActive, authorized })} className="rounded-lg border border-zinc-800 px-3 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800">
             Re-scan
           </button>
         )}
       </form>
 
+      {canActive && (
+        <div className="mb-6 rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+          <label className="flex cursor-pointer items-start gap-2 text-sm">
+            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="mt-0.5 accent-rose-400" />
+            <span>
+              <span className="font-medium text-zinc-200">Active (intrusive) checks</span>
+              <span className="text-zinc-500"> — runs Nuclei's vulnerability templates against the target to verify issues. Takes a few minutes and sends many requests.</span>
+            </span>
+          </label>
+          {active && (
+            <label className="mt-2 flex cursor-pointer items-start gap-2 pl-6 text-sm text-amber-200/90">
+              <input type="checkbox" checked={authorized} onChange={(e) => setAuthorized(e.target.checked)} className="mt-0.5 accent-amber-400" />
+              <span>I am authorised to actively test this target.</span>
+            </label>
+          )}
+        </div>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[1fr_18rem]">
         <div className="min-w-0 space-y-6">
           {scan.isPending && (
-            <Card><Spinner label={`Scanning ${input.trim()}… this takes a few seconds`} /></Card>
+            <Card><Spinner label={runActive ? `Active scan of ${input.trim()}… this runs vulnerability templates and can take a few minutes` : `Scanning ${input.trim()}… this takes a few seconds`} /></Card>
           )}
           {scan.isError && !scan.isPending && (
             <ErrorBox error={scan.error instanceof ApiError ? scan.error.message : String(scan.error)} />
@@ -109,7 +132,7 @@ export function ScanPage() {
                 {recent.data.items.map((s) => (
                   <li key={s.id}>
                     <button
-                      onClick={() => { setInput(s.target); scan.mutate({ target: s.target, fresh: false }) }}
+                      onClick={() => { setInput(s.target); setActive(false); scan.mutate({ target: s.target }) }}
                       className="flex w-full items-center gap-2 py-2 text-left hover:text-cyan-200"
                     >
                       <GradeChip grade={s.grade} small />
@@ -168,6 +191,30 @@ function ReportView({ report, cached }: { report: ScanReport; cached: boolean })
         )}
       </Card>
 
+      {report.active?.ran && (
+        <Card title="Active checks (Nuclei)">
+          <p className="mb-2 text-xs text-zinc-500">
+            {report.active.engine} · {report.active.duration} · {report.active.findings.length} template{report.active.findings.length === 1 ? '' : 's'} matched. These verify issues by probing the target; results also appear in Findings above.
+            {report.active.note && <span className="text-amber-300/80"> · {report.active.note}</span>}
+          </p>
+          {report.active.findings.length === 0 ? (
+            <p className="text-sm text-zinc-500">No vulnerability template matched.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {report.active.findings.map((f) => (
+                <li key={f.template_id} className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                  <span className={`inline-flex h-5 items-center rounded px-1.5 text-xs font-medium ring-1 ring-inset ${sevStyle[(f.severity as ScanSeverity) in sevStyle ? (f.severity as ScanSeverity) : 'info'].tag}`}>{f.severity}</span>
+                  <span className="text-zinc-200">{f.name}</span>
+                  {f.count > 1 && <span className="text-xs text-zinc-500">×{f.count}</span>}
+                  {f.cves.map((c) => <Link key={c} to={`/cves/${c}`} className="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-xs text-cyan-300 hover:bg-zinc-700">{c}</Link>)}
+                  <span className="font-mono text-xs text-zinc-600">{f.template_id}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
+
       <div className="grid gap-6 md:grid-cols-2">
         {report.tech.length > 0 && <TechCard tech={report.tech} />}
         {report.tls && <TlsCard tls={report.tls} />}
@@ -192,7 +239,7 @@ function FindingRow({ f }: { f: ScanFinding }) {
         <Icon className="h-3 w-3" />{sevStyle[f.severity].label}
       </span>
       <div className="min-w-0">
-        <div className="text-sm text-zinc-200">{f.title} <span className="text-xs text-zinc-600">· {f.category}</span></div>
+        <div className="text-sm text-zinc-200">{f.title} {f.category === 'active' ? <span className="rounded bg-rose-500/15 px-1 text-[10px] font-medium text-rose-300 ring-1 ring-rose-400/30">verified</span> : <span className="text-xs text-zinc-600">· {f.category}</span>}</div>
         {f.detail && <p className="text-xs text-zinc-500">{f.detail}</p>}
       </div>
     </li>

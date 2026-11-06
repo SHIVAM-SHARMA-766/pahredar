@@ -1,4 +1,4 @@
-package api
+package scanner
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/jobs"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/platform"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/scan"
 )
 
@@ -50,7 +51,7 @@ type scanJobView struct {
 }
 
 // registerScanJobs wires the scan task handler onto the queue. Called from New.
-func (s *Server) registerScanJobs() {
+func (s *Service) registerScanJobs() {
 	if s.Jobs != nil {
 		s.Jobs.Register(scanTaskType, s.handleScanTask)
 	}
@@ -58,7 +59,7 @@ func (s *Server) registerScanJobs() {
 
 // runScan enqueues a scan and returns its job id. Body:
 // {"target","active"?,"authorized"?,"fresh"?,"templates"?}.
-func (s *Server) runScan(w http.ResponseWriter, r *http.Request) {
+func (s *Service) runScan(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Target     string               `json:"target"`
 		Fresh      bool                 `json:"fresh"`
@@ -67,21 +68,21 @@ func (s *Server) runScan(w http.ResponseWriter, r *http.Request) {
 		Templates  *scan.TemplateFilter `json:"templates"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body); err != nil || body.Target == "" {
-		writeError(w, http.StatusBadRequest, `body must be {"target": "example.com"}`)
+		platform.WriteError(w, http.StatusBadRequest, `body must be {"target": "example.com"}`)
 		return
 	}
 	host, _, err := scan.ParseTarget(body.Target)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		platform.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if body.Active {
 		if !s.scanner.ActiveAvailable() {
-			writeError(w, http.StatusBadRequest, "active scanning is not enabled on this server (set SCAN_ACTIVE_ENABLED=true)")
+			platform.WriteError(w, http.StatusBadRequest, "active scanning is not enabled on this server (set SCAN_ACTIVE_ENABLED=true)")
 			return
 		}
 		if !body.Authorized {
-			writeError(w, http.StatusForbidden, "active scanning sends intrusive requests; confirm you are authorised to test this target")
+			platform.WriteError(w, http.StatusForbidden, "active scanning sends intrusive requests; confirm you are authorised to test this target")
 			return
 		}
 	}
@@ -95,7 +96,7 @@ func (s *Server) runScan(w http.ResponseWriter, r *http.Request) {
 			if json.Unmarshal(raw, &rep) == nil {
 				result := scanTaskResult{Host: host, Report: &rep, StoredID: id, Cached: true}
 				if jobID, eerr := s.Jobs.EnqueueDone(r.Context(), scanTaskType, payload, result); eerr == nil {
-					writeJSON(w, http.StatusOK, map[string]any{"id": jobID})
+					platform.WriteJSON(w, http.StatusOK, map[string]any{"id": jobID})
 					return
 				}
 			}
@@ -104,15 +105,15 @@ func (s *Server) runScan(w http.ResponseWriter, r *http.Request) {
 
 	jobID, err := s.Jobs.Enqueue(r.Context(), scanTaskType, payload, 1)
 	if err != nil {
-		internalError(w, r, err)
+		platform.InternalError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusAccepted, map[string]any{"id": jobID})
+	platform.WriteJSON(w, http.StatusAccepted, map[string]any{"id": jobID})
 }
 
 // handleScanTask runs one scan task, streaming progress onto the task row and
 // storing the final report.
-func (s *Server) handleScanTask(ctx context.Context, payload json.RawMessage, progress jobs.Progress) (any, error) {
+func (s *Service) handleScanTask(ctx context.Context, payload json.RawMessage, progress jobs.Progress) (any, error) {
 	var p scanTaskPayload
 	if err := json.Unmarshal(payload, &p); err != nil {
 		return nil, err
@@ -150,15 +151,15 @@ func (s *Server) handleScanTask(ctx context.Context, payload json.RawMessage, pr
 
 // scanJobStatus returns a job's current state (for polling), read from the
 // durable task row so it survives restarts.
-func (s *Server) scanJobStatus(w http.ResponseWriter, r *http.Request) {
+func (s *Service) scanJobStatus(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "id must be a number")
+		platform.WriteError(w, http.StatusBadRequest, "id must be a number")
 		return
 	}
 	t, err := s.Jobs.Get(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "scan job not found (it may have expired); start a new scan")
+		platform.WriteError(w, http.StatusNotFound, "scan job not found (it may have expired); start a new scan")
 		return
 	}
 	view := scanJobView{ID: t.ID, Status: t.Status, Error: t.Error}
@@ -178,27 +179,27 @@ func (s *Server) scanJobStatus(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	writeJSON(w, http.StatusOK, view)
+	platform.WriteJSON(w, http.StatusOK, view)
 }
 
-func (s *Server) listScans(w http.ResponseWriter, r *http.Request) {
-	out, err := s.Store.RecentScans(r.Context(), boundedInt(r, "limit", 25, 1, 100))
+func (s *Service) listScans(w http.ResponseWriter, r *http.Request) {
+	out, err := s.Store.RecentScans(r.Context(), platform.BoundedInt(r, "limit", 25, 1, 100))
 	if err != nil {
-		internalError(w, r, err)
+		platform.InternalError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": out})
+	platform.WriteJSON(w, http.StatusOK, map[string]any{"items": out})
 }
 
-func (s *Server) getScan(w http.ResponseWriter, r *http.Request) {
+func (s *Service) getScan(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "id must be a number")
+		platform.WriteError(w, http.StatusBadRequest, "id must be a number")
 		return
 	}
 	payload, _, err := s.Store.GetScan(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "scan not found")
+		platform.WriteError(w, http.StatusNotFound, "scan not found")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -207,31 +208,31 @@ func (s *Server) getScan(w http.ResponseWriter, r *http.Request) {
 
 // scanRequest sends one user-defined HTTP request (the request tool) and
 // returns the raw request and response for inspection.
-func (s *Server) scanRequest(w http.ResponseWriter, r *http.Request) {
+func (s *Service) scanRequest(w http.ResponseWriter, r *http.Request) {
 	var spec scan.RequestSpec
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&spec); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		platform.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	res, err := s.scanner.SendRequest(ctx, spec)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		platform.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, res)
+	platform.WriteJSON(w, http.StatusOK, res)
 }
 
 // scanConfig tells the UI which scanner capabilities the server enables and,
 // when active scanning is on, the Nuclei template categories it covers.
-func (s *Server) scanConfig(w http.ResponseWriter, r *http.Request) {
+func (s *Service) scanConfig(w http.ResponseWriter, r *http.Request) {
 	catalog := s.scanner.ActiveCatalog()
 	total := 0
 	for _, c := range catalog {
 		total += c.Count
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	platform.WriteJSON(w, http.StatusOK, map[string]any{
 		"active_available": s.scanner.ActiveAvailable(),
 		"allow_private":    s.scanner.AllowsPrivate(),
 		"active_catalog":   catalog,

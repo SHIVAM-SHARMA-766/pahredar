@@ -1,4 +1,4 @@
-package api
+package intel
 
 import (
 	"errors"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/cverecord"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/platform"
 )
 
 const (
@@ -31,19 +32,19 @@ type relatedGroup struct {
 // relatedCVEs finds the CVEs that "came with" this one: those citing the
 // same vendor advisory or patch (typically fixed in the same release), and
 // those for the same product published around the same time.
-func (s *Server) relatedCVEs(w http.ResponseWriter, r *http.Request) {
+func (s *Service) relatedCVEs(w http.ResponseWriter, r *http.Request) {
 	id := strings.ToUpper(r.PathValue("id"))
 	if !cverecord.IDPattern.MatchString(id) {
-		writeError(w, http.StatusBadRequest, "id must look like CVE-2024-12345")
+		platform.WriteError(w, http.StatusBadRequest, "id must look like CVE-2024-12345")
 		return
 	}
 	d, err := s.Store.GetCVE(r.Context(), id)
 	if errors.Is(err, db.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "CVE not found")
+		platform.WriteError(w, http.StatusNotFound, "CVE not found")
 		return
 	}
 	if err != nil {
-		internalError(w, r, err)
+		platform.InternalError(w, r, err)
 		return
 	}
 
@@ -78,7 +79,7 @@ func (s *Server) relatedCVEs(w http.ResponseWriter, r *http.Request) {
 	for _, u := range urls {
 		ids, total, err := s.Store.CVEsCitingURL(r.Context(), u, id, relatedPerGroup)
 		if err != nil {
-			internalError(w, r, err)
+			platform.InternalError(w, r, err)
 			return
 		}
 		label := u
@@ -86,7 +87,7 @@ func (s *Server) relatedCVEs(w http.ResponseWriter, r *http.Request) {
 			label = strings.TrimPrefix(p.Hostname(), "www.") + p.EscapedPath()
 		}
 		if err := addGroup(relatedGroup{Kind: "advisory", Label: label, URL: u, Total: total}, ids); err != nil {
-			internalError(w, r, err)
+			platform.InternalError(w, r, err)
 			return
 		}
 	}
@@ -105,17 +106,17 @@ func (s *Server) relatedCVEs(w http.ResponseWriter, r *http.Request) {
 	if target != nil && d.DatePublished != nil {
 		ids, total, err := s.Store.CVEsForProductNear(r.Context(), target.Vendor, target.Product, *d.DatePublished, relatedWindowDays, id, relatedPerGroup)
 		if err != nil {
-			internalError(w, r, err)
+			platform.InternalError(w, r, err)
 			return
 		}
 		label := db.PrettyLabel(target.ProductLabel)
 		if err := addGroup(relatedGroup{Kind: "product", Label: label, Vendor: target.Vendor, Product: target.Product, Total: total}, ids); err != nil {
-			internalError(w, r, err)
+			platform.InternalError(w, r, err)
 			return
 		}
 	}
 	if groups == nil {
 		groups = []relatedGroup{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"groups": groups})
+	platform.WriteJSON(w, http.StatusOK, map[string]any{"groups": groups})
 }

@@ -1,4 +1,4 @@
-package api
+package news
 
 import (
 	"encoding/json"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/platform"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/feeds"
 )
 
@@ -18,34 +19,34 @@ import (
 // limit. Alongside the
 // articles it returns a badge (severity, score, KEV, exploited) for each
 // CVE they name.
-func (s *Server) news(w http.ResponseWriter, r *http.Request) {
+func (s *Service) news(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	p := db.NewsParams{
 		Query:       strings.TrimSpace(q.Get("q")),
 		WithCVEOnly: q.Get("cves") == "1",
 		Top:         q.Get("sort") == "top",
 		Bookmarked:  q.Get("bookmarked") == "1",
-		Limit:       boundedInt(r, "limit", 30, 1, 100),
+		Limit:       platform.BoundedInt(r, "limit", 30, 1, 100),
 	}
 	if len(p.Query) > 200 {
-		writeError(w, http.StatusBadRequest, "q is limited to 200 characters")
+		platform.WriteError(w, http.StatusBadRequest, "q is limited to 200 characters")
 		return
 	}
-	p.Offset = (boundedInt(r, "page", 1, 1, 1000) - 1) * p.Limit
-	if days := boundedInt(r, "days", 7, 0, 3650); days > 0 {
+	p.Offset = (platform.BoundedInt(r, "page", 1, 1, 1000) - 1) * p.Limit
+	if days := platform.BoundedInt(r, "days", 7, 0, 3650); days > 0 {
 		p.Since = time.Now().AddDate(0, 0, -days)
 	}
 	kind, feed := q.Get("kind"), q.Get("feed")
 	switch {
 	case feed != "":
 		if _, ok := feeds.ByKey(feed); !ok {
-			writeError(w, http.StatusBadRequest, "unknown feed")
+			platform.WriteError(w, http.StatusBadRequest, "unknown feed")
 			return
 		}
 		p.Feeds = []string{feed}
 	case kind != "":
 		if !slices.Contains([]string{feeds.KindVendor, feeds.KindGovernment, feeds.KindResearch, feeds.KindNews}, kind) {
-			writeError(w, http.StatusBadRequest, "kind must be one of vendor, government, research, news")
+			platform.WriteError(w, http.StatusBadRequest, "kind must be one of vendor, government, research, news")
 			return
 		}
 		p.Feeds = []string{}
@@ -57,7 +58,7 @@ func (s *Server) news(w http.ResponseWriter, r *http.Request) {
 	}
 	items, total, err := s.Store.NewsArticles(r.Context(), p)
 	if err != nil {
-		internalError(w, r, err)
+		platform.InternalError(w, r, err)
 		return
 	}
 	var ids []string
@@ -72,33 +73,33 @@ func (s *Server) news(w http.ResponseWriter, r *http.Request) {
 	badges := map[string]db.CVEBadge{}
 	if len(ids) > 0 {
 		if badges, err = s.Store.CVEBadges(r.Context(), ids); err != nil {
-			internalError(w, r, err)
+			platform.InternalError(w, r, err)
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": total, "cves": badges})
+	platform.WriteJSON(w, http.StatusOK, map[string]any{"items": items, "total": total, "cves": badges})
 }
 
 // setBookmark bookmarks (or un-bookmarks) a feed article so it is kept past
 // its retention and listed under bookmarked=1. Body: {"url": "…",
 // "bookmarked": true}.
-func (s *Server) setBookmark(w http.ResponseWriter, r *http.Request) {
+func (s *Service) setBookmark(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		URL        string `json:"url"`
 		Bookmarked bool   `json:"bookmarked"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&body); err != nil || body.URL == "" {
-		writeError(w, http.StatusBadRequest, `body must be {"url": "…", "bookmarked": true|false}`)
+		platform.WriteError(w, http.StatusBadRequest, `body must be {"url": "…", "bookmarked": true|false}`)
 		return
 	}
 	found, err := s.Store.SetBookmark(r.Context(), body.URL, body.Bookmarked)
 	if err != nil {
-		internalError(w, r, err)
+		platform.InternalError(w, r, err)
 		return
 	}
 	if !found {
-		writeError(w, http.StatusNotFound, "no article with that URL")
+		platform.WriteError(w, http.StatusNotFound, "no article with that URL")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"url": body.URL, "bookmarked": body.Bookmarked})
+	platform.WriteJSON(w, http.StatusOK, map[string]any{"url": body.URL, "bookmarked": body.Bookmarked})
 }

@@ -1,4 +1,4 @@
-package api
+package intel
 
 import (
 	"errors"
@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/platform"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/syncer"
 )
 
@@ -17,15 +18,15 @@ type syncStatusResponse struct {
 	RecentRuns       []db.SyncRun   `json:"recent_runs"`
 }
 
-func (s *Server) syncStatus(w http.ResponseWriter, r *http.Request) {
+func (s *Service) syncStatus(w http.ResponseWriter, r *http.Request) {
 	states, err := s.Store.SyncStates(r.Context())
 	if err != nil {
-		internalError(w, r, err)
+		platform.InternalError(w, r, err)
 		return
 	}
 	runs, err := s.Store.RecentRuns(r.Context(), recentRunsLimit)
 	if err != nil {
-		internalError(w, r, err)
+		platform.InternalError(w, r, err)
 		return
 	}
 	if states == nil {
@@ -34,29 +35,29 @@ func (s *Server) syncStatus(w http.ResponseWriter, r *http.Request) {
 	if runs == nil {
 		runs = []db.SyncRun{}
 	}
-	writeJSON(w, http.StatusOK, syncStatusResponse{SchedulerEnabled: s.sched != nil, Sources: states, RecentRuns: runs})
+	platform.WriteJSON(w, http.StatusOK, syncStatusResponse{SchedulerEnabled: s.sched != nil, Sources: states, RecentRuns: runs})
 }
 
 // triggerSync queues an immediate run of one source. The run itself happens
 // in the scheduler; poll /sync/status for the outcome.
-func (s *Server) triggerSync(w http.ResponseWriter, r *http.Request) {
+func (s *Service) triggerSync(w http.ResponseWriter, r *http.Request) {
 	if s.sched == nil {
-		writeError(w, http.StatusConflict, "sync scheduler is disabled (SYNC_ENABLED=false)")
+		platform.WriteError(w, http.StatusConflict, "sync scheduler is disabled (SYNC_ENABLED=false)")
 		return
 	}
 	source := r.PathValue("source")
 	if err := s.sched.Trigger(source); errors.Is(err, syncer.ErrUnknownSource) {
-		writeError(w, http.StatusNotFound, "unknown source")
+		platform.WriteError(w, http.StatusNotFound, "unknown source")
 		return
 	}
-	writeJSON(w, http.StatusAccepted, map[string]string{"status": "queued", "source": source})
+	platform.WriteJSON(w, http.StatusAccepted, map[string]string{"status": "queued", "source": source})
 }
 
-func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
+func (s *Service) dashboard(w http.ResponseWriter, r *http.Request) {
 	d, err := s.Store.Dashboard(r.Context(), time.Now())
 	if err != nil {
-		internalError(w, r, err)
+		platform.InternalError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, d)
+	platform.WriteJSON(w, http.StatusOK, d)
 }

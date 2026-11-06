@@ -1,4 +1,4 @@
-package api
+package intel
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/cverecord"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/platform"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/reports"
 )
 
@@ -84,10 +85,10 @@ type reportsResponse struct {
 // the UI can load groups independently. Fresh cache entries are served
 // as-is; the rest are fetched concurrently and cached. A failing source is
 // reported, not fatal.
-func (s *Server) cveReports(w http.ResponseWriter, r *http.Request) {
+func (s *Service) cveReports(w http.ResponseWriter, r *http.Request) {
 	id := strings.ToUpper(r.PathValue("id"))
 	if !cverecord.IDPattern.MatchString(id) {
-		writeError(w, http.StatusBadRequest, "id must look like CVE-2024-12345")
+		platform.WriteError(w, http.StatusBadRequest, "id must look like CVE-2024-12345")
 		return
 	}
 	wanted := reports.Sources
@@ -95,7 +96,7 @@ func (s *Server) cveReports(w http.ResponseWriter, r *http.Request) {
 		wanted = nil
 		for _, src := range strings.Split(v, ",") {
 			if !slices.Contains(reports.Sources, src) {
-				writeError(w, http.StatusBadRequest, "sources must be a comma list of "+strings.Join(reports.Sources, ", "))
+				platform.WriteError(w, http.StatusBadRequest, "sources must be a comma list of "+strings.Join(reports.Sources, ", "))
 				return
 			}
 			wanted = append(wanted, src)
@@ -103,11 +104,11 @@ func (s *Server) cveReports(w http.ResponseWriter, r *http.Request) {
 	}
 	d, err := s.Store.GetCVE(r.Context(), id)
 	if errors.Is(err, db.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "CVE not found")
+		platform.WriteError(w, http.StatusNotFound, "CVE not found")
 		return
 	}
 	if err != nil {
-		internalError(w, r, err)
+		platform.InternalError(w, r, err)
 		return
 	}
 	req := reports.Request{CVEID: id, AdvisoryURLs: advisoryURLs(d.Refs), CommitURLs: reports.CommitURLs(referenceURLs(d.Refs))}
@@ -121,7 +122,7 @@ func (s *Server) cveReports(w http.ResponseWriter, r *http.Request) {
 	}
 	cached, err := s.Store.CachedReports(r.Context(), id)
 	if err != nil {
-		internalError(w, r, err)
+		platform.InternalError(w, r, err)
 		return
 	}
 
@@ -154,7 +155,7 @@ func (s *Server) cveReports(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 	wg.Wait()
-	writeJSON(w, http.StatusOK, resp)
+	platform.WriteJSON(w, http.StatusOK, resp)
 }
 
 func fresh(c db.CachedReport) bool {
@@ -171,7 +172,7 @@ func fresh(c db.CachedReport) bool {
 	return time.Since(c.FetchedAt) < ttl
 }
 
-func (s *Server) fetchReport(ctx context.Context, source string, req reports.Request) (reportStatus, json.RawMessage) {
+func (s *Service) fetchReport(ctx context.Context, source string, req reports.Request) (reportStatus, json.RawMessage) {
 	ctx, cancel := context.WithTimeout(ctx, reportTimeout)
 	defer cancel()
 	now := time.Now().UTC()
@@ -203,14 +204,14 @@ func (s *Server) fetchReport(ctx context.Context, source string, req reports.Req
 // series returns a daily metric series for the dashboard chart.
 // Parameters: metric (published, kev_added, exploits), from and to
 // (YYYY-MM-DD, inclusive; default the last 90 days).
-func (s *Server) series(w http.ResponseWriter, r *http.Request) {
+func (s *Service) series(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	metric := q.Get("metric")
 	if metric == "" {
 		metric = "published"
 	}
 	if !db.IsMetric(metric) {
-		writeError(w, http.StatusBadRequest, "metric must be one of published, kev_added, exploits")
+		platform.WriteError(w, http.StatusBadRequest, "metric must be one of published, kev_added, exploits")
 		return
 	}
 	today := time.Now().UTC().Truncate(24 * time.Hour)
@@ -222,24 +223,24 @@ func (s *Server) series(w http.ResponseWriter, r *http.Request) {
 		if v := q.Get(p.name); v != "" {
 			t, err := time.Parse("2006-01-02", v)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, p.name+" must be YYYY-MM-DD")
+				platform.WriteError(w, http.StatusBadRequest, p.name+" must be YYYY-MM-DD")
 				return
 			}
 			*p.dst = t
 		}
 	}
 	if from.After(to) {
-		writeError(w, http.StatusBadRequest, "from must not be after to")
+		platform.WriteError(w, http.StatusBadRequest, "from must not be after to")
 		return
 	}
 	if to.Sub(from) > db.MaxSeriesDays*24*time.Hour {
-		writeError(w, http.StatusBadRequest, "range is limited to about three years")
+		platform.WriteError(w, http.StatusBadRequest, "range is limited to about three years")
 		return
 	}
 	out, err := s.Store.DailySeries(r.Context(), metric, from, to)
 	if err != nil {
-		internalError(w, r, err)
+		platform.InternalError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	platform.WriteJSON(w, http.StatusOK, out)
 }

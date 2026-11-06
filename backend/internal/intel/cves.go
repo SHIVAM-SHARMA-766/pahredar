@@ -1,4 +1,4 @@
-package api
+package intel
 
 import (
 	"encoding/json"
@@ -16,6 +16,7 @@ import (
 
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/cverecord"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/platform"
 )
 
 const (
@@ -38,35 +39,35 @@ type listResponse struct {
 	PageSize int             `json:"page_size"`
 }
 
-func (s *Server) cveFacets(w http.ResponseWriter, r *http.Request) {
+func (s *Service) cveFacets(w http.ResponseWriter, r *http.Request) {
 	p, _, err := parseListParams(r.URL.Query())
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		platform.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	facets, err := s.Store.FacetCVEs(r.Context(), p)
 	if err != nil {
-		internalError(w, r, err)
+		platform.InternalError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, facets)
+	platform.WriteJSON(w, http.StatusOK, facets)
 }
 
-func (s *Server) listCVEs(w http.ResponseWriter, r *http.Request) {
+func (s *Service) listCVEs(w http.ResponseWriter, r *http.Request) {
 	p, page, err := parseListParams(r.URL.Query())
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		platform.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	items, total, err := s.Store.ListCVEs(r.Context(), p)
 	if err != nil {
-		internalError(w, r, err)
+		platform.InternalError(w, r, err)
 		return
 	}
 	if items == nil {
 		items = []db.CVESummary{}
 	}
-	writeJSON(w, http.StatusOK, listResponse{Items: items, Total: total, Page: page, PageSize: p.Limit})
+	platform.WriteJSON(w, http.StatusOK, listResponse{Items: items, Total: total, Page: page, PageSize: p.Limit})
 }
 
 func parseListParams(q url.Values) (db.ListCVEParams, int, error) {
@@ -327,19 +328,19 @@ type effectiveCVSS struct {
 	V2 *cverecord.Metric `json:"v2"`
 }
 
-func (s *Server) getCVE(w http.ResponseWriter, r *http.Request) {
+func (s *Service) getCVE(w http.ResponseWriter, r *http.Request) {
 	id := strings.ToUpper(r.PathValue("id"))
 	if !cverecord.IDPattern.MatchString(id) {
-		writeError(w, http.StatusBadRequest, "id must look like CVE-2024-12345")
+		platform.WriteError(w, http.StatusBadRequest, "id must look like CVE-2024-12345")
 		return
 	}
 	d, err := s.Store.GetCVE(r.Context(), id)
 	if errors.Is(err, db.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "CVE not found")
+		platform.WriteError(w, http.StatusNotFound, "CVE not found")
 		return
 	}
 	if err != nil {
-		internalError(w, r, err)
+		platform.InternalError(w, r, err)
 		return
 	}
 
@@ -384,7 +385,7 @@ func (s *Server) getCVE(w http.ResponseWriter, r *http.Request) {
 		d.Exploits = []db.ExploitOut{}
 	}
 
-	writeJSON(w, http.StatusOK, cveDetailResponse{
+	platform.WriteJSON(w, http.StatusOK, cveDetailResponse{
 		ID: d.ID, State: d.State, Assigner: d.Assigner,
 		DateReserved: d.DateReserved, DatePublished: d.DatePublished, DateUpdated: d.DateUpdated,
 		Title: d.Title, Description: d.Description, CWEIDs: d.CWEIDs, CWEs: cwes,

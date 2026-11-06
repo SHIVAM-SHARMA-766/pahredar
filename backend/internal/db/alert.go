@@ -2,7 +2,10 @@ package db
 
 import (
 	"context"
+	"errors"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // Alert is one notification about a tracked asset.
@@ -113,5 +116,58 @@ func (s *Store) MarkAlertRead(ctx context.Context, id int64) error {
 		return err
 	}
 	_, err := s.pool.Exec(ctx, `UPDATE alert SET read_at = now() WHERE id = $1 AND read_at IS NULL`, id)
+	return err
+}
+
+// InsertAlerts inserts each alert (deduped on type+asset+cve) and returns the
+// ones newly created. Used for scan-triggered alerts (e.g. critical findings).
+func (s *Store) InsertAlerts(ctx context.Context, alerts []Alert) ([]Alert, error) {
+	out := []Alert{}
+	for _, al := range alerts {
+		var a Alert
+		err := s.pool.QueryRow(ctx, `
+			INSERT INTO alert (type, asset_id, cve_id, severity, title, detail)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (type, asset_id, cve_id) DO NOTHING
+			RETURNING id, type, asset_id, cve_id, severity, title, detail, created_at`,
+			al.Type, al.AssetID, al.CVEID, al.Severity, al.Title, al.Detail).
+			Scan(&a.ID, &a.Type, &a.AssetID, &a.CVEID, &a.Severity, &a.Title, &a.Detail, &a.CreatedAt)
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue // already existed
+		}
+		if err != nil {
+			return out, err
+		}
+		out = append(out, a)
+	}
+	return out, nil
+}
+
+// PendingAlerts returns alerts not yet delivered to the webhook, oldest first.
+func (s *Store) PendingAlerts(ctx context.Context, limit int) ([]Alert, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, type, asset_id, cve_id, severity, title, detail, created_at
+		FROM alert WHERE delivered_at IS NULL ORDER BY created_at LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Alert{}
+	for rows.Next() {
+		var a Alert
+		if err := rows.Scan(&a.ID, &a.Type, &a.AssetID, &a.CVEID, &a.Severity, &a.Title, &a.Detail, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// MarkAlertsDelivered stamps the given alerts delivered.
+func (s *Store) MarkAlertsDelivered(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err := s.pool.Exec(ctx, `UPDATE alert SET delivered_at = now() WHERE id = ANY($1)`, ids)
 	return err
 }

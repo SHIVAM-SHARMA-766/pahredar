@@ -31,7 +31,7 @@ export function AlertsPage() {
 
   return (
     <>
-      <PageHeader title="Alerts" subtitle="Raised when a CVE matched to one of your assets is known-exploited (KEV) or likely to be exploited soon (high EPSS)." />
+      <PageHeader title="Alerts" subtitle="Raised when a tracked asset is affected by a known-exploited (KEV) or likely-exploited (high EPSS) CVE, or a scan finds a critical issue on it." />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="flex rounded-lg border border-zinc-800 bg-zinc-900 p-0.5">
@@ -69,6 +69,7 @@ function AlertRow({ a, onRead }: { a: Alert; onRead: () => void }) {
           <span className="text-sm font-medium text-zinc-100">{a.title}</span>
           {a.type === 'kev_match' && <Tag tone="red">KEV</Tag>}
           {a.type === 'epss_high' && <Tag tone="amber">High EPSS</Tag>}
+          {a.type === 'critical_finding' && <Tag tone="red">Critical finding</Tag>}
           {unread && <Tag tone="cyan">new</Tag>}
         </div>
         {a.detail && <p className="mt-0.5 text-sm text-zinc-400">{a.detail}</p>}

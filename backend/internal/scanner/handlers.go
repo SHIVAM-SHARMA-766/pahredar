@@ -154,6 +154,9 @@ func (s *Service) handleScanTask(ctx context.Context, payload json.RawMessage, p
 		_ = s.Store.LinkAssetScan(saveCtx, p.AssetID, id)
 		_ = s.Store.ReplaceAssetCVEs(saveCtx, p.AssetID, assetCVEsFromReport(rep))
 		_ = s.Store.ReplaceAssetTech(saveCtx, p.AssetID, assetTechFromReport(rep))
+		if fa := findingAlerts(p.AssetID, p.Host, rep); len(fa) > 0 {
+			_, _ = s.Store.InsertAlerts(saveCtx, fa)
+		}
 	}
 	return res, nil
 }
@@ -286,4 +289,38 @@ func assetTechFromReport(rep *scan.Report) []db.AssetTech {
 		out = append(out, db.AssetTech{Vendor: t.CVEs.Vendor, Product: t.CVEs.Product, Version: t.Version})
 	}
 	return out
+}
+
+// findingAlerts builds alerts for the critical findings on an asset's scan,
+// deduped per (asset, finding) so a persistent issue does not re-alert.
+func findingAlerts(assetID int64, host string, rep *scan.Report) []db.Alert {
+	out := []db.Alert{}
+	aid := assetID
+	for _, f := range rep.Findings {
+		if f.Severity != scan.SevCritical {
+			continue
+		}
+		detail := f.Title
+		if f.Detail != "" {
+			detail += " — " + f.Detail
+		}
+		out = append(out, db.Alert{
+			Type:     "critical_finding",
+			AssetID:  &aid,
+			CVEID:    clip("finding:"+f.Category+":"+f.Title, 300),
+			Severity: "critical",
+			Title:    "Critical issue on " + host,
+			Detail:   clip(detail, 500),
+		})
+	}
+	return out
+}
+
+// clip truncates s to n runes.
+func clip(s string, n int) string {
+	r := []rune(s)
+	if len(r) > n {
+		return string(r[:n])
+	}
+	return s
 }

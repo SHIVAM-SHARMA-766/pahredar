@@ -32,33 +32,32 @@ func NewNotifier(url string, log *slog.Logger) *Notifier {
 // Enabled reports whether a webhook is configured.
 func (n *Notifier) Enabled() bool { return n != nil && n.url != "" }
 
-// Deliver posts the alerts to the webhook as JSON {text, alerts}.
-func (n *Notifier) Deliver(ctx context.Context, alerts []db.Alert) {
+// Deliver posts the alerts to the webhook as JSON {text, alerts}. It returns an
+// error on failure so the caller can leave them pending for the next attempt.
+func (n *Notifier) Deliver(ctx context.Context, alerts []db.Alert) error {
 	if !n.Enabled() || len(alerts) == 0 {
-		return
+		return nil
 	}
 	payload := map[string]any{"text": summarize(alerts), "alerts": alerts}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return
+		return err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, n.url, bytes.NewReader(body))
 	if err != nil {
-		n.log.Warn("alert webhook request", "err", err)
-		return
+		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := n.client.Do(req)
 	if err != nil {
-		n.log.Warn("alert webhook delivery failed", "err", err)
-		return
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		n.log.Warn("alert webhook returned error", "status", resp.StatusCode)
-		return
+		return fmt.Errorf("webhook returned status %d", resp.StatusCode)
 	}
 	n.log.Info("alerts delivered to webhook", "count", len(alerts))
+	return nil
 }
 
 // summarize builds a human-readable message for the webhook's text field.

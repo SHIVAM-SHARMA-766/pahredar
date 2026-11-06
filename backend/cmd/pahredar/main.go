@@ -335,11 +335,28 @@ func alertCheckLoop(ctx context.Context, store *db.Store, notifier *alerts.Notif
 		newAlerts, err := alerts.Check(rctx, store)
 		if err != nil {
 			slog.Warn("alert check failed", "err", err)
-			return
-		}
-		if len(newAlerts) > 0 {
+		} else if len(newAlerts) > 0 {
 			slog.Info("alerts raised", "count", len(newAlerts))
-			notifier.Deliver(rctx, newAlerts)
+		}
+		// Deliver any undelivered alerts (periodic or scan-triggered); failures
+		// leave them pending for the next tick.
+		if notifier.Enabled() {
+			pending, perr := store.PendingAlerts(rctx, 100)
+			if perr != nil {
+				slog.Warn("pending alerts query failed", "err", perr)
+			} else if len(pending) > 0 {
+				if derr := notifier.Deliver(rctx, pending); derr != nil {
+					slog.Warn("alert delivery failed", "err", derr)
+				} else {
+					ids := make([]int64, len(pending))
+					for i, a := range pending {
+						ids[i] = a.ID
+					}
+					if merr := store.MarkAlertsDelivered(rctx, ids); merr != nil {
+						slog.Warn("mark delivered failed", "err", merr)
+					}
+				}
+			}
 		}
 	}
 	select {

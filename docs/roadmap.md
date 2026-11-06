@@ -47,10 +47,19 @@ Outcome: new services plug in via the registry; scans are durable.
 Outcome: Pahredar becomes an inventory that tells the operator what is wrong,
 not three separate tools.
 
-### Phase 3 — Monitoring & alerting · next
+### Phase 3 — Monitoring & alerting · in progress
 
 The asset_cve reverse lookup (Phase 2 M3) is the seed: on a new KEV/CVE match,
 find the affected assets and notify.
+
+- **M1 (done)** — alert table (migration 00023) + `internal/alerts` service; a
+  periodic check raises a deduped alert when a CVE matched to a tracked asset is
+  in CISA KEV. In-app alerts feed with a nav unread badge.
+- **M2 (next)** — more triggers (EPSS spikes, new critical findings) and
+  `asset_tech` so alerts catch any new KEV for an asset\'s products, not only
+  CVEs already in `asset_cve`.
+- **M3** — delivery out (webhook, then email) and the P5 auth skeleton so the
+  API can be driven by automation.
 
 
 - **P5 auth skeleton** so the API can be driven by automation.

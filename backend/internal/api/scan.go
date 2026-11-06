@@ -33,6 +33,7 @@ type scanJob struct {
 	Cached   bool          `json:"cached"`
 	started  time.Time
 	finished time.Time
+	filter   *scan.TemplateFilter
 }
 
 // snapshot returns a copy safe to serialise outside the lock.
@@ -45,10 +46,11 @@ func (j *scanJob) snapshot() scanJob {
 // {"target","active"?,"authorized"?,"fresh"?}.
 func (s *Server) runScan(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Target     string `json:"target"`
-		Fresh      bool   `json:"fresh"`
-		Active     bool   `json:"active"`
-		Authorized bool   `json:"authorized"`
+		Target     string               `json:"target"`
+		Fresh      bool                 `json:"fresh"`
+		Active     bool                 `json:"active"`
+		Authorized bool                 `json:"authorized"`
+		Templates  *scan.TemplateFilter `json:"templates"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&body); err != nil || body.Target == "" {
 		writeError(w, http.StatusBadRequest, `body must be {"target": "example.com"}`)
@@ -75,7 +77,7 @@ func (s *Server) runScan(w http.ResponseWriter, r *http.Request) {
 		if id, payload, ok, err := s.store.LatestScanFor(r.Context(), host, time.Now().Add(-scanReuse)); err == nil && ok {
 			var rep scan.Report
 			if json.Unmarshal(payload, &rep) == nil {
-				job := s.newJob(body.Target, host, false)
+				job := s.newJob(body.Target, host, false, nil)
 				job.Status = "done"
 				job.Report = &rep
 				job.StoredID = id
@@ -87,16 +89,16 @@ func (s *Server) runScan(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	job := s.newJob(body.Target, host, body.Active)
+	job := s.newJob(body.Target, host, body.Active, body.Templates)
 	go s.execJob(job)
 	writeJSON(w, http.StatusAccepted, map[string]any{"id": job.ID})
 }
 
-func (s *Server) newJob(target, host string, active bool) *scanJob {
+func (s *Server) newJob(target, host string, active bool, filter *scan.TemplateFilter) *scanJob {
 	s.jobsMu.Lock()
 	defer s.jobsMu.Unlock()
 	s.nextJob++
-	j := &scanJob{ID: s.nextJob, Target: target, Host: host, Active: active, Status: "queued", started: time.Now()}
+	j := &scanJob{ID: s.nextJob, Target: target, Host: host, Active: active, Status: "queued", started: time.Now(), filter: filter}
 	s.jobs[j.ID] = j
 	return j
 }
@@ -115,7 +117,7 @@ func (s *Server) execJob(job *scanJob) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	rep, err := s.scanner.Scan(ctx, job.Target, job.Active, func(p scan.Progress) {
+	rep, err := s.scanner.Scan(ctx, job.Target, job.Active, job.filter, func(p scan.Progress) {
 		s.updateJob(job.ID, func(j *scanJob) { j.Progress = p })
 	})
 	if err != nil {

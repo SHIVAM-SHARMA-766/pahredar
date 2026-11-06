@@ -115,11 +115,50 @@ func hasTemplates(dir string) bool {
 	return len(entries) > 3 // the template repo has many top-level folders
 }
 
+// TemplateFilter narrows which Nuclei templates run. An empty filter runs the
+// full HTTP/SSL set; otherwise only templates matching the given tags,
+// severities, or exact IDs run (the "run many templates" selection).
+type TemplateFilter struct {
+	Tags     []string `json:"tags"`
+	Severity []string `json:"severity"`
+	IDs      []string `json:"ids"`
+}
+
+func (f *TemplateFilter) empty() bool {
+	return f == nil || (len(f.Tags) == 0 && len(f.Severity) == 0 && len(f.IDs) == 0)
+}
+
+// cleanList keeps only safe template-filter tokens (nuclei args are passed as
+// separate argv, but this guards against junk and caps the count).
+func cleanList(in []string) []string {
+	out := []string{}
+	for _, s := range in {
+		s = strings.TrimSpace(strings.ToLower(s))
+		if s == "" || len(s) > 64 {
+			continue
+		}
+		ok := true
+		for _, r := range s {
+			if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_' || r == '.') {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			out = append(out, s)
+		}
+		if len(out) >= 100 {
+			break
+		}
+	}
+	return out
+}
+
 // Run scans targetURL and returns the templates that matched, calling
 // onStats periodically with live progress from Nuclei's statistics and
 // onFinding once for each template the first time it matches (so results can
-// stream to the UI as they are found).
-func (n *Nuclei) Run(ctx context.Context, targetURL string, onStats func(ActiveProgress), onFinding func(ActiveFinding)) (*ActiveScan, error) {
+// stream to the UI as they are found). filter narrows which templates run.
+func (n *Nuclei) Run(ctx context.Context, targetURL string, filter *TemplateFilter, onStats func(ActiveProgress), onFinding func(ActiveFinding)) (*ActiveScan, error) {
 	if onStats == nil {
 		onStats = func(ActiveProgress) {}
 	}
@@ -141,6 +180,17 @@ func (n *Nuclei) Run(ctx context.Context, targetURL string, onStats func(ActiveP
 		"-rate-limit", "50", "-concurrency", "25", "-timeout", "10", "-retries", "1", "-max-host-error", "40",
 		"-no-interactsh",                                // keep the scan self-contained (no out-of-band callbacks)
 		"-stats", "-stats-json", "-stats-interval", "2", // live progress on stderr
+	}
+	if !filter.empty() {
+		if t := cleanList(filter.Tags); len(t) > 0 {
+			args = append(args, "-tags", strings.Join(t, ","))
+		}
+		if sv := cleanList(filter.Severity); len(sv) > 0 {
+			args = append(args, "-severity", strings.Join(sv, ","))
+		}
+		if id := cleanList(filter.IDs); len(id) > 0 {
+			args = append(args, "-id", strings.Join(id, ","))
+		}
 	}
 	cmd := exec.CommandContext(ctx, n.bin, args...)
 	cmd.Env = n.env()

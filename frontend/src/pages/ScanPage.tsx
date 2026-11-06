@@ -34,6 +34,11 @@ export function ScanPage() {
   const [input, setInput] = useState(params.get('target') ?? '')
   const [active, setActive] = useState(false)
   const [authorized, setAuthorized] = useState(false)
+  // Optional active-scan template filters (run a chosen subset, not all 19k).
+  const [tmplTags, setTmplTags] = useState('')
+  const [tmplIds, setTmplIds] = useState('')
+  const [tmplSev, setTmplSev] = useState<string[]>([])
+  const [showFilters, setShowFilters] = useState(false)
   const [jobId, setJobId] = useState<number | null>(() => {
     const j = Number(params.get('job'))
     return Number.isInteger(j) && j > 0 ? j : null
@@ -41,7 +46,7 @@ export function ScanPage() {
   const config = useQuery({ queryKey: ['scan-config'], queryFn: api.scanConfig, staleTime: 5 * 60_000 })
 
   const start = useMutation({
-    mutationFn: (v: { target: string; fresh?: boolean; active?: boolean; authorized?: boolean }) => api.scan(v.target, { fresh: v.fresh, active: v.active, authorized: v.authorized }),
+    mutationFn: (v: { target: string; fresh?: boolean; active?: boolean; authorized?: boolean; templates?: { tags?: string[]; severity?: string[]; ids?: string[] } }) => api.scan(v.target, { fresh: v.fresh, active: v.active, authorized: v.authorized, templates: v.templates }),
     onSuccess: (res, v) => {
       setJobId(res.id)
       const next = new URLSearchParams(params)
@@ -77,9 +82,15 @@ export function ScanPage() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     const t = input.trim()
-    if (t && (!runActive || authorized)) start.mutate({ target: t, active: runActive, authorized })
+    if (t && (!runActive || authorized)) start.mutate({ target: t, active: runActive, authorized, templates: runActive ? buildTemplates() : undefined })
   }
-  const rescan = () => report && start.mutate({ target: report.target, fresh: true, active: runActive, authorized })
+  const buildTemplates = () => {
+    const tags = tmplTags.split(',').map((s) => s.trim()).filter(Boolean)
+    const ids = tmplIds.split(',').map((s) => s.trim()).filter(Boolean)
+    if (!tags.length && !ids.length && !tmplSev.length) return undefined
+    return { tags, severity: tmplSev, ids }
+  }
+  const rescan = () => report && start.mutate({ target: report.target, fresh: true, active: runActive, authorized, templates: runActive ? buildTemplates() : undefined })
   const newScan = () => {
     setJobId(null)
     const next = new URLSearchParams(params)
@@ -168,6 +179,35 @@ GET /.git/HEAD  404     GET /.env  404     /.well-known/security.txt 200
             <input type="checkbox" checked={authorized} onChange={(e) => setAuthorized(e.target.checked)} className="accent-amber-400" />
             I am authorised to actively test this target.
           </label>
+        )}
+        {runActive && (
+          <div className="mx-auto mt-3 max-w-xl text-left">
+            <button type="button" onClick={() => setShowFilters((v) => !v)} className="mx-auto flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200">
+              {showFilters ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />} Template filters (optional) — run a chosen subset, not all
+            </button>
+            {showFilters && (
+              <div className="mt-2 space-y-2 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+                <div>
+                  <label className="mb-1 block text-[11px] text-zinc-500">Severity</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['critical', 'high', 'medium', 'low', 'info'].map((sv) => {
+                      const on = tmplSev.includes(sv)
+                      return <button key={sv} type="button" onClick={() => setTmplSev((p) => on ? p.filter((x) => x !== sv) : [...p, sv])} className={`rounded px-2 py-0.5 text-xs ring-1 ring-inset ${on ? 'bg-rose-500/15 text-rose-200 ring-rose-400/30' : 'text-zinc-400 ring-zinc-700 hover:text-zinc-200'}`}>{sv}</button>
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] text-zinc-500">Tags (comma-separated, e.g. cve,rce,exposure,wordpress)</label>
+                  <input value={tmplTags} onChange={(e) => setTmplTags(e.target.value)} placeholder="cve,exposure,misconfig" className="w-full rounded border border-zinc-800 bg-zinc-950 px-2 py-1 font-mono text-xs text-zinc-200 placeholder:text-zinc-600 focus:border-rose-400/40 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] text-zinc-500">Template IDs (comma-separated)</label>
+                  <input value={tmplIds} onChange={(e) => setTmplIds(e.target.value)} placeholder="CVE-2021-44228,git-config" className="w-full rounded border border-zinc-800 bg-zinc-950 px-2 py-1 font-mono text-xs text-zinc-200 placeholder:text-zinc-600 focus:border-rose-400/40 focus:outline-none" />
+                </div>
+                <p className="text-[11px] text-zinc-600">Leave empty to run the full set. Filters narrow Nuclei to matching templates — far faster for a focused test.</p>
+              </div>
+            )}
+          </div>
         )}
         <p className="mx-auto mt-3 flex max-w-xl items-center justify-center gap-1.5 text-xs text-zinc-600">
           <AlertTriangle className="h-3.5 w-3.5" /> Only scan endpoints you own or are authorised to assess. Scans are logged.

@@ -69,7 +69,7 @@ export const api = {
     }
     return request<NewsPage>(`/api/v1/news?${p}`)
   },
-  scan: (target: string, opts: { fresh?: boolean; active?: boolean; authorized?: boolean } = {}) =>
+  scan: (target: string, opts: { fresh?: boolean; active?: boolean; authorized?: boolean; templates?: { tags?: string[]; severity?: string[]; ids?: string[] } } = {}) =>
     request<{ id: number }>('/api/v1/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

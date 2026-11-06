@@ -186,7 +186,7 @@ func ParseTarget(in string) (host string, base *url.URL, err error) {
 // Scan assesses one target. It is bounded by ctx; callers pass a timeout.
 // When active is true and a Nuclei runner is configured, intrusive checks
 // run after the passive phase.
-func (sc *Scanner) Scan(ctx context.Context, target string, active bool, onProgress func(Progress)) (*Report, error) {
+func (sc *Scanner) Scan(ctx context.Context, target string, active bool, filter *TemplateFilter, onProgress func(Progress)) (*Report, error) {
 	start := time.Now()
 	if onProgress == nil {
 		onProgress = func(Progress) {}
@@ -357,7 +357,7 @@ func (sc *Scanner) Scan(ctx context.Context, target string, active bool, onProgr
 			mu.Unlock()
 			emit()
 		}
-		if as, err := sc.active.Run(ctx, targetURL, onActive, onFinding); err != nil {
+		if as, err := sc.active.Run(ctx, targetURL, filter, onActive, onFinding); err != nil {
 			rep.Errors = append(rep.Errors, "active: "+err.Error())
 		} else {
 			rep.Active = as

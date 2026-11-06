@@ -41,7 +41,7 @@ const SECTIONS: { title: string; dot: string; items: NavItem[] }[] = [
   {
     title: 'Inventory',
     dot: 'bg-violet-400',
-    items: [{ to: '/assets', label: 'Assets', icon: Boxes, active: (l) => l.pathname.startsWith('/assets') }],
+    items: [{ to: '/inventory', label: 'Assets', icon: Boxes, active: (l) => l.pathname.startsWith('/inventory') }],
   },
   {
     title: 'Vulnerability intelligence',

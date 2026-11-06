@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2, Plus, Radar, Trash2 } from 'lucide-react'
 import { useState } from 'react'
-import { useNavigate } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { api } from '../api/client'
 import type { Asset } from '../api/types'
 import { Card, ErrorBox, PageHeader, Spinner, Tag } from '../components/ui'
@@ -91,7 +91,7 @@ export function AssetsPage() {
               <li key={a.id} className="flex flex-wrap items-center gap-3 py-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-sm text-zinc-100">{a.value}</span>
+                    <Link to={`/inventory/${a.id}`} className="font-mono text-sm text-cyan-300 hover:text-cyan-200">{a.value}</Link>
                     <Tag tone="zinc">{a.kind}</Tag>
                     {a.tags.map((t) => <Tag key={t} tone="violet">{t}</Tag>)}
                   </div>

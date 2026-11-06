@@ -84,6 +84,7 @@ export const api = {
     request<{ id: number }>('/api/v1/assets', { method: 'POST', body: JSON.stringify(body) }),
   deleteAsset: (id: number) => request<{ deleted: number }>(`/api/v1/assets/${id}`, { method: 'DELETE' }),
   scanAsset: (id: number) => request<{ job_id: number }>(`/api/v1/assets/${id}/scan`, { method: 'POST' }),
+  assetScans: (id: number) => request<{ items: ScanSummary[] }>(`/api/v1/assets/${id}/scans`),
   scanRequest: (spec: ScanRequestSpec) => request<ScanRequestResult>('/api/v1/scan/request', { method: 'POST', body: JSON.stringify(spec) }),
   recentScans: () => request<{ items: ScanSummary[] }>('/api/v1/scans'),
   getScan: (id: number) => request<ScanReport>(`/api/v1/scans/${id}`),

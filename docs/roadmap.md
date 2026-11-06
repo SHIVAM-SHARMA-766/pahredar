@@ -36,9 +36,11 @@ Outcome: new services plug in via the registry; scans are durable.
   asset), an Inventory nav/page, and scan→asset linking (an asset shows its
   latest scan's grade). Adding the service was one line in `api.New` — the
   module foundation proven.
-- **M2 (next)** — asset detail: its scans, the tech fingerprinted on it, and the
-  CVEs matched to that tech (`asset_tech` / `asset_cve`, derived from scans).
-- **M3** — scheduled re-scans of assets on the durable queue.
+- **M2 (done)** — scans link to assets (`scan.asset_id`, migration 00021) and
+  the asset detail page shows its latest-scan posture: tech fingerprinted on it
+  with matched CVEs, a security-issues summary, a score gauge, and scan history.
+- **M3 (next)** — scheduled re-scans of assets on the durable queue, and
+  persisting matched CVEs per asset (`asset_cve`) to drive alerting.
 
 Outcome: Pahredar becomes an inventory that tells the operator what is wrong,
 not three separate tools.
@@ -76,6 +78,9 @@ Kept here (not in the README) on purpose.
   them; needs a DNS library).
 - **Single Postgres, no backups configured** in the compose dev setup.
 - **No CI yet** (P7).
+
+- **Inventory routes are `/inventory`** (not `/assets`) because the Vite build
+  serves its hashed bundles under `/assets/`; the API stays `/api/v1/assets`.
 
 ## Non-goals
 

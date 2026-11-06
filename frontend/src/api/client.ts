@@ -39,9 +39,18 @@ export class ApiError extends Error {
   }
 }
 
+import { getApiKey, requireAuth } from '../lib/auth'
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, { ...init, headers: { Accept: 'application/json', ...init?.headers } })
+  const key = getApiKey()
+  const headers: Record<string, string> = { Accept: 'application/json', ...(init?.headers as Record<string, string>) }
+  if (key) headers.Authorization = `Bearer ${key}`
+  const res = await fetch(path, { ...init, headers })
   const body = await res.json().catch(() => null)
+  if (res.status === 401) {
+    requireAuth()
+    throw new ApiError(401, body?.error ?? 'unauthorized')
+  }
   if (!res.ok) {
     throw new ApiError(res.status, body?.error ?? res.statusText)
   }

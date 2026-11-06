@@ -60,9 +60,11 @@ find the affected assets and notify.
   catching any known-exploited CVE for the asset's products (not just the
   asset_cve examples) the moment the KEV catalog updates. *Still to add:
   EPSS-spike and new-critical-finding triggers.*
-- **M3 (in progress)** — delivery out: a webhook notifier posts new alerts as
-  JSON {text, alerts} to `ALERT_WEBHOOK_URL` (done). *Next: email delivery and
-  the P5 auth skeleton so the API can be driven by automation.*
+- **M3 (in progress)** — delivery out: a webhook notifier posts new alerts to
+  `ALERT_WEBHOOK_URL` (done); and an opt-in **API-key auth skeleton** (`API_KEY`
+  gates `/api/v1/*`, `/healthz` open; empty = open) so the API can be driven by
+  automation (done). *Next: email delivery, and SPA auth so the bundled UI
+  works with auth enabled.*
 
 
 - **P5 auth skeleton** so the API can be driven by automation.
@@ -86,8 +88,9 @@ New services become straightforward once the spine exists:
 
 Kept here (not in the README) on purpose.
 
-- **No authentication.** The API is open; run it only on trusted/local
-  networks until P5 lands.
+- **Auth is opt-in and backend-only.** `API_KEY` gates the API, but the bundled
+  SPA sends no key, so with auth enabled the UI needs a login (not built yet);
+  run the UI locally with auth off.
 - **Active scan depends on Nuclei templates bundled in the image.** They are
   pinned, not self-updating; refresh by rebuilding with a newer template tag.
 - **`api/types.ts` is hand-maintained** against the Go types — they can drift;

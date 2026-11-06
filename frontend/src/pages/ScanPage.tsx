@@ -234,37 +234,35 @@ function ScanResult({ host, active, scanning, job, report, cached, errMsg, onNew
         <div className="mt-6"><ErrorBox error={errMsg} /></div>
       ) : report ? (
         <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_340px]">
+          {/* Details first: a recon profile of the endpoint, section by section. */}
           <div className="min-w-0 space-y-6">
-            <FindingsCard findings={report.findings} />
-            {report.active?.ran && <ActiveCard active={report.active} />}
+            <HostCard report={report} />
+            {report.domain && <DomainCard domain={report.domain} />}
+            {report.dns && <DnsCard dns={report.dns} />}
+            {report.tls && <TlsCard tls={report.tls} />}
             <div className="grid gap-6 xl:grid-cols-2">
               {report.tech.length > 0 && <TechCard tech={report.tech} />}
-              {report.tls && <TlsCard tls={report.tls} />}
-              <HeadersCard report={report} />
-              {report.dns && <DnsCard dns={report.dns} />}
-              {report.paths.some((p) => p.exposed) && <PathsCard report={report} />}
-              {report.related && <RelatedCard related={report.related} />}
+              {report.ports.length > 0 && <PortsCard ports={report.ports} />}
             </div>
+            {report.subdomains.length > 0 && <SubdomainsCard subdomains={report.subdomains} />}
+            <HeadersCard report={report} />
+            {report.cookies.length > 0 && <CookiesCard cookies={report.cookies} />}
+            {report.paths.some((p) => p.exposed) && <PathsCard report={report} />}
+            {report.related && <RelatedCard related={report.related} />}
+            {/* Security issues, derived from the details above. */}
+            <div id="issues"><FindingsCard findings={report.findings} /></div>
+            {report.active?.ran && <ActiveCard active={report.active} />}
             {report.errors.length > 0 && (
               <Card title="Scan notes"><ul className="space-y-1 text-xs text-zinc-500">{report.errors.map((e, i) => <li key={i}>{e}</li>)}</ul></Card>
             )}
           </div>
 
           <div className="min-w-0 space-y-6">
-            <Card title="Score">
+            <Card title="Security score">
               <ScoreGauge score={report.score} grade={grade} />
+              <IssuesSummary findings={report.findings} />
             </Card>
             {active && <ActiveCoverage />}
-            <Card title="Target">
-              <dl>
-                <Row label="IP">{report.ip}</Row>
-                {report.http && <Row label="Final URL"><a href={report.http.final_url} target="_blank" rel="noreferrer" className={link}>{report.http.final_url}</a></Row>}
-                {report.http?.server && <Row label="Server">{report.http.server}</Row>}
-                {report.http?.powered_by && <Row label="Powered by">{report.http.powered_by}</Row>}
-                {report.http && <Row label="https redirect">{report.http.https_redirect ? 'yes' : 'no'}</Row>}
-                {report.http && report.http.methods.length > 0 && <Row label="Methods">{report.http.methods.join(', ')}</Row>}
-              </dl>
-            </Card>
             <Card title="Export">
               <button onClick={() => downloadJSON(report)} className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-950 py-2 text-sm text-zinc-200 hover:bg-zinc-800">
                 <Download className="h-4 w-4" /> Download report (JSON)
@@ -609,9 +607,75 @@ function TlsCard({ tls }: { tls: NonNullable<ScanReport['tls']> }) {
   )
 }
 
-function HeadersCard({ report }: { report: ScanReport }) {
+// HostCard is the top of the recon profile: the resolved IP, its network
+// (reverse DNS, ASN, hosting org), and the live HTTP response.
+function HostCard({ report }: { report: ScanReport }) {
+  const n = report.net
   return (
-    <Card title="HTTP headers & cookies">
+    <Card title="Host & network">
+      <dl>
+        <Row label="IP address">{report.ip}</Row>
+        {n?.ptr && <Row label="Reverse DNS">{n.ptr}</Row>}
+        {n?.asn && <Row label="ASN">{n.asn}{n.as_org && <span className="text-zinc-400"> · {n.as_org}</span>}</Row>}
+        {n?.org && <Row label="Network org">{n.org}</Row>}
+        {n?.net_name && <Row label="Net name">{n.net_name}{n.net_range && <span className="text-zinc-500"> · {n.net_range}</span>}</Row>}
+        {n?.country && <Row label="Country">{n.country}</Row>}
+        {report.http && <Row label="Final URL"><a href={report.http.final_url} target="_blank" rel="noreferrer" className={`break-all ${link}`}>{report.http.final_url}</a></Row>}
+        {report.http && <Row label="Status">{report.http.status}</Row>}
+        {report.http?.server && <Row label="Server">{report.http.server}</Row>}
+        {report.http?.powered_by && <Row label="Powered by">{report.http.powered_by}</Row>}
+        {report.http && <Row label="https redirect">{report.http.https_redirect ? 'yes' : 'no'}</Row>}
+        {report.http && report.http.methods.length > 0 && <Row label="Methods">{report.http.methods.join(', ')}</Row>}
+      </dl>
+    </Card>
+  )
+}
+
+// DomainCard shows the registration record (RDAP / WHOIS).
+function DomainCard({ domain }: { domain: NonNullable<ScanReport['domain']> }) {
+  const soon = domain.expires && new Date(domain.expires).getTime() - Date.now() < 30 * 864e5
+  return (
+    <Card title="Domain registration">
+      <dl>
+        <Row label="Domain">{domain.domain}</Row>
+        {domain.registrar && <Row label="Registrar">{domain.registrar}</Row>}
+        {domain.registrant_org && <Row label="Registrant">{domain.registrant_org}</Row>}
+        {domain.created && <Row label="Created">{domain.created}</Row>}
+        {domain.updated && <Row label="Updated">{domain.updated}</Row>}
+        {domain.expires && <Row label="Expires"><span className={soon ? 'text-amber-300' : undefined}>{domain.expires}</span></Row>}
+        <Row label="DNSSEC">{domain.dnssec ? <span className="text-emerald-300">enabled</span> : <span className="text-zinc-400">not enabled</span>}</Row>
+        {domain.nameservers.length > 0 && <Row label="Nameservers">{domain.nameservers.join(', ')}</Row>}
+        {domain.statuses.length > 0 && <Row label="Status"><span className="text-xs text-zinc-400">{domain.statuses.join(', ')}</span></Row>}
+      </dl>
+      <p className="mt-2 text-[11px] text-zinc-600">Source: RDAP (registry data). Some fields may be redacted by the registrar.</p>
+    </Card>
+  )
+}
+
+function DnsCard({ dns }: { dns: NonNullable<ScanReport['dns']> }) {
+  return (
+    <Card title="DNS records & email">
+      <dl>
+        {dns.a.length > 0 && <Row label="A">{dns.a.join(', ')}</Row>}
+        {dns.aaaa.length > 0 && <Row label="AAAA">{dns.aaaa.join(', ')}</Row>}
+        {dns.mx.length > 0 && <Row label="MX">{dns.mx.join(', ')}</Row>}
+        {dns.ns.length > 0 && <Row label="NS">{dns.ns.join(', ')}</Row>}
+        {dns.caa.length > 0 && <Row label="CAA">{dns.caa.join(', ')}</Row>}
+        <Row label="SPF">{dns.spf ? <span className="font-mono text-xs break-all">{dns.spf}</span> : <span className="text-red-400">missing</span>}</Row>
+        <Row label="DMARC">{dns.dmarc ? <span className="font-mono text-xs break-all">{dns.dmarc}</span> : <span className="text-red-400">missing</span>}</Row>
+        <Row label="DKIM">{dns.dkim.length > 0 ? dns.dkim.join(', ') : <span className="text-zinc-500">no common selector found</span>}</Row>
+        {dns.txt.length > 0 && <Row label="TXT"><div className="space-y-0.5">{dns.txt.map((t, i) => <div key={i} className="font-mono text-xs break-all text-zinc-400">{t}</div>)}</div></Row>}
+      </dl>
+    </Card>
+  )
+}
+
+// HeadersCard shows the graded security headers and the full raw header set.
+function HeadersCard({ report }: { report: ScanReport }) {
+  const [showAll, setShowAll] = useState(false)
+  return (
+    <Card title="HTTP response headers">
+      <div className="mb-1 text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">Security headers</div>
       <ul className="space-y-1 text-sm">
         {report.headers.map((h) => (
           <li key={h.name} className="flex items-center gap-2">
@@ -621,32 +685,97 @@ function HeadersCard({ report }: { report: ScanReport }) {
           </li>
         ))}
       </ul>
-      {report.http && (
-        <div className="mt-3 border-t border-zinc-800 pt-2 text-xs text-zinc-500">
-          Status {report.http.status}{report.http.server && ` · Server: ${report.http.server}`}{report.http.methods.length > 0 && ` · Methods: ${report.http.methods.join(', ')}`}
-        </div>
-      )}
-      {report.cookies.length > 0 && (
-        <div className="mt-2 text-xs text-zinc-500">
-          Cookies: {report.cookies.map((c) => `${c.name} (${[c.secure && 'Secure', c.http_only && 'HttpOnly', c.same_site && `SameSite=${c.same_site}`].filter(Boolean).join(', ') || 'no flags'})`).join('; ')}
+      {report.all_headers.length > 0 && (
+        <div className="mt-3 border-t border-zinc-800 pt-2">
+          <button onClick={() => setShowAll((v) => !v)} className="inline-flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200">
+            {showAll ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />} {showAll ? 'Hide' : 'Show'} all {report.all_headers.length} response headers
+          </button>
+          {showAll && (
+            <dl className="mt-2 space-y-1">
+              {report.all_headers.map((h, i) => (
+                <div key={i} className="grid grid-cols-[10rem_1fr] gap-2 text-xs">
+                  <dt className="truncate font-mono text-zinc-400" title={h.name}>{h.name}</dt>
+                  <dd className="min-w-0 font-mono break-all text-zinc-300">{h.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
         </div>
       )}
     </Card>
   )
 }
 
-function DnsCard({ dns }: { dns: NonNullable<ScanReport['dns']> }) {
+// CookiesCard lists every Set-Cookie and its flags.
+function CookiesCard({ cookies }: { cookies: ScanReport['cookies'] }) {
   return (
-    <Card title="DNS & email">
-      <dl>
-        {dns.a.length > 0 && <Row label="A">{dns.a.join(', ')}</Row>}
-        {dns.aaaa.length > 0 && <Row label="AAAA">{dns.aaaa.slice(0, 3).join(', ')}</Row>}
-        {dns.mx.length > 0 && <Row label="MX">{dns.mx.slice(0, 4).join(', ')}</Row>}
-        {dns.ns.length > 0 && <Row label="NS">{dns.ns.slice(0, 4).join(', ')}</Row>}
-        <Row label="SPF">{dns.spf ? <span className="font-mono text-xs">{dns.spf}</span> : <span className="text-red-400">missing</span>}</Row>
-        <Row label="DMARC">{dns.dmarc ? <span className="font-mono text-xs">{dns.dmarc}</span> : <span className="text-red-400">missing</span>}</Row>
-      </dl>
+    <Card title={`Cookies (${cookies.length})`}>
+      <ul className="space-y-1.5 text-sm">
+        {cookies.map((c) => (
+          <li key={c.name} className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-zinc-200">{c.name}</span>
+            <span className={`rounded px-1.5 text-[10px] ring-1 ring-inset ${c.secure ? 'text-emerald-300 ring-emerald-400/30' : 'text-red-300 ring-red-400/30'}`}>{c.secure ? 'Secure' : 'no Secure'}</span>
+            <span className={`rounded px-1.5 text-[10px] ring-1 ring-inset ${c.http_only ? 'text-emerald-300 ring-emerald-400/30' : 'text-red-300 ring-red-400/30'}`}>{c.http_only ? 'HttpOnly' : 'no HttpOnly'}</span>
+            <span className="rounded px-1.5 text-[10px] text-zinc-400 ring-1 ring-inset ring-zinc-700">SameSite={c.same_site || 'none'}</span>
+          </li>
+        ))}
+      </ul>
     </Card>
+  )
+}
+
+// SubdomainsCard lists subdomains discovered from certificates and CT logs.
+function SubdomainsCard({ subdomains }: { subdomains: string[] }) {
+  const [showAll, setShowAll] = useState(false)
+  const shown = showAll ? subdomains : subdomains.slice(0, 30)
+  return (
+    <Card title={`Subdomains (${subdomains.length})`} actions={<span className="text-xs text-zinc-500">cert SANs + CT logs</span>}>
+      <div className="flex flex-wrap gap-1.5">
+        {shown.map((s) => (
+          <a key={s} href={`?target=${encodeURIComponent(s)}`} className="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-xs text-cyan-300 hover:bg-zinc-700">{s}</a>
+        ))}
+      </div>
+      {subdomains.length > 30 && (
+        <button onClick={() => setShowAll((v) => !v)} className="mt-2 text-xs text-cyan-300 hover:text-cyan-200">{showAll ? 'Show fewer' : `Show all ${subdomains.length}`}</button>
+      )}
+    </Card>
+  )
+}
+
+// PortsCard lists open TCP ports found by the active scan.
+function PortsCard({ ports }: { ports: NonNullable<ScanReport['ports']> }) {
+  return (
+    <Card title={`Open ports (${ports.length})`}>
+      <ul className="space-y-1 text-sm">
+        {ports.map((p) => (
+          <li key={p.port} className="flex items-center gap-2">
+            <span className="text-emerald-400">●</span>
+            <span className="font-mono text-zinc-200">{p.port}/tcp</span>
+            <span className="text-xs text-zinc-500">{p.service}</span>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  )
+}
+
+// IssuesSummary is the sidebar count of security findings by severity, linking
+// to the issues section (the details lead the page; issues are derived).
+function IssuesSummary({ findings }: { findings: ScanFinding[] }) {
+  const counts = findings.reduce<Record<string, number>>((a, f) => ((a[f.severity] = (a[f.severity] ?? 0) + 1), a), {})
+  const total = findings.filter((f) => f.severity !== 'good').length
+  return (
+    <a href="#issues" className="mt-4 block border-t border-zinc-800 pt-3">
+      <div className="flex items-baseline justify-between">
+        <span className="text-sm text-zinc-300">Security issues</span>
+        <span className="font-mono text-sm font-semibold text-zinc-100">{total}</span>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {(['critical', 'high', 'medium', 'low', 'info', 'good'] as ScanSeverity[]).filter((s) => counts[s]).map((s) => (
+          <span key={s} className={`rounded px-1.5 py-0.5 text-xs font-medium ring-1 ring-inset ${sevStyle[s].tag}`}>{counts[s]} {sevStyle[s].label.toLowerCase()}</span>
+        ))}
+      </div>
+    </a>
   )
 }
 
@@ -671,8 +800,7 @@ function RelatedCard({ related }: { related: NonNullable<ScanReport['related']> 
     <Card title="Related resources">
       <dl>
         <Row label="security.txt">{related.security_txt ? (related.contacts.join(', ') || 'present') : <span className="text-zinc-500">not published</span>}</Row>
-        {related.subdomains.length > 0 && <Row label="Cert names">{related.subdomains.slice(0, 8).map((s) => <a key={s} href={`?target=${s}`} className={`mr-2 ${link}`}>{s}</a>)}</Row>}
-        {related.assets.length > 0 && <Row label="External assets">{related.assets.slice(0, 8).join(', ')}</Row>}
+        {related.assets.length > 0 && <Row label="External assets">{related.assets.slice(0, 10).join(', ')}</Row>}
         {related.disallowed.length > 0 && <Row label="robots.txt">{related.disallowed.length} disallowed paths <span className="font-mono text-xs text-zinc-500">{related.disallowed.slice(0, 5).join(' ')}</span></Row>}
       </dl>
       {related.contacts.length === 0 && !related.subdomains.length && !related.assets.length && !related.disallowed.length && !related.security_txt && (

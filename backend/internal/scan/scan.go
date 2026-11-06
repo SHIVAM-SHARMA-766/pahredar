@@ -76,27 +76,40 @@ type Evidence struct {
 	Snippet  string `json:"snippet,omitempty"` // the relevant part of the response body
 }
 
-// Report is the full assessment of one endpoint.
+// Report is the full assessment of one endpoint: a recon profile (everything
+// discoverable about the target from public sources) plus the security
+// findings derived from it.
 type Report struct {
-	Target    string      `json:"target"`
-	URL       string      `json:"url"`
-	Host      string      `json:"host"`
-	IP        string      `json:"ip"`
-	ScannedAt time.Time   `json:"scanned_at"`
-	Duration  string      `json:"duration"`
-	Grade     string      `json:"grade"`
-	Score     int         `json:"score"`
-	Findings  []Finding   `json:"findings"`
-	DNS       *DNSInfo    `json:"dns"`
-	TLS       *TLSInfo    `json:"tls"`
-	HTTP      *HTTPInfo   `json:"http"`
-	Headers   []HeaderOut `json:"headers"`
-	Cookies   []CookieOut `json:"cookies"`
-	Tech      []TechOut   `json:"tech"`
-	Paths     []PathOut   `json:"paths"`
-	Related   *Related    `json:"related"`
-	Active    *ActiveScan `json:"active"`
-	Errors    []string    `json:"errors"`
+	Target     string      `json:"target"`
+	URL        string      `json:"url"`
+	Host       string      `json:"host"`
+	IP         string      `json:"ip"`
+	ScannedAt  time.Time   `json:"scanned_at"`
+	Duration   string      `json:"duration"`
+	Grade      string      `json:"grade"`
+	Score      int         `json:"score"`
+	Findings   []Finding   `json:"findings"`
+	Domain     *DomainInfo `json:"domain"`
+	Net        *NetInfo    `json:"net"`
+	DNS        *DNSInfo    `json:"dns"`
+	TLS        *TLSInfo    `json:"tls"`
+	HTTP       *HTTPInfo   `json:"http"`
+	Headers    []HeaderOut `json:"headers"`     // the graded security headers
+	AllHeaders []HeaderKV  `json:"all_headers"` // every response header, raw
+	Cookies    []CookieOut `json:"cookies"`
+	Tech       []TechOut   `json:"tech"`
+	Paths      []PathOut   `json:"paths"`
+	Subdomains []string    `json:"subdomains"` // from certificate SANs and CT logs
+	Related    *Related    `json:"related"`
+	Ports      []PortOut   `json:"ports"` // active scan only
+	Active     *ActiveScan `json:"active"`
+	Errors     []string    `json:"errors"`
+}
+
+// HeaderKV is one raw response header.
+type HeaderKV struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 // TechMatcher looks up a fingerprinted product in Pahredar's CVE data.
@@ -177,8 +190,15 @@ func (sc *Scanner) Scan(ctx context.Context, target string, active bool, onProgr
 	if onProgress == nil {
 		onProgress = func(Progress) {}
 	}
-	phases := []Phase{{"DNS", "pending"}, {"TLS & certificate", "pending"}, {"HTTP, headers & technology", "pending"}}
+	phases := []Phase{
+		{"DNS", "pending"},
+		{"TLS & certificate", "pending"},
+		{"HTTP, headers & technology", "pending"},
+		{"Registration & hosting", "pending"},
+		{"Subdomains (CT logs)", "pending"},
+	}
 	if active {
+		phases = append(phases, Phase{"Open ports", "pending"})
 		phases = append(phases, Phase{"Verification checks", "pending"})
 	}
 	if active && sc.active != nil {
@@ -271,13 +291,35 @@ func (sc *Scanner) Scan(ctx context.Context, target string, active bool, onProgr
 	// The HTTP checks (headers, cookies, tech, paths, related) share one
 	// fetch of the page, so they run together.
 	phased("http", "HTTP, headers & technology", func(c context.Context) error { return sc.checkHTTP(c, host, base, rep, &mu) })
+	// Recon from public third-party sources (registration, hosting, CT logs).
+	phased("recon", "Registration & hosting", func(c context.Context) error {
+		var w sync.WaitGroup
+		w.Add(2)
+		go func() { defer w.Done(); fail("domain", sc.checkDomain(c, host, rep, &mu)) }()
+		go func() { defer w.Done(); fail("net", sc.checkNet(c, dst.String(), rep, &mu)) }()
+		w.Wait()
+		return nil
+	})
+	phased("subdomains", "Subdomains (CT logs)", func(c context.Context) error { return sc.checkSubdomains(c, host, rep, &mu) })
 
 	wg.Wait()
+
+	// Fold the certificate-SAN subdomains into the discovered set.
+	if rep.Related != nil && len(rep.Related.Subdomains) > 0 {
+		rep.Subdomains = mergeStrings(rep.Subdomains, rep.Related.Subdomains)
+	}
 
 	// Resolve the URL the passive phase ended on (after any scheme/redirect).
 	targetURL := rep.URL
 	if rep.HTTP != nil && rep.HTTP.FinalURL != "" {
 		targetURL = rep.HTTP.FinalURL
+	}
+
+	if active {
+		setPhase("Open ports", "running")
+		sc.checkPorts(ctx, dst.String(), rep, &mu)
+		setPhase("Open ports", "done")
+		emit()
 	}
 
 	// Pahredar's own transparent active checks (with evidence), run before
@@ -378,6 +420,15 @@ func nilEmpty(rep *Report) {
 	}
 	if rep.Paths == nil {
 		rep.Paths = []PathOut{}
+	}
+	if rep.AllHeaders == nil {
+		rep.AllHeaders = []HeaderKV{}
+	}
+	if rep.Subdomains == nil {
+		rep.Subdomains = []string{}
+	}
+	if rep.Ports == nil {
+		rep.Ports = []PortOut{}
 	}
 }
 

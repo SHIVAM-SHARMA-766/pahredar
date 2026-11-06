@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -83,10 +84,12 @@ func (sc *Scanner) checkHTTP(ctx context.Context, host string, base *url.URL, re
 
 	headers, cookies := analyzeHeaders(resp, base.Scheme == "https")
 	tech := sc.fingerprint(ctx, resp, body, mu, rep)
+	all := allHeaders(resp)
 
 	mu.Lock()
 	rep.HTTP = info
 	rep.Headers = headers
+	rep.AllHeaders = all
 	rep.Cookies = cookies
 	rep.Tech = tech
 	addHTTPFindings(rep, info, headers, cookies)
@@ -117,6 +120,27 @@ func (sc *Scanner) get(ctx context.Context, u string) (*http.Response, []byte, e
 var securityHeaders = []string{
 	"Strict-Transport-Security", "Content-Security-Policy", "X-Frame-Options",
 	"X-Content-Type-Options", "Referrer-Policy", "Permissions-Policy",
+}
+
+// allHeaders returns every response header as raw name/value pairs, sorted by
+// name, with multi-value headers kept as separate entries (Set-Cookie values
+// are summarised in Cookies, so they are dropped here to avoid leaking them).
+func allHeaders(resp *http.Response) []HeaderKV {
+	out := []HeaderKV{}
+	names := make([]string, 0, len(resp.Header))
+	for name := range resp.Header {
+		if strings.EqualFold(name, "Set-Cookie") {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		for _, v := range resp.Header[name] {
+			out = append(out, HeaderKV{Name: name, Value: clip(v, 300)})
+		}
+	}
+	return out
 }
 
 func analyzeHeaders(resp *http.Response, https bool) ([]HeaderOut, []CookieOut) {

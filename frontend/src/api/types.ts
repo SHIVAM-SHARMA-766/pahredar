@@ -684,14 +684,37 @@ export interface ScanReport {
   grade: string
   score: number
   findings: ScanFinding[]
+  domain: {
+    domain: string
+    registrar?: string
+    registrant_org?: string
+    created?: string
+    updated?: string
+    expires?: string
+    statuses: string[]
+    nameservers: string[]
+    dnssec: boolean
+  } | null
+  net: {
+    ip: string
+    ptr?: string
+    asn?: string
+    as_org?: string
+    net_name?: string
+    net_range?: string
+    country?: string
+    org?: string
+  } | null
   dns: {
     a: string[]
     aaaa: string[]
     mx: string[]
     ns: string[]
     txt: string[]
+    caa: string[]
     spf: string
     dmarc: string
+    dkim: string[]
   } | null
   tls: {
     supported: boolean
@@ -717,9 +740,12 @@ export interface ScanReport {
     methods: string[]
   } | null
   headers: { name: string; present: boolean; value?: string }[]
+  all_headers: { name: string; value: string }[]
   cookies: { name: string; secure: boolean; http_only: boolean; same_site: string }[]
   tech: ScanTech[]
   paths: { path: string; status: number; exposed: boolean }[]
+  subdomains: string[]
+  ports: { port: number; service: string; open: boolean }[]
   related: {
     security_txt: boolean
     contacts: string[]

@@ -3,6 +3,7 @@ package scan
 import (
 	"context"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -17,7 +18,11 @@ type DNSInfo struct {
 	CAA   []string `json:"caa"`
 	SPF   string   `json:"spf"`
 	DMARC string   `json:"dmarc"`
+	DKIM  []string `json:"dkim"` // selectors found (e.g. "google", "selector1")
 }
+
+// dkimSelectors are common DKIM selector names to probe.
+var dkimSelectors = []string{"default", "google", "selector1", "selector2", "k1", "k2", "dkim", "mail", "s1", "s2", "mandrill", "mailjet", "zoho", "amazonses"}
 
 // checkDNS looks up the common records and flags email- and
 // certificate-issuance hardening that is missing.
@@ -59,6 +64,40 @@ func (sc *Scanner) checkDNS(ctx context.Context, host string, rep *Report, mu *s
 			}
 		}
 	}
+	// DKIM: probe common selectors concurrently; a hit means that selector
+	// publishes a key.
+	info.DKIM = []string{}
+	var dkmu sync.Mutex
+	var dkwg sync.WaitGroup
+	for _, sel := range dkimSelectors {
+		sel := sel
+		dkwg.Add(1)
+		go func() {
+			defer dkwg.Done()
+			txts, err := r.LookupTXT(ctx, sel+"._domainkey."+host)
+			if err != nil {
+				return
+			}
+			for _, t := range txts {
+				lt := strings.ToLower(t)
+				if !strings.Contains(lt, "v=dkim1") && !strings.Contains(lt, "k=rsa") && !strings.Contains(lt, "k=ed25519") {
+					continue
+				}
+				// A published, usable selector has a non-empty public key; an
+				// empty p= is a revoked/placeholder key (some domains publish
+				// a wildcard "v=DKIM1; p=").
+				if dkimKey(t) == "" {
+					continue
+				}
+				dkmu.Lock()
+				info.DKIM = append(info.DKIM, sel)
+				dkmu.Unlock()
+				return
+			}
+		}()
+	}
+	dkwg.Wait()
+	sort.Strings(info.DKIM)
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -83,4 +122,18 @@ func (sc *Scanner) checkDNS(ctx context.Context, host string, rep *Report, mu *s
 		rep.add(SevGood, "dns", "DMARC enforced", info.DMARC)
 	}
 	return nil
+}
+
+// dkimKey extracts the public-key value (p=) from a DKIM TXT record, trimmed.
+func dkimKey(txt string) string {
+	for _, part := range strings.Split(txt, ";") {
+		part = strings.TrimSpace(part)
+		if v, ok := strings.CutPrefix(part, "p="); ok {
+			return strings.TrimSpace(v)
+		}
+		if v, ok := strings.CutPrefix(part, "P="); ok {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }

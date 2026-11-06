@@ -782,6 +782,13 @@ export interface ScanCategory {
   count: number
 }
 
+export interface AssetCVE {
+  cve_id: string
+  product: string
+  kev: boolean
+  first_seen: string
+}
+
 export interface Asset {
   id: number
   kind: string

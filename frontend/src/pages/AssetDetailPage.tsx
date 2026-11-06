@@ -23,6 +23,7 @@ export function AssetDetailPage() {
   const asset = useQuery({ queryKey: ['asset', assetId], queryFn: () => api.getAsset(assetId) })
   useOrigin(asset.data?.value)
   const history = useQuery({ queryKey: ['asset-scans', assetId], queryFn: () => api.assetScans(assetId) })
+  const cves = useQuery({ queryKey: ['asset-cves', assetId], queryFn: () => api.assetCves(assetId) })
   const lastScan = asset.data?.last_scan_id
   const report = useQuery({ queryKey: ['scan-report', lastScan], queryFn: () => api.getScan(lastScan as number), enabled: !!lastScan })
 
@@ -75,6 +76,17 @@ export function AssetDetailPage() {
                 <ul className="space-y-3">{rep!.tech.map((t) => <TechRow key={t.name + t.version} t={t} />)}</ul>
               )}
             </Card>
+            {(cves.data?.items.length ?? 0) > 0 && (
+              <Card title={`Tracked CVEs (${cves.data!.items.length})`} actions={<span className="text-xs text-zinc-500">matched from scans · alert-ready</span>}>
+                <div className="flex flex-wrap gap-1.5">
+                  {cves.data!.items.map((c) => (
+                    <Link key={c.cve_id} to={`/cves/${c.cve_id}`} className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-xs hover:opacity-80 ${c.kev ? 'bg-red-500/15 text-red-300 ring-1 ring-inset ring-red-400/30' : 'bg-zinc-800 text-cyan-300'}`}>
+                      {c.cve_id}{c.kev && ' ⚠'}
+                    </Link>
+                  ))}
+                </div>
+              </Card>
+            )}
             <Card title={`Security issues (${findings.length})`}>
               <div className="mb-3 flex flex-wrap gap-1.5">
                 {(['critical', 'high', 'medium', 'low', 'info'] as const).filter((sv) => counts[sv]).map((sv) => (

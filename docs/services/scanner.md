@@ -71,5 +71,6 @@ cleanest module and a good template for new services.
 - Path probes use catch-all detection so a single-page app that returns its
   HTML shell for every path does not trip exposure checks — preserve that when
   adding probes.
-- Scan jobs are in-memory and lost on restart (roadmap P2 moves them to the
-  durable queue). The result is persisted to `scan` only on completion.
+- Scans run as `scan.run` tasks on the durable queue (`internal/jobs`), so a
+  finished scan survives a restart; progress is streamed onto the task row and
+  the final report is also persisted to the `scan` table.

@@ -18,15 +18,17 @@ recon, active (Nuclei + native) checks, and a request tool.
 Core limitations this roadmap removes: the `api.Server` god-struct, in-memory
 scan jobs, no asset inventory, no auth, no alerting.
 
-### Phase 1 — The spine (foundation)
+### Phase 1 — The spine (foundation) · done
 
-- **P1 module pattern** — extract a `Module` interface + `Platform` context;
-  move each service behind it; `main.go` registers modules.
-- **P2 durable jobs** — `task` table + worker pool; move endpoint scans onto it;
-  fold the sync scheduler in.
+- **P1 module pattern** — `internal/platform` holds a shared `Platform` (store,
+  logger, job queue); `internal/api` embeds it and registers routes per service
+  via a `modules()` registry. *Remaining (P1b): extract each service's route
+  group into its own package.*
+- **P2 durable jobs** — `task` table + `internal/jobs` worker pool; endpoint
+  scans run as `scan.run` tasks and survive a restart. *(The periodic sync
+  scheduler stays as-is; the queue is for discrete/triggered work.)*
 
-Outcome: new services plug in without touching the core; async work survives
-restarts and can be scheduled.
+Outcome: new services plug in via the registry; scans are durable.
 
 ### Phase 2 — Asset platform
 
@@ -62,10 +64,10 @@ Kept here (not in the README) on purpose.
 
 - **No authentication.** The API is open; run it only on trusted/local
   networks until P5 lands.
-- **Scan jobs are in-memory.** A backend restart drops running/finished scans
-  (15-min TTL otherwise). P2 fixes this.
-- **`api.Server` holds all dependencies.** Adding a service currently edits
-  core files; P1 fixes this.
+- **Services are route groups on one `api.Server`, not yet separate packages.**
+  P1 added the `Platform` + module registry; the per-service package split
+  (P1b) is still pending, so handlers from different services share the `api`
+  package.
 - **Active scan depends on Nuclei templates bundled in the image.** They are
   pinned, not self-updating; refresh by rebuilding with a newer template tag.
 - **`api/types.ts` is hand-maintained** against the Go types — they can drift;

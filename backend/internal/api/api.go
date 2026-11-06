@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/platform"
@@ -28,9 +27,6 @@ type Server struct {
 	scanner *scan.Scanner
 	// scanSem bounds concurrent endpoint scans (scanner service).
 	scanSem chan struct{}
-	jobsMu  sync.Mutex
-	jobs    map[int64]*scanJob
-	nextJob int64
 }
 
 func New(p *platform.Platform, sched *syncer.Scheduler, rc *reports.Client, allowPrivate bool, active *scan.Nuclei) *Server {
@@ -40,9 +36,8 @@ func New(p *platform.Platform, sched *syncer.Scheduler, rc *reports.Client, allo
 		reports:  rc,
 		scanner:  scan.NewScanner(p.Store, allowPrivate, active),
 		scanSem:  make(chan struct{}, 3),
-		jobs:     map[int64]*scanJob{},
 	}
-	go srv.reapScanJobs()
+	srv.registerScanJobs()
 	return srv
 }
 

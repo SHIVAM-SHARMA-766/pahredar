@@ -7,43 +7,57 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/jobs"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/scan"
 )
 
 // scanReuse: a passive scan of a host within this window is reused.
 const scanReuse = 60 * time.Second
 
-// scanJobTTL: finished jobs are kept this long so a returning client can
-// still read the result.
-const scanJobTTL = 15 * time.Minute
+// scanTaskType is the durable task queue type for endpoint scans.
+const scanTaskType = "scan.run"
 
-// scanJob is one running or finished scan. The scan runs in a background
-// goroutine detached from the request, so navigating away does not cancel
-// it; the client polls for progress and the result.
-type scanJob struct {
+// scanTaskPayload is what runScan enqueues.
+type scanTaskPayload struct {
+	Target string               `json:"target"`
+	Host   string               `json:"host"`
+	Active bool                 `json:"active"`
+	Filter *scan.TemplateFilter `json:"filter,omitempty"`
+}
+
+// scanTaskResult is stored on the task as progress accrues and on completion.
+type scanTaskResult struct {
+	Host     string        `json:"host"`
+	Active   bool          `json:"active"`
+	Progress scan.Progress `json:"progress"`
+	Report   *scan.Report  `json:"report,omitempty"`
+	StoredID int64         `json:"stored_id,omitempty"`
+	Cached   bool          `json:"cached"`
+}
+
+// scanJobView is the shape the UI polls (unchanged from the in-memory version).
+type scanJobView struct {
 	ID       int64         `json:"id"`
 	Target   string        `json:"target"`
 	Host     string        `json:"host"`
 	Active   bool          `json:"active"`
-	Status   string        `json:"status"` // queued, running, done, error
+	Status   string        `json:"status"`
 	Progress scan.Progress `json:"progress"`
 	Report   *scan.Report  `json:"report,omitempty"`
 	StoredID int64         `json:"stored_id,omitempty"`
-	Error    string        `json:"error,omitempty"`
 	Cached   bool          `json:"cached"`
-	started  time.Time
-	finished time.Time
-	filter   *scan.TemplateFilter
+	Error    string        `json:"error,omitempty"`
 }
 
-// snapshot returns a copy safe to serialise outside the lock.
-func (j *scanJob) snapshot() scanJob {
-	c := *j
-	return c
+// registerScanJobs wires the scan task handler onto the queue. Called from New.
+func (s *Server) registerScanJobs() {
+	if s.Jobs != nil {
+		s.Jobs.Register(scanTaskType, s.handleScanTask)
+	}
 }
 
-// runScan starts a scan job and returns its id. Body:
-// {"target","active"?,"authorized"?,"fresh"?}.
+// runScan enqueues a scan and returns its job id. Body:
+// {"target","active"?,"authorized"?,"fresh"?,"templates"?}.
 func (s *Server) runScan(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Target     string               `json:"target"`
@@ -71,111 +85,100 @@ func (s *Server) runScan(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	payload := scanTaskPayload{Target: body.Target, Host: host, Active: body.Active, Filter: body.Templates}
 
-	// A recent passive scan is reused without re-running.
+	// A recent passive scan is reused without re-running: record it as an
+	// already-done task so the client polls it the same way.
 	if !body.Fresh && !body.Active {
-		if id, payload, ok, err := s.Store.LatestScanFor(r.Context(), host, time.Now().Add(-scanReuse)); err == nil && ok {
+		if id, raw, ok, lerr := s.Store.LatestScanFor(r.Context(), host, time.Now().Add(-scanReuse)); lerr == nil && ok {
 			var rep scan.Report
-			if json.Unmarshal(payload, &rep) == nil {
-				job := s.newJob(body.Target, host, false, nil)
-				job.Status = "done"
-				job.Report = &rep
-				job.StoredID = id
-				job.Cached = true
-				job.finished = time.Now()
-				writeJSON(w, http.StatusOK, map[string]any{"id": job.ID})
-				return
+			if json.Unmarshal(raw, &rep) == nil {
+				result := scanTaskResult{Host: host, Report: &rep, StoredID: id, Cached: true}
+				if jobID, eerr := s.Jobs.EnqueueDone(r.Context(), scanTaskType, payload, result); eerr == nil {
+					writeJSON(w, http.StatusOK, map[string]any{"id": jobID})
+					return
+				}
 			}
 		}
 	}
 
-	job := s.newJob(body.Target, host, body.Active, body.Templates)
-	go s.execJob(job)
-	writeJSON(w, http.StatusAccepted, map[string]any{"id": job.ID})
+	jobID, err := s.Jobs.Enqueue(r.Context(), scanTaskType, payload, 1)
+	if err != nil {
+		internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"id": jobID})
 }
 
-func (s *Server) newJob(target, host string, active bool, filter *scan.TemplateFilter) *scanJob {
-	s.jobsMu.Lock()
-	defer s.jobsMu.Unlock()
-	s.nextJob++
-	j := &scanJob{ID: s.nextJob, Target: target, Host: host, Active: active, Status: "queued", started: time.Now(), filter: filter}
-	s.jobs[j.ID] = j
-	return j
-}
+// handleScanTask runs one scan task, streaming progress onto the task row and
+// storing the final report.
+func (s *Server) handleScanTask(ctx context.Context, payload json.RawMessage, progress jobs.Progress) (any, error) {
+	var p scanTaskPayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return nil, err
+	}
+	// Bound concurrent scans.
+	select {
+	case s.scanSem <- struct{}{}:
+		defer func() { <-s.scanSem }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 
-func (s *Server) execJob(job *scanJob) {
-	// Bound concurrent scans; the job waits (queued) for a slot.
-	s.scanSem <- struct{}{}
-	defer func() { <-s.scanSem }()
-
-	s.updateJob(job.ID, func(j *scanJob) { j.Status = "running" })
-
+	res := &scanTaskResult{Host: p.Host, Active: p.Active}
 	timeout := 45 * time.Second
-	if job.Active {
+	if p.Active {
 		timeout = 8 * time.Minute
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	sctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	rep, err := s.scanner.Scan(ctx, job.Target, job.Active, job.filter, func(p scan.Progress) {
-		s.updateJob(job.ID, func(j *scanJob) { j.Progress = p })
+	rep, err := s.scanner.Scan(sctx, p.Target, p.Active, p.Filter, func(pr scan.Progress) {
+		res.Progress = pr
+		progress(res)
 	})
 	if err != nil {
-		s.updateJob(job.ID, func(j *scanJob) { j.Status = "error"; j.Error = err.Error(); j.finished = time.Now() })
-		return
+		return nil, err
 	}
 	saveCtx, saveCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer saveCancel()
 	id, _ := s.Store.SaveScan(saveCtx, rep)
-	s.updateJob(job.ID, func(j *scanJob) {
-		j.Status = "done"
-		j.Report = rep
-		j.StoredID = id
-		j.finished = time.Now()
-	})
+	res.Report = rep
+	res.StoredID = id
+	return res, nil
 }
 
-func (s *Server) updateJob(id int64, fn func(*scanJob)) {
-	s.jobsMu.Lock()
-	defer s.jobsMu.Unlock()
-	if j, ok := s.jobs[id]; ok {
-		fn(j)
-	}
-}
-
-// scanJobStatus returns a job's current state (for polling).
+// scanJobStatus returns a job's current state (for polling), read from the
+// durable task row so it survives restarts.
 func (s *Server) scanJobStatus(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "id must be a number")
 		return
 	}
-	s.jobsMu.Lock()
-	j, ok := s.jobs[id]
-	var snap scanJob
-	if ok {
-		snap = j.snapshot()
-	}
-	s.jobsMu.Unlock()
-	if !ok {
+	t, err := s.Jobs.Get(r.Context(), id)
+	if err != nil {
 		writeError(w, http.StatusNotFound, "scan job not found (it may have expired); start a new scan")
 		return
 	}
-	writeJSON(w, http.StatusOK, snap)
-}
-
-// reapScanJobs removes finished jobs past their TTL.
-func (s *Server) reapScanJobs() {
-	for range time.Tick(time.Minute) {
-		cutoff := time.Now().Add(-scanJobTTL)
-		s.jobsMu.Lock()
-		for id, j := range s.jobs {
-			if !j.finished.IsZero() && j.finished.Before(cutoff) {
-				delete(s.jobs, id)
+	view := scanJobView{ID: t.ID, Status: t.Status, Error: t.Error}
+	var p scanTaskPayload
+	if json.Unmarshal(t.Payload, &p) == nil {
+		view.Target, view.Host, view.Active = p.Target, p.Host, p.Active
+	}
+	if len(t.Result) > 0 {
+		var res scanTaskResult
+		if json.Unmarshal(t.Result, &res) == nil {
+			view.Progress = res.Progress
+			view.Report = res.Report
+			view.StoredID = res.StoredID
+			view.Cached = res.Cached
+			if res.Host != "" {
+				view.Host = res.Host
 			}
 		}
-		s.jobsMu.Unlock()
 	}
+	writeJSON(w, http.StatusOK, view)
 }
 
 func (s *Server) listScans(w http.ResponseWriter, r *http.Request) {
@@ -221,8 +224,7 @@ func (s *Server) scanRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 // scanConfig tells the UI which scanner capabilities the server enables and,
-// when active scanning is on, the Nuclei template categories it covers (so the
-// UI can show what the checks are, not just a total).
+// when active scanning is on, the Nuclei template categories it covers.
 func (s *Server) scanConfig(w http.ResponseWriter, r *http.Request) {
 	catalog := s.scanner.ActiveCatalog()
 	total := 0

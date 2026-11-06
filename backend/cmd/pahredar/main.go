@@ -261,7 +261,7 @@ func serve(ctx context.Context, cfg config.Config) error {
 		Handler: api.New(plat, sched, reports.New(fetch.NewClient(), reports.Keys{
 			NVD: cfg.NVDAPIKey, GitHub: cfg.GitHubToken, OTX: cfg.OTXKey, AbuseCH: cfg.AbuseCHKey,
 			BlueskyHandle: cfg.BlueskyHandle, BlueskyPassword: cfg.BlueskyAppPassword,
-		}), cfg.ScanAllowPrivate, nucleiRunner(cfg)),
+		}), cfg.ScanAllowPrivate, nucleiRunner(cfg), cfg.APIKeys),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,

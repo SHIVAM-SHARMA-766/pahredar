@@ -6,8 +6,10 @@ package api
 
 import (
 	"context"
+	"crypto/subtle"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/alerts"
@@ -22,7 +24,7 @@ import (
 )
 
 // New builds the HTTP handler: each service module registers its own routes.
-func New(p *platform.Platform, sched *syncer.Scheduler, rc *reports.Client, allowPrivate bool, active *scan.Nuclei) http.Handler {
+func New(p *platform.Platform, sched *syncer.Scheduler, rc *reports.Client, allowPrivate bool, active *scan.Nuclei, apiKeys []string) http.Handler {
 	modules := []platform.Module{
 		intel.New(p, sched, rc),
 		news.New(p),
@@ -35,7 +37,45 @@ func New(p *platform.Platform, sched *syncer.Scheduler, rc *reports.Client, allo
 	for _, m := range modules {
 		m.Routes(mux)
 	}
-	return mux
+	return withAuth(apiKeys, mux)
+}
+
+// withAuth gates the API behind an API key when any key is configured; /healthz
+// is always open. With no keys the API is open (local use).
+func withAuth(keys []string, next http.Handler) http.Handler {
+	if len(keys) == 0 {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		got := apiKeyFromRequest(r)
+		if got == "" || !keyMatches(keys, got) {
+			platform.WriteError(w, http.StatusUnauthorized, "missing or invalid API key")
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(platform.WithPrincipal(r.Context(), platform.Principal{Name: "api-key"})))
+	})
+}
+
+func apiKeyFromRequest(r *http.Request) string {
+	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+		return strings.TrimSpace(h[len("Bearer "):])
+	}
+	return strings.TrimSpace(r.Header.Get("X-API-Key"))
+}
+
+func keyMatches(keys []string, got string) bool {
+	gb := []byte(got)
+	match := false
+	for _, k := range keys {
+		if subtle.ConstantTimeCompare([]byte(k), gb) == 1 {
+			match = true
+		}
+	}
+	return match
 }
 
 func healthz(p *platform.Platform) http.HandlerFunc {

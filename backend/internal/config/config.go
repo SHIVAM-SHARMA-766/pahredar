@@ -32,6 +32,9 @@ type Config struct {
 	AssetRescanInterval time.Duration
 	// AlertWebhookURL receives new alerts as JSON (Slack-style {text}); empty disables.
 	AlertWebhookURL string
+	// APIKeys gate the HTTP API when non-empty (Authorization: Bearer / X-API-Key);
+	// empty means the API is open (local use).
+	APIKeys []string
 	NucleiPath         string // nuclei binary, "" disables active scanning
 	NucleiTemplatesDir string
 	// DataDir holds temporary download artifacts (the extracted cvelist
@@ -75,6 +78,7 @@ func Load() (Config, error) {
 		NucleiPath:         getenv("NUCLEI_PATH", "nuclei"),
 		NucleiTemplatesDir: getenv("NUCLEI_TEMPLATES_DIR", "/opt/nuclei-templates"),
 		AlertWebhookURL:    getenv("ALERT_WEBHOOK_URL", ""),
+		APIKeys:            splitCommaNonEmpty(getenv("API_KEY", "")),
 		DataDir:            getenv("DATA_DIR", os.TempDir()),
 	}
 	if cfg.DatabaseURL == "" {
@@ -116,6 +120,17 @@ func Load() (Config, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// splitCommaNonEmpty splits a comma-separated list, trimming and dropping blanks.
+func splitCommaNonEmpty(v string) []string {
+	out := []string{}
+	for _, p := range strings.Split(v, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func getenv(key, fallback string) string {

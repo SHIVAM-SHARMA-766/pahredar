@@ -51,6 +51,7 @@ services:
       SCAN_ACTIVE_ENABLED: ${SCAN_ACTIVE_ENABLED:-false}
       ASSET_RESCAN_INTERVAL: ${ASSET_RESCAN_INTERVAL:-24h}
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      API_KEY: ${API_KEY:-}
       NUCLEI_PATH: /usr/local/bin/nuclei
       NUCLEI_TEMPLATES_DIR: ${NUCLEI_TEMPLATES_DIR:-/opt/nuclei-templates}
     volumes:

@@ -227,8 +227,10 @@ func serve(ctx context.Context, cfg config.Config) error {
 		go assetRescanLoop(jobsCtx, store, queue, cfg.AssetRescanInterval)
 	}
 
-	// Raise alerts for assets matched by known-exploited CVEs.
-	go alertCheckLoop(jobsCtx, store)
+	// Raise alerts for assets matched by known-exploited CVEs, and deliver
+	// new ones to the configured webhook.
+	notifier := alerts.NewNotifier(cfg.AlertWebhookURL, slog.Default())
+	go alertCheckLoop(jobsCtx, store, notifier)
 
 	syncCtx, stopSync := context.WithCancel(ctx)
 	syncDone := make(chan struct{})
@@ -326,14 +328,18 @@ func assetRescanLoop(ctx context.Context, store *db.Store, queue *jobs.Queue, in
 }
 
 // alertCheckLoop generates asset alerts shortly after startup and periodically.
-func alertCheckLoop(ctx context.Context, store *db.Store) {
+func alertCheckLoop(ctx context.Context, store *db.Store, notifier *alerts.Notifier) {
 	run := func() {
 		rctx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
-		if n, err := alerts.Check(rctx, store); err != nil {
+		newAlerts, err := alerts.Check(rctx, store)
+		if err != nil {
 			slog.Warn("alert check failed", "err", err)
-		} else if n > 0 {
-			slog.Info("alerts raised", "count", n)
+			return
+		}
+		if len(newAlerts) > 0 {
+			slog.Info("alerts raised", "count", len(newAlerts))
+			notifier.Deliver(rctx, newAlerts)
 		}
 	}
 	select {

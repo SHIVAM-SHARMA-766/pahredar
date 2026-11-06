@@ -30,6 +30,8 @@ type Config struct {
 	ScanActiveEnabled  bool   // allow active (Nuclei) scanning
 	// AssetRescanInterval auto re-scans tracked assets this often (0 disables).
 	AssetRescanInterval time.Duration
+	// AlertWebhookURL receives new alerts as JSON (Slack-style {text}); empty disables.
+	AlertWebhookURL string
 	NucleiPath         string // nuclei binary, "" disables active scanning
 	NucleiTemplatesDir string
 	// DataDir holds temporary download artifacts (the extracted cvelist
@@ -72,6 +74,7 @@ func Load() (Config, error) {
 		BlueskyAppPassword: os.Getenv("BLUESKY_APP_PASSWORD"),
 		NucleiPath:         getenv("NUCLEI_PATH", "nuclei"),
 		NucleiTemplatesDir: getenv("NUCLEI_TEMPLATES_DIR", "/opt/nuclei-templates"),
+		AlertWebhookURL:    getenv("ALERT_WEBHOOK_URL", ""),
 		DataDir:            getenv("DATA_DIR", os.TempDir()),
 	}
 	if cfg.DatabaseURL == "" {

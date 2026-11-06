@@ -22,9 +22,9 @@ type Alert struct {
 
 // GenerateKEVAlerts raises an alert for every (asset, CVE) pair where the CVE
 // matched to the asset is in the CISA KEV catalog and no such alert exists yet.
-// Returns the number of new alerts. This is the "a new KEV matches your asset"
-// trigger; it is safe to run repeatedly (deduped on type+asset+cve).
-func (s *Store) GenerateKEVAlerts(ctx context.Context) (int, error) {
+// Returns the new alerts. This is the "a new KEV matches your asset" trigger;
+// it is safe to run repeatedly (deduped on type+asset+cve).
+func (s *Store) GenerateKEVAlerts(ctx context.Context) ([]Alert, error) {
 	rows, err := s.pool.Query(ctx, `
 		INSERT INTO alert (type, asset_id, cve_id, severity, title, detail)
 		SELECT DISTINCT 'kev_match', at.asset_id, ca.cve_id, 'high',
@@ -35,16 +35,20 @@ func (s *Store) GenerateKEVAlerts(ctx context.Context) (int, error) {
 		JOIN kev k ON k.cve_id = ca.cve_id
 		JOIN asset a ON a.id = at.asset_id
 		ON CONFLICT (type, asset_id, cve_id) DO NOTHING
-		RETURNING id`)
+		RETURNING id, type, asset_id, cve_id, severity, title, detail, created_at`)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	defer rows.Close()
-	n := 0
+	out := []Alert{}
 	for rows.Next() {
-		n++
+		var a Alert
+		if err := rows.Scan(&a.ID, &a.Type, &a.AssetID, &a.CVEID, &a.Severity, &a.Title, &a.Detail, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
 	}
-	return n, rows.Err()
+	return out, rows.Err()
 }
 
 // ListAlerts returns alerts newest first; unreadOnly limits to unread.

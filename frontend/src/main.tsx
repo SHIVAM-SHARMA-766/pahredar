@@ -16,6 +16,7 @@ const VendorsPage = lazy(() => import('./pages/VendorsPage').then((m) => ({ defa
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
 const NewsPage = lazy(() => import('./pages/NewsPage').then((m) => ({ default: m.NewsPage })))
 const ScanPage = lazy(() => import('./pages/ScanPage').then((m) => ({ default: m.ScanPage })))
+const AssetsPage = lazy(() => import('./pages/AssetsPage').then((m) => ({ default: m.AssetsPage })))
 const SyncPage = lazy(() => import('./pages/SyncPage').then((m) => ({ default: m.SyncPage })))
 
 const page = (el: ReactNode) => <Suspense fallback={<Spinner />}>{el}</Suspense>
@@ -42,6 +43,7 @@ const router = createBrowserRouter([
       { path: 'vendors/:vendor/products/:product', element: page(<ProductPage />) },
       { path: 'news', element: page(<NewsPage />) },
       { path: 'scan', element: page(<ScanPage />) },
+      { path: 'assets', element: page(<AssetsPage />) },
       { path: 'sync', element: page(<SyncPage />) },
       { path: '*', element: <ErrorBox error="Page not found." /> },
     ],

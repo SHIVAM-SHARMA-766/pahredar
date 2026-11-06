@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import {
+  Boxes,
   Building2,
   Bug,
   ChevronsLeft,
@@ -36,6 +37,11 @@ const SECTIONS: { title: string; dot: string; items: NavItem[] }[] = [
       { to: '/', label: 'Dashboard', icon: LayoutDashboard, active: (l) => l.pathname === '/' },
       { to: '/news', label: 'Security news', icon: Newspaper, active: (l) => l.pathname === '/news' },
     ],
+  },
+  {
+    title: 'Inventory',
+    dot: 'bg-violet-400',
+    items: [{ to: '/assets', label: 'Assets', icon: Boxes, active: (l) => l.pathname.startsWith('/assets') }],
   },
   {
     title: 'Vulnerability intelligence',

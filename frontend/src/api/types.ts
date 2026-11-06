@@ -782,6 +782,19 @@ export interface ScanCategory {
   count: number
 }
 
+export interface Asset {
+  id: number
+  kind: string
+  value: string
+  label: string
+  tags: string[]
+  last_scan_id?: number
+  last_scanned_at?: string
+  created_at: string
+  last_grade?: string
+  last_score?: number
+}
+
 export interface ScanRequestSpec {
   method: string
   url: string

@@ -60,8 +60,9 @@ find the affected assets and notify.
   catching any known-exploited CVE for the asset's products (not just the
   asset_cve examples) the moment the KEV catalog updates. *Still to add:
   EPSS-spike and new-critical-finding triggers.*
-- **M3** — delivery out (webhook, then email) and the P5 auth skeleton so the
-  API can be driven by automation.
+- **M3 (in progress)** — delivery out: a webhook notifier posts new alerts as
+  JSON {text, alerts} to `ALERT_WEBHOOK_URL` (done). *Next: email delivery and
+  the P5 auth skeleton so the API can be driven by automation.*
 
 
 - **P5 auth skeleton** so the API can be driven by automation.

@@ -88,9 +88,9 @@ New services become straightforward once the spine exists:
 
 Kept here (not in the README) on purpose.
 
-- **Auth is opt-in and backend-only.** `API_KEY` gates the API, but the bundled
-  SPA sends no key, so with auth enabled the UI needs a login (not built yet);
-  run the UI locally with auth off.
+- **Auth is a single shared API key**, opt-in via `API_KEY` (no per-user
+  accounts or roles yet); the SPA prompts for and stores that key. Fine for a
+  single operator; multi-user is a later step.
 - **Active scan depends on Nuclei templates bundled in the image.** They are
   pinned, not self-updating; refresh by rebuilding with a newer template tag.
 - **`api/types.ts` is hand-maintained** against the Go types — they can drift;

@@ -739,6 +739,7 @@ export interface ScanReport {
     https_redirect: boolean
     methods: string[]
   } | null
+  waf: string
   headers: { name: string; present: boolean; value?: string }[]
   all_headers: { name: string; value: string }[]
   cookies: { name: string; secure: boolean; http_only: boolean; same_site: string }[]

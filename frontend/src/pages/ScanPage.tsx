@@ -601,6 +601,7 @@ function HostCard({ report }: { report: ScanReport }) {
         {report.http && <Row label="Final URL"><a href={report.http.final_url} target="_blank" rel="noreferrer" className={`break-all ${link}`}>{report.http.final_url}</a></Row>}
         {report.http && <Row label="Status">{report.http.status}</Row>}
         {report.http?.server && <Row label="Server">{report.http.server}</Row>}
+        {report.waf && <Row label="WAF / CDN"><span className="rounded bg-violet-500/15 px-1.5 py-0.5 text-xs text-violet-300 ring-1 ring-inset ring-violet-400/30">{report.waf}</span></Row>}
         {report.http?.powered_by && <Row label="Powered by">{report.http.powered_by}</Row>}
         {report.http && <Row label="https redirect">{report.http.https_redirect ? 'yes' : 'no'}</Row>}
         {report.http && report.http.methods.length > 0 && <Row label="Methods">{report.http.methods.join(', ')}</Row>}

@@ -86,13 +86,19 @@ func (sc *Scanner) checkHTTP(ctx context.Context, host string, base *url.URL, re
 	tech := sc.fingerprint(ctx, resp, body, mu, rep)
 	all := allHeaders(resp)
 
+	waf, _ := detectWAF(resp, body)
+
 	mu.Lock()
 	rep.HTTP = info
 	rep.Headers = headers
 	rep.AllHeaders = all
 	rep.Cookies = cookies
 	rep.Tech = tech
+	rep.WAF = waf
 	addHTTPFindings(rep, info, headers, cookies)
+	if waf != "" {
+		rep.add(SevInfo, "waf", "WAF / CDN detected: "+waf, "Responses carry "+waf+" fingerprints, so an edge filter sits in front of the origin. Active-scan results may be affected by it.")
+	}
 	mu.Unlock()
 
 	// Paths and related resources make their own requests.

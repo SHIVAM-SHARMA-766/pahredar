@@ -94,6 +94,7 @@ type Report struct {
 	DNS        *DNSInfo    `json:"dns"`
 	TLS        *TLSInfo    `json:"tls"`
 	HTTP       *HTTPInfo   `json:"http"`
+	WAF        string      `json:"waf"`
 	Headers    []HeaderOut `json:"headers"`     // the graded security headers
 	AllHeaders []HeaderKV  `json:"all_headers"` // every response header, raw
 	Cookies    []CookieOut `json:"cookies"`

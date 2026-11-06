@@ -1,0 +1,82 @@
+# Roadmap & known gaps
+
+Where Pahredar is going, in phases, plus the current limitations worth knowing.
+The architecture that underpins this is in [foundation.md](foundation.md).
+
+## Phases
+
+Phases are about the **foundation and platform shape**, not a fixed schedule.
+Feature work on the existing services continues in parallel.
+
+### Phase 0 — Current state
+
+Three services share one database and one HTTP server:
+Vulnerability Intelligence, Security News, Endpoint Scanner (see
+`docs/services/`). Data sync runs on a scheduler. The scanner does passive
+recon, active (Nuclei + native) checks, and a request tool.
+
+Core limitations this roadmap removes: the `api.Server` god-struct, in-memory
+scan jobs, no asset inventory, no auth, no alerting.
+
+### Phase 1 — The spine (foundation)
+
+- **P1 module pattern** — extract a `Module` interface + `Platform` context;
+  move each service behind it; `main.go` registers modules.
+- **P2 durable jobs** — `task` table + worker pool; move endpoint scans onto it;
+  fold the sync scheduler in.
+
+Outcome: new services plug in without touching the core; async work survives
+restarts and can be scheduled.
+
+### Phase 2 — Asset platform
+
+- **P3 asset model** — `asset` + `asset_scan` / `asset_tech` / `asset_cve`.
+- Scanner writes results against an asset; intel matches tech → CVE per asset.
+- A simple inventory UI (assets, their findings, their matched CVEs).
+
+Outcome: Pahredar becomes an inventory that tells the operator what is wrong,
+not three separate tools.
+
+### Phase 3 — Monitoring & alerting
+
+- **P5 auth skeleton** so the API can be driven by automation.
+- **P4 events + notifications** — emit `asset.cve_matched`, `kev.new`,
+  `scan.finding`; deliver to an in-app feed, then webhook/email.
+- Scheduled re-scans of assets (on the P2 queue).
+
+Outcome: "a new KEV matches your stack → you get told", and continuous scanning.
+
+### Phase 4 and beyond — Expansion
+
+New services become straightforward once the spine exists:
+
+- **Attack-surface monitoring** — auto-discover subdomains/assets and scan them
+  on a cadence.
+- **Integrations** — Slack/webhook out, SIEM/JSON export, an external API.
+- **Compliance/reporting** — periodic posture reports per asset.
+- **More intel sources** and detection content.
+
+## Known gaps / limitations
+
+Kept here (not in the README) on purpose.
+
+- **No authentication.** The API is open; run it only on trusted/local
+  networks until P5 lands.
+- **Scan jobs are in-memory.** A backend restart drops running/finished scans
+  (15-min TTL otherwise). P2 fixes this.
+- **`api.Server` holds all dependencies.** Adding a service currently edits
+  core files; P1 fixes this.
+- **Active scan depends on Nuclei templates bundled in the image.** They are
+  pinned, not self-updating; refresh by rebuilding with a newer template tag.
+- **`api/types.ts` is hand-maintained** against the Go types — they can drift;
+  P6 (generation) addresses it.
+- **CAA / SOA DNS records** are not collected (the Go stdlib resolver can't do
+  them; needs a DNS library).
+- **Single Postgres, no backups configured** in the compose dev setup.
+- **No CI yet** (P7).
+
+## Non-goals
+
+- Microservices / multiple deployables.
+- Paid or hosted third-party services.
+- Multi-region or horizontal scaling (single operator, single node).

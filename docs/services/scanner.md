@@ -1,0 +1,75 @@
+# Service: Endpoint Scanner
+
+Assesses a public (or, when enabled, private) endpoint: a details-first recon
+profile of everything discoverable, plus optional active checks that probe with
+attack patterns, plus a request tool for manual testing. Self-contained — the
+cleanest module and a good template for new services.
+
+## Owns
+
+**API routes**
+
+- `POST /api/v1/scan` — start a scan job (passive, or active with
+  `authorized: true`; optional `templates` filter)
+- `POST /api/v1/scan/request` — the request tool (send one crafted request)
+- `GET /api/v1/scan/jobs/{id}` — poll a running job (streams findings)
+- `GET /api/v1/scans`, `GET /api/v1/scans/{id}` — stored results
+- `GET /api/v1/scan/config` — capabilities (active available, allow private)
+
+**Backend**
+
+- `internal/api/scan.go` — job lifecycle (in-memory jobs today; see roadmap P2)
+- `internal/scan/` (self-contained):
+  - `scan.go` — orchestration, scoring, public-only dialer
+  - recon: `dns.go`, `tls.go`, `http.go`, `paths.go`, `tech.go`, `recon.go`
+    (RDAP registration, ASN/reverse-DNS, CT-log subdomains, favicon mmh3,
+    email security)
+  - active: `verify.go` (native evidence checks), `active.go` (Nuclei runner),
+    `waf.go` (WAF/CDN fingerprint)
+  - `requesttool.go` (the Repeater)
+- `internal/db/scan.go` — `SaveScan`, `GetScan`, `RecentScans`, `MatchTech`
+
+**Frontend**
+
+- Page: `ScanPage` (scan landing + result + request tool tab)
+
+**Tables** (migration block `03000+` for new ones)
+
+- `scan` (migration 00018; result stored as JSONB)
+
+## Dependencies
+
+- **Core:** store, config, logger, HTTP server.
+- **Reads from Intel:** `db.MatchTech` → `scan.TechMatcher` matches fingerprinted
+  tech (vendor/product) against intel's `product_stats`/CVE data. This is the
+  one cross-service contract; keep it behind the interface.
+- **Nuclei:** the binary and templates are bundled in the backend image
+  (pinned). Active scanning is gated by `SCAN_ACTIVE_ENABLED`; private targets by
+  `SCAN_ALLOW_PRIVATE`.
+
+## How to add a feature
+
+- **A new recon check:** add a `check*` function in a `scan/*.go` file, call it
+  from `Scan` (as its own phase or within an existing one), extend the `Report`
+  struct and `nilEmpty`, add the field to `frontend/src/api/types.ts`
+  (`ScanReport`) and render a card in `ScanPage`.
+- **A new native active check:** add to `verify.go` with request/response
+  `Evidence`; it streams and shows under "Show evidence". Keep it safe (no
+  exploitation/DoS) and cover it in `verify_test.go`.
+- **New result data:** always stream findings via the progress callback and
+  store the full report as JSONB; the UI leads with details, findings trail.
+
+## Gotchas
+
+- Everything that reaches out uses the scanner's public-only dialer
+  (`sc.dial`), which re-resolves and validates the IP on every connection
+  (SSRF/DNS-rebinding guard). Private targets are allowed only when
+  `SCAN_ALLOW_PRIVATE=true`.
+- Nuclei does **not** use the public-only dialer (it has its own client); the
+  target URL is validated/allowed before Nuclei is invoked, and template runs
+  are filtered to `http,ssl` excluding `dos,fuzz`.
+- Path probes use catch-all detection so a single-page app that returns its
+  HTML shell for every path does not trip exposure checks — preserve that when
+  adding probes.
+- Scan jobs are in-memory and lost on restart (roadmap P2 moves them to the
+  durable queue). The result is persisted to `scan` only on completion.

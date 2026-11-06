@@ -51,3 +51,4 @@ All ports bind to `127.0.0.1` only; there is no authentication.
 - [ARCHITECTURE.md](ARCHITECTURE.md): design, data model, sync, API, decision log, milestones
 - [backend/README.md](backend/README.md): Go module layout, subcommands, configuration, migrations
 - [frontend/README.md](frontend/README.md): React app layout, routes, conventions, dev workflow
+- [docs/](docs/README.md): platform foundation, roadmap, per-service specs, and parallel-work conventions

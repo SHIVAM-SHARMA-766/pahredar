@@ -347,8 +347,12 @@ func (sc *Scanner) Scan(ctx context.Context, target string, active bool, onProgr
 			if len(f.CVEs) > 0 {
 				detail = strings.Join(f.CVEs, ", ") + " — " + detail
 			}
+			var ev *Evidence
+			if f.Request != "" || f.Response != "" {
+				ev = &Evidence{Request: f.Request, Response: f.Response}
+			}
 			mu.Lock()
-			rep.add(nucleiSeverity(f.Severity), "active", f.Name, detail)
+			rep.addEv(nucleiSeverity(f.Severity), "active", f.Name, detail, ev)
 			mu.Unlock()
 			emit()
 		}

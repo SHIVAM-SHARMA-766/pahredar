@@ -54,6 +54,11 @@ type ActiveFinding struct {
 	CVEs       []string `json:"cves"`
 	MatchedAt  string   `json:"matched_at"`
 	Reference  []string `json:"reference,omitempty"`
+	// Request and Response are the raw HTTP exchange Nuclei sent and received
+	// for the match (from its -irr output), so a finding can be inspected.
+	Request  string `json:"request,omitempty"`
+	Response string `json:"response,omitempty"`
+	Type     string `json:"type,omitempty"` // http, ssl, …
 	// Count is how many times this template matched (e.g. one per missing
 	// header); the shown MatchedAt is the first.
 	Count int `json:"count"`
@@ -62,7 +67,10 @@ type ActiveFinding struct {
 // nucleiLine is the subset of Nuclei's -jsonl output we read.
 type nucleiLine struct {
 	TemplateID string `json:"template-id"`
+	Type       string `json:"type"`
 	MatchedAt  string `json:"matched-at"`
+	Request    string `json:"request"`
+	Response   string `json:"response"`
 	Info       struct {
 		Name           string   `json:"name"`
 		Severity       string   `json:"severity"`
@@ -200,6 +208,7 @@ func (n *Nuclei) Run(ctx context.Context, targetURL string, onStats func(ActiveP
 			TemplateID: l.TemplateID, Name: l.Info.Name, Severity: l.Info.Severity,
 			Tags: l.Info.Tags, CVEs: l.Info.Classification.CVEID, MatchedAt: l.MatchedAt,
 			Reference: l.Info.Reference, Count: 1,
+			Request: clip(l.Request, 4000), Response: clip(l.Response, 4000), Type: l.Type,
 		}
 		out.Findings = append(out.Findings, f)
 		matched++

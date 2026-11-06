@@ -33,7 +33,7 @@ cleanest module and a good template for new services.
 
 - Page: `ScanPage` (scan landing + result + request tool tab)
 
-**Tables** (migration block `03000+` for new ones)
+**Tables** (new migrations use the next sequential number — see [../contributing.md](../contributing.md))
 
 - `scan` (migration 00018; result stored as JSONB)
 

@@ -66,7 +66,7 @@ Cross-service reads go through named interfaces, not another service's
 internals: Scanner → Intel via `scan.TechMatcher` (tech → CVE); News → Intel for
 CVE badges. The full per-service specs, the target `Module`/`Platform` pattern
 that will remove the `api.Server` god-struct, the foundational pillars, and the
-parallel-work conventions (incl. per-service migration number blocks) live in
+parallel-work conventions live in
 [`docs/`](docs/README.md): `foundation.md`, `roadmap.md`, `contributing.md`,
 `services/*`.
 
@@ -477,7 +477,7 @@ and alerting. Specific product ideas still on the list:
 | 2026-11-06 | Added a request tool (Repeater): `POST /api/v1/scan/request` sends a user-defined request through the scanner's public-only client and returns the raw request + response; a scan finding's request can be opened there prefilled ("Edit & replay"). Responses are fingerprinted for a WAF/CDN (shared `detectWAF`), which also runs during the scan and shows in Host & network. |
 | 2026-11-06 | Active scans can be narrowed to a chosen template subset (severity / Nuclei tags / template IDs) via the scan job, so a focused test runs a fraction of the ~19.8k templates. |
 | 2026-11-06 | Recon deepened: email security (MTA-STS with policy mode, TLS-RPT, BIMI) and a Shodan-style favicon mmh3 hash (plus SHA-256) with a pivot link; `internal/scan/recon.go`, `waf.go`, `requesttool.go`. |
-| 2026-11-06 | Defined the project as a modular monolith: three product services (Vulnerability Intelligence, Security News, Endpoint Scanner) over a shared core, with named cross-service interfaces and per-service migration number blocks. Documented the platform foundation (module/`Platform` pattern to replace the `api.Server` god-struct, durable job queue, asset-centric model, events/notifications, auth skeleton, CI) and a phased roadmap in `docs/`. Docs only; no code moved yet. |
+| 2026-11-06 | Defined the project as a modular monolith: three product services (Vulnerability Intelligence, Security News, Endpoint Scanner) over a shared core, with named cross-service interfaces; migrations stay a single sequential series (rename on the rare collision). Documented the platform foundation (module/`Platform` pattern to replace the `api.Server` god-struct, durable job queue, asset-centric model, events/notifications, auth skeleton, CI) and a phased roadmap in `docs/`. Docs only; no code moved yet. |
 | 2026-11-03 | The scanner also does active (intrusive) checks with bundled Nuclei, off by default (`SCAN_ACTIVE_ENABLED`): its community templates actively verify vulnerabilities (not destructive exploitation; denial-of-service and fuzzing excluded), gated by a per-request authorisation confirmation. Nuclei (v3.11.1, SHA-pinned) and its templates (v10.5.0) are bundled in the backend image; the self-update was unreliable here. Scanning private/internal targets is a separate opt-in (`SCAN_ALLOW_PRIVATE`) for assessing one's own infrastructure; `host.docker.internal` reaches the Docker host. Both default off — enable only on a trusted single-user instance. |
 | 2026-11-03 | The sidebar has no search box; CVE search lives in the explorer's query bar only. |
 | 2026-11-03 | Phone layout: the CVE explorer switches to cards, tab strips scroll sideways in one row instead of wrapping, the at-a-glance rows stack, and wide tables keep a minimum width and scroll inside their card rather than squeezing columns. Checked at 390 px on every page: no page scrolls sideways. |

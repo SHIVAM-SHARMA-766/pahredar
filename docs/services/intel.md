@@ -36,7 +36,7 @@ The largest service and the source of truth other services read from.
   `VendorsPage`, `SyncPage`
 - Components: `CveTable`, `QueryBar`; `lib/query.ts` (the search query language)
 
-**Tables** (migration block `01000+` for new ones)
+**Tables** (new migrations use the next sequential number — see [../contributing.md](../contributing.md))
 
 - `cve`, `cve_affected`, `kev`, `epss`, `epss_history`, `exploit`,
   `euvd_exploited`, `attack_mapping`, `capec`, `debian_status`, `vulncheck_kev`,
@@ -54,7 +54,7 @@ The largest service and the source of truth other services read from.
 - **A new upstream source:** add a package under `internal/sources/`, register
   its task with the syncer scheduler, write rows via `db/enrichment_write.go`
   (or a new writer), and surface it in the CVE/vendor reads. Add a migration in
-  the `01000+` block for any new table.
+  a new sequential migration for any new table.
 - **A new CVE/vendor query or field:** extend `db/cve_read.go` /
   `vendor_read.go` and the matching `api/*.go` handler; add the field to
   `frontend/src/api/types.ts` (intel section) and render it.

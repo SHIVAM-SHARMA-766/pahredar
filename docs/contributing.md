@@ -14,29 +14,17 @@ doc. A change that needs core is a coordination point — see Rule 3.
 Service ownership is listed in each `docs/services/<name>.md` (its routes,
 backend files, frontend files, and tables).
 
-## Rule 2 — Migrations use per-service number blocks
+## Rule 2 — Migrations are plain sequential
 
 Migrations are `backend/internal/db/migrations/NNNNN_name.sql`, applied by goose
-in numeric order. To stop two parallel changes from colliding on the same
-number, **each service owns a block**:
+in numeric order. Keep them a single sequence: to add one, `ls
+backend/internal/db/migrations/` → take the next number after the highest
+existing (e.g. after `00018` comes `00019`).
 
-| Block | Owner |
-|---|---|
-| `00001`–`00018` | legacy (do not touch) |
-| `01000`+ | Vulnerability Intelligence |
-| `02000`+ | Security News |
-| `03000`+ | Endpoint Scanner |
-| `09000`+ | shared / core schema |
-
-To add one: `ls backend/internal/db/migrations/` → take the next free number in
-**your** service's block. Two services therefore never collide; only two
-changes to the *same* service's schema can, and then the later one renames its
-file to the next number on merge (nothing is applied until merged).
-
-Because a lower-numbered migration from one service can be merged *after* a
-higher-numbered one from another has already run locally, the migration runner
-must allow out-of-order application (goose "allow missing"). Cross-service
-migrations touch different tables, so order between services does not matter.
+Work is usually sequential (one change finished and committed before the next),
+so numbers don't collide. If two parallel changes ever grab the same number,
+the later one to merge renames its file to the next free number — a trivial fix,
+since nothing is applied to a shared database until merged.
 
 Never edit a migration that may already be applied — always add a new one.
 

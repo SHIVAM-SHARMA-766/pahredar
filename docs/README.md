@@ -9,7 +9,7 @@ built today, see `../ARCHITECTURE.md`.
 - **[roadmap.md](roadmap.md)** — phased plan from tools to platform, future
   services, and current known gaps/limitations.
 - **[contributing.md](contributing.md)** — conventions for working in parallel:
-  service ownership, migration number blocks, the core coordination zone.
+  service ownership, migration numbering, the core coordination zone.
 - **services/** — one spec per product service:
   - [intel.md](services/intel.md) — Vulnerability Intelligence
   - [news.md](services/news.md) — Security News

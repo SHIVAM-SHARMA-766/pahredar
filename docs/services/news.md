@@ -24,7 +24,7 @@ CVEs" view. A thin service that leans on Intelligence for CVE context.
 - Page: `NewsPage`
 - Components: `FeedCards` (trending card, latest-advisories card, article list)
 
-**Tables** (migration block `02000+` for new ones)
+**Tables** (new migrations use the next sequential number — see [../contributing.md](../contributing.md))
 
 - `feed`, `feed_article`, `article_bookmark`
 

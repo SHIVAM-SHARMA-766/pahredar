@@ -100,6 +100,11 @@ export function AssetsPage() {
                     {a.last_scanned_at ? <>scanned {relativeTime(a.last_scanned_at)}</> : 'never scanned'}
                   </div>
                 </div>
+                {a.kev_count > 0 ? (
+                  <span className="rounded px-2 py-0.5 text-xs font-medium text-red-300 ring-1 ring-inset ring-red-400/30 bg-red-500/10">{a.kev_count} KEV</span>
+                ) : a.cve_count > 0 ? (
+                  <span className="rounded px-2 py-0.5 text-xs text-zinc-400 ring-1 ring-inset ring-zinc-700">{a.cve_count} CVEs</span>
+                ) : null}
                 {a.last_grade && (
                   <span className={`rounded px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${gradeColor[a.last_grade] ?? gradeColor.F}`}>
                     Grade {a.last_grade}{a.last_score != null && ` · ${a.last_score}`}
@@ -110,7 +115,7 @@ export function AssetsPage() {
                     <Radar className="h-3.5 w-3.5" /> Scan
                   </button>
                 )}
-                <button onClick={() => remove.mutate(a.id)} title="Delete asset" className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-red-300">
+                <button onClick={() => { if (confirm(`Delete asset ${a.value}?`)) remove.mutate(a.id) }} title="Delete asset" className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-red-300">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </li>

@@ -800,6 +800,8 @@ export interface Asset {
   created_at: string
   last_grade?: string
   last_score?: number
+  cve_count: number
+  kev_count: number
 }
 
 export interface ScanRequestSpec {

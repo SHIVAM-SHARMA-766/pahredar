@@ -21,6 +21,9 @@ type Asset struct {
 	// LastGrade/LastScore are joined from the latest scan when available.
 	LastGrade string `json:"last_grade,omitempty"`
 	LastScore *int   `json:"last_score,omitempty"`
+	// CVECount/KEVCount summarise the CVEs matched to the asset.
+	CVECount int `json:"cve_count"`
+	KEVCount int `json:"kev_count"`
 }
 
 // CreateAsset inserts an asset (idempotent on kind+value: returns the existing
@@ -41,9 +44,11 @@ func (s *Store) CreateAsset(ctx context.Context, kind, value, label string, tags
 func (s *Store) ListAssets(ctx context.Context) ([]Asset, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT a.id, a.kind, a.value, a.label, a.tags, a.last_scan_id, a.last_scanned_at, a.created_at,
-		       sc.grade, sc.score
+		       sc.grade, sc.score,
+		       COALESCE(ac.cve_count, 0), COALESCE(ac.kev_count, 0)
 		FROM asset a
 		LEFT JOIN scan sc ON sc.id = a.last_scan_id
+		LEFT JOIN (SELECT asset_id, count(*) AS cve_count, count(*) FILTER (WHERE kev) AS kev_count FROM asset_cve GROUP BY asset_id) ac ON ac.asset_id = a.id
 		ORDER BY a.created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -53,7 +58,7 @@ func (s *Store) ListAssets(ctx context.Context) ([]Asset, error) {
 	for rows.Next() {
 		var a Asset
 		var grade *string
-		if err := rows.Scan(&a.ID, &a.Kind, &a.Value, &a.Label, &a.Tags, &a.LastScanID, &a.LastScannedAt, &a.CreatedAt, &grade, &a.LastScore); err != nil {
+		if err := rows.Scan(&a.ID, &a.Kind, &a.Value, &a.Label, &a.Tags, &a.LastScanID, &a.LastScannedAt, &a.CreatedAt, &grade, &a.LastScore, &a.CVECount, &a.KEVCount); err != nil {
 			return nil, err
 		}
 		if grade != nil {
@@ -69,10 +74,12 @@ func (s *Store) GetAsset(ctx context.Context, id int64) (*Asset, error) {
 	var a Asset
 	var grade *string
 	err := s.pool.QueryRow(ctx, `
-		SELECT a.id, a.kind, a.value, a.label, a.tags, a.last_scan_id, a.last_scanned_at, a.created_at, sc.grade, sc.score
+		SELECT a.id, a.kind, a.value, a.label, a.tags, a.last_scan_id, a.last_scanned_at, a.created_at, sc.grade, sc.score,
+		       (SELECT count(*) FROM asset_cve WHERE asset_id = a.id),
+		       (SELECT count(*) FROM asset_cve WHERE asset_id = a.id AND kev)
 		FROM asset a LEFT JOIN scan sc ON sc.id = a.last_scan_id
 		WHERE a.id = $1`, id).
-		Scan(&a.ID, &a.Kind, &a.Value, &a.Label, &a.Tags, &a.LastScanID, &a.LastScannedAt, &a.CreatedAt, &grade, &a.LastScore)
+		Scan(&a.ID, &a.Kind, &a.Value, &a.Label, &a.Tags, &a.LastScanID, &a.LastScannedAt, &a.CreatedAt, &grade, &a.LastScore, &a.CVECount, &a.KEVCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}

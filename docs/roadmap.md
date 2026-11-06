@@ -30,7 +30,7 @@ scan jobs, no asset inventory, no auth, no alerting.
 
 Outcome: new services plug in via the registry; scans are durable.
 
-### Phase 2 — Asset platform · in progress
+### Phase 2 — Asset platform · done
 
 - **M1 (done)** — `asset` table + `internal/assets` service (CRUD + scan an
   asset), an Inventory nav/page, and scan→asset linking (an asset shows its
@@ -39,13 +39,19 @@ Outcome: new services plug in via the registry; scans are durable.
 - **M2 (done)** — scans link to assets (`scan.asset_id`, migration 00021) and
   the asset detail page shows its latest-scan posture: tech fingerprinted on it
   with matched CVEs, a security-issues summary, a score gauge, and scan history.
-- **M3 (next)** — scheduled re-scans of assets on the durable queue, and
-  persisting matched CVEs per asset (`asset_cve`) to drive alerting.
+- **M3 (done)** — scheduled asset re-scans on the durable queue
+  (`ASSET_RESCAN_INTERVAL`, default 24h), and `asset_cve` (migration 00022):
+  the CVEs matched to an asset are persisted, with a reverse lookup
+  (`AssetsForCVE`) — the foundation Phase 3 alerting builds on.
 
 Outcome: Pahredar becomes an inventory that tells the operator what is wrong,
 not three separate tools.
 
-### Phase 3 — Monitoring & alerting
+### Phase 3 — Monitoring & alerting · next
+
+The asset_cve reverse lookup (Phase 2 M3) is the seed: on a new KEV/CVE match,
+find the affected assets and notify.
+
 
 - **P5 auth skeleton** so the API can be driven by automation.
 - **P4 events + notifications** — emit `asset.cve_matched`, `kev.new`,

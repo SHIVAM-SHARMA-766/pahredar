@@ -11,6 +11,8 @@ import type {
   NewsPage,
   NewsQuery,
   ScanConfig,
+  ScanRequestResult,
+  ScanRequestSpec,
   ScanJob,
   ScanReport,
   ScanSummary,
@@ -75,6 +77,7 @@ export const api = {
     }),
   scanJob: (id: number) => request<ScanJob>(`/api/v1/scan/jobs/${id}`),
   scanConfig: () => request<ScanConfig>('/api/v1/scan/config'),
+  scanRequest: (spec: ScanRequestSpec) => request<ScanRequestResult>('/api/v1/scan/request', { method: 'POST', body: JSON.stringify(spec) }),
   recentScans: () => request<{ items: ScanSummary[] }>('/api/v1/scans'),
   getScan: (id: number) => request<ScanReport>(`/api/v1/scans/${id}`),
   setBookmark: (url: string, bookmarked: boolean) =>

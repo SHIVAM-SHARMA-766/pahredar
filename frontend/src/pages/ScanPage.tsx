@@ -1,9 +1,9 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Circle, Download, Fingerprint, Info, Loader2, Lock, Search, ShieldCheck, Zap } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Circle, Download, Fingerprint, Info, Loader2, Lock, Search, Send, ShieldCheck, Terminal, Zap } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { api, ApiError } from '../api/client'
-import type { ScanEvidence, ScanFinding, ScanJob, ScanReport, ScanSeverity, ScanTech } from '../api/types'
+import type { ScanEvidence, ScanFinding, ScanJob, ScanReport, ScanRequestResult, ScanRequestSpec, ScanSeverity, ScanTech } from '../api/types'
 import { Card, ErrorBox, Tag } from '../components/ui'
 import { Gauge } from '../components/Gauge'
 import { relativeTime } from '../lib/format'
@@ -87,25 +87,50 @@ export function ScanPage() {
     setParams(next, { replace: true })
   }
 
+  // The scanner has two tools: the scan (passive/active) and the request tool.
+  const view = params.get('view') === 'request' ? 'request' : 'scan'
+  const setView = (v: 'scan' | 'request') => {
+    const next = new URLSearchParams(params)
+    if (v === 'request') next.set('view', 'request')
+    else next.delete('view')
+    setParams(next, { replace: true })
+  }
+
+  if (view === 'request') {
+    return (
+      <div>
+        <ToolTabs view={view} onView={setView} />
+        <div className="mt-5"><RequestTool allowPrivate={config.data?.allow_private ?? false} /></div>
+      </div>
+    )
+  }
+
   // Once a scan is started, the landing is replaced by the result view.
   if (jobId != null) {
     return (
-      <ScanResult
-        host={jobData?.host ?? report?.host ?? input.trim()}
-        active={jobData?.active ?? runActive}
-        scanning={scanning}
-        job={jobData}
-        report={report}
-        cached={jobData?.cached ?? false}
-        errMsg={errMsg}
-        onNew={newScan}
-        onRescan={rescan}
-      />
+      <div>
+        <ToolTabs view={view} onView={setView} />
+        <div className="mt-5">
+          <ScanResult
+            host={jobData?.host ?? report?.host ?? input.trim()}
+            active={jobData?.active ?? runActive}
+            scanning={scanning}
+            job={jobData}
+            report={report}
+            cached={jobData?.cached ?? false}
+            errMsg={errMsg}
+            onNew={newScan}
+            onRescan={rescan}
+          />
+        </div>
+      </div>
     )
   }
 
   return (
     <div>
+      <ToolTabs view={view} onView={setView} />
+      <div className="mt-5" />
       {/* Hero */}
       <div className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900/80 to-zinc-950 px-5 py-10 text-center sm:px-8 sm:py-14">
         <pre aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden p-4 text-left font-mono text-[11px] leading-5 whitespace-pre-wrap text-zinc-500/10 select-none">
@@ -224,7 +249,7 @@ function ScanResult({ host, active, scanning, job, report, cached, errMsg, onNew
       {scanning ? (
         <div className="mt-6 space-y-6">
           <ProgressCard job={job} active={active} target={host} />
-          {live.length > 0 && <FindingsCard findings={live} live />}
+          {live.length > 0 && <FindingsCard findings={live} live baseUrl={report?.http?.final_url ?? report?.url} />}
         </div>
       ) : errMsg ? (
         <div className="mt-6"><ErrorBox error={errMsg} /></div>
@@ -246,7 +271,7 @@ function ScanResult({ host, active, scanning, job, report, cached, errMsg, onNew
             {report.paths.some((p) => p.exposed) && <PathsCard report={report} />}
             {report.related && <RelatedCard related={report.related} />}
             {/* Security issues, derived from the details above. */}
-            <div id="issues"><FindingsCard findings={report.findings} /></div>
+            <div id="issues"><FindingsCard findings={report.findings} baseUrl={report.http?.final_url ?? report.url} /></div>
             {report.active?.ran && <ActiveCard active={report.active} />}
             {report.errors.length > 0 && (
               <Card title="Scan notes"><ul className="space-y-1 text-xs text-zinc-500">{report.errors.map((e, i) => <li key={i}>{e}</li>)}</ul></Card>
@@ -277,7 +302,7 @@ function ScanResult({ host, active, scanning, job, report, cached, errMsg, onNew
 
 // FindingsCard shows a severity-count row and the findings list. With `live`
 // it reflects results still streaming in from a running scan.
-function FindingsCard({ findings, live = false }: { findings: ScanFinding[]; live?: boolean }) {
+function FindingsCard({ findings, live = false, baseUrl }: { findings: ScanFinding[]; live?: boolean; baseUrl?: string }) {
   const counts = findings.reduce<Record<string, number>>((a, f) => ((a[f.severity] = (a[f.severity] ?? 0) + 1), a), {})
   return (
     <Card title={live ? 'Findings so far' : 'Findings'} actions={live ? <span className="inline-flex items-center gap-1.5 text-xs text-cyan-300"><Loader2 className="h-3.5 w-3.5 animate-spin" /> live</span> : undefined}>
@@ -289,7 +314,7 @@ function FindingsCard({ findings, live = false }: { findings: ScanFinding[]; liv
       {findings.length === 0 ? (
         <p className="text-sm text-zinc-500">{live ? 'Checking…' : 'No findings.'}</p>
       ) : (
-        <ul className="space-y-2">{findings.map((f, i) => <FindingRow key={`${f.category}-${f.title}-${i}`} f={f} />)}</ul>
+        <ul className="space-y-2">{findings.map((f, i) => <FindingRow key={`${f.category}-${f.title}-${i}`} f={f} baseUrl={baseUrl} />)}</ul>
       )}
     </Card>
   )
@@ -444,7 +469,7 @@ function Feature({ icon: Icon, tone, title, text }: { icon: typeof Search; tone:
 }
 
 
-function FindingRow({ f }: { f: ScanFinding }) {
+function FindingRow({ f, baseUrl }: { f: ScanFinding; baseUrl?: string }) {
   const Icon = f.severity === 'good' ? ShieldCheck : AlertTriangle
   const [open, setOpen] = useState(false)
   return (
@@ -465,7 +490,7 @@ function FindingRow({ f }: { f: ScanFinding }) {
             <button onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200">
               {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />} {open ? 'Hide' : 'Show'} evidence
             </button>
-            {open && <EvidenceBlock e={f.evidence} />}
+            {open && <EvidenceBlock e={f.evidence} baseUrl={baseUrl} />}
           </div>
         )}
       </div>
@@ -473,11 +498,21 @@ function FindingRow({ f }: { f: ScanFinding }) {
   )
 }
 
-function EvidenceBlock({ e }: { e: ScanEvidence }) {
+function EvidenceBlock({ e, baseUrl }: { e: ScanEvidence; baseUrl?: string }) {
+  const navigate = useNavigate()
+  const replay = () => {
+    const spec = rawToSpec(e.request, baseUrl)
+    if (!spec) return
+    try { sessionStorage.setItem('pahredar-replay', JSON.stringify(spec)) } catch { /* ignore */ }
+    navigate('?view=request')
+  }
   return (
     <div className="mt-1.5 space-y-2 rounded-lg border border-zinc-800 bg-zinc-950 p-3">
       <div>
-        <div className="mb-1 text-[10px] font-semibold tracking-wider text-zinc-500 uppercase">Request sent</div>
+        <div className="mb-1 flex items-center justify-between">
+          <span className="text-[10px] font-semibold tracking-wider text-zinc-500 uppercase">Request sent</span>
+          {e.request && <button onClick={replay} className="inline-flex items-center gap-1 text-[11px] text-cyan-300 hover:text-cyan-200"><Terminal className="h-3 w-3" /> Edit & replay</button>}
+        </div>
         <pre className="overflow-x-auto font-mono text-xs break-all whitespace-pre-wrap text-emerald-300/90">{e.request}</pre>
       </div>
       <div>
@@ -751,4 +786,196 @@ function RelatedCard({ related }: { related: NonNullable<ScanReport['related']> 
       )}
     </Card>
   )
+}
+
+// ToolTabs switches between the scanner and the request tool.
+function ToolTabs({ view, onView }: { view: 'scan' | 'request'; onView: (v: 'scan' | 'request') => void }) {
+  const tab = (v: 'scan' | 'request', icon: typeof Search, label: string) => {
+    const Icon = icon
+    const on = view === v
+    return (
+      <button onClick={() => onView(v)} className={`inline-flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${on ? 'border-cyan-400 text-white' : 'border-transparent text-zinc-400 hover:border-zinc-600 hover:text-zinc-200'}`}>
+        <Icon className="h-4 w-4" /> {label}
+      </button>
+    )
+  }
+  return (
+    <div className="flex items-end gap-1 border-b border-zinc-800">
+      {tab('scan', Search, 'Endpoint scan')}
+      {tab('request', Terminal, 'Request tool')}
+    </div>
+  )
+}
+
+const REQUEST_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
+
+// RequestTool is a transparent HTTP client (a Repeater): craft a request,
+// send it through the scanner's public-only client, and inspect the raw
+// request and response. The request bodies of scan findings can be replayed
+// here to probe further.
+function RequestTool({ allowPrivate }: { allowPrivate: boolean }) {
+  const [method, setMethod] = useState('GET')
+  const [url, setUrl] = useState('')
+  const [headersText, setHeadersText] = useState('')
+  const [body, setBody] = useState('')
+  const [follow, setFollow] = useState(false)
+  // Prefill from a finding's "Edit & replay".
+  useEffect(() => {
+    let raw: string | null = null
+    try { raw = sessionStorage.getItem('pahredar-replay'); sessionStorage.removeItem('pahredar-replay') } catch { /* ignore */ }
+    if (!raw) return
+    try {
+      const s = JSON.parse(raw) as ScanRequestSpec
+      setMethod(s.method || 'GET')
+      setUrl(s.url || '')
+      setHeadersText((s.headers || []).map((h) => `${h.name}: ${h.value}`).join('\n'))
+      setBody(s.body || '')
+      setFollow(!!s.follow_redirects)
+    } catch { /* ignore */ }
+  }, [])
+  const send = useMutation({
+    mutationFn: () => api.scanRequest({ method, url: url.trim(), headers: parseHeaderLines(headersText), body, follow_redirects: follow }),
+  })
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (url.trim()) send.mutate()
+  }
+  const res = send.data
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-2">
+      <form onSubmit={submit} className="space-y-3">
+        <Card title="Request">
+          <div className="flex gap-2">
+            <select value={method} onChange={(e) => setMethod(e.target.value)} className="shrink-0 rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 focus:border-cyan-400/40 focus:outline-none">
+              {REQUEST_METHODS.map((m) => <option key={m}>{m}</option>)}
+            </select>
+            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://example.com/api/path?query=1" autoFocus
+              className="min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-cyan-400/40 focus:outline-none" />
+            <button type="submit" disabled={!url.trim() || send.isPending} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-cyan-500 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-400 disabled:opacity-50">
+              {send.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send
+            </button>
+          </div>
+          <div className="mt-3">
+            <label className="mb-1 block text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">Headers (one per line, Name: value)</label>
+            <textarea value={headersText} onChange={(e) => setHeadersText(e.target.value)} rows={4} spellCheck={false}
+              placeholder={'Authorization: Bearer …\nContent-Type: application/json'}
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-200 placeholder:text-zinc-600 focus:border-cyan-400/40 focus:outline-none" />
+          </div>
+          <div className="mt-3">
+            <label className="mb-1 block text-[11px] font-semibold tracking-wider text-zinc-500 uppercase">Body</label>
+            <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={5} spellCheck={false}
+              placeholder={'{ "key": "value" }'}
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-200 placeholder:text-zinc-600 focus:border-cyan-400/40 focus:outline-none" />
+          </div>
+          <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-zinc-300">
+            <input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} className="accent-cyan-400" /> Follow redirects
+          </label>
+          <p className="mt-2 text-xs text-zinc-600">Sends exactly what you specify, through the scanner's {allowPrivate ? 'client (public and private targets allowed on this server)' : 'public-only client'}. Only test endpoints you are authorised to.</p>
+          {send.isError && <p className="mt-2 text-sm text-red-300">{send.error instanceof ApiError ? send.error.message : String(send.error)}</p>}
+        </Card>
+        {res && (
+          <Card title="Request sent">
+            <pre className="max-h-64 overflow-auto font-mono text-xs break-all whitespace-pre-wrap text-emerald-300/90">{res.request}</pre>
+          </Card>
+        )}
+      </form>
+
+      <div className="space-y-3">
+        {send.isPending ? (
+          <Card><div className="flex items-center gap-2 text-sm text-zinc-400"><Loader2 className="h-4 w-4 animate-spin text-cyan-300" /> Sending…</div></Card>
+        ) : res ? (
+          <ResponseView res={res} />
+        ) : (
+          <Card><p className="py-8 text-center text-sm text-zinc-500">The response will appear here. Craft a request and press Send.</p></Card>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ResponseView({ res }: { res: ScanRequestResult }) {
+  const [tab, setTab] = useState<'body' | 'headers'>('body')
+  const statusTone = res.status >= 500 ? 'text-red-300' : res.status >= 400 ? 'text-amber-300' : res.status >= 300 ? 'text-sky-300' : 'text-emerald-300'
+  return (
+    <Card title="Response">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className={`font-mono font-semibold ${statusTone}`}>{res.status} {res.status_text}</span>
+        <span className="text-xs text-zinc-500">{res.proto}</span>
+        <span className="text-xs text-zinc-500">· {res.time_ms} ms</span>
+        <span className="text-xs text-zinc-500">· {fmtBytes(res.body_size)}</span>
+        {res.remote_ip && <span className="text-xs text-zinc-500">· {res.remote_ip}</span>}
+        {res.waf && <span className="rounded bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-medium text-violet-300 ring-1 ring-inset ring-violet-400/30">WAF: {res.waf}</span>}
+        {res.blocked && <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-medium text-red-300 ring-1 ring-inset ring-red-400/30">looks blocked</span>}
+      </div>
+      <div className="mt-3 flex gap-1 border-b border-zinc-800">
+        {(['body', 'headers'] as const).map((t) => (
+          <button key={t} onClick={() => setTab(t)} className={`-mb-px border-b-2 px-3 py-1.5 text-xs font-medium ${tab === t ? 'border-cyan-400 text-white' : 'border-transparent text-zinc-400 hover:text-zinc-200'}`}>
+            {t === 'body' ? 'Body' : `Headers (${res.headers.length})`}
+          </button>
+        ))}
+      </div>
+      {tab === 'body' ? (
+        <pre className="mt-2 max-h-[32rem] overflow-auto font-mono text-xs break-all whitespace-pre-wrap text-zinc-300">{res.body || <span className="text-zinc-600">(empty body)</span>}</pre>
+      ) : (
+        <dl className="mt-2 max-h-[32rem] space-y-1 overflow-auto">
+          {res.headers.map((h, i) => (
+            <div key={i} className="grid grid-cols-[10rem_1fr] gap-2 text-xs">
+              <dt className="truncate font-mono text-zinc-400" title={h.name}>{h.name}</dt>
+              <dd className="min-w-0 font-mono break-all text-zinc-300">{h.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </Card>
+  )
+}
+
+// parseHeaderLines turns "Name: value" lines into header pairs.
+function parseHeaderLines(text: string): { name: string; value: string }[] {
+  const out: { name: string; value: string }[] = []
+  for (const line of text.split('\n')) {
+    const i = line.indexOf(':')
+    if (i <= 0) continue
+    const name = line.slice(0, i).trim()
+    const value = line.slice(i + 1).trim()
+    if (name) out.push({ name, value })
+  }
+  return out
+}
+
+function fmtBytes(n: number): string {
+  if (n >= 1 << 20) return `${(n / (1 << 20)).toFixed(1)} MB`
+  if (n >= 1 << 10) return `${(n / (1 << 10)).toFixed(1)} KB`
+  return `${n} B`
+}
+
+// rawToSpec parses a raw HTTP request (as captured in evidence) into a request
+// spec the request tool can send. baseUrl supplies the scheme/host when the
+// request line has only a path.
+function rawToSpec(raw: string, baseUrl?: string): ScanRequestSpec | null {
+  if (!raw) return null
+  const lines = raw.replace(/\r/g, '').split('\n')
+  const m = lines[0].trim().match(/^([A-Z]+)\s+(\S+)(?:\s+HTTP\/[\d.]+)?$/)
+  if (!m) return null
+  const method = m[1]
+  let path = m[2]
+  const headers: { name: string; value: string }[] = []
+  let host = ''
+  let bodyStart = -1
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i].trim() === '') { bodyStart = i + 1; break }
+    const idx = lines[i].indexOf(':')
+    if (idx <= 0) continue
+    const name = lines[i].slice(0, idx).trim()
+    const value = lines[i].slice(idx + 1).trim()
+    if (name.toLowerCase() === 'host') { host = value; continue }
+    headers.push({ name, value })
+  }
+  const body = bodyStart >= 0 ? lines.slice(bodyStart).join('\n') : ''
+  let scheme = 'https'
+  let baseHost = host
+  try { const b = baseUrl ? new URL(baseUrl) : null; if (b) { scheme = b.protocol.replace(':', ''); if (!baseHost) baseHost = b.host } } catch { /* ignore */ }
+  const url = /^https?:\/\//.test(path) ? path : `${scheme}://${baseHost}${path.startsWith('/') ? '' : '/'}${path}`
+  return { method, url, headers, body, follow_redirects: false }
 }

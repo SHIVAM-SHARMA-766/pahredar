@@ -200,6 +200,24 @@ func (s *Server) getScan(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(payload)
 }
 
+// scanRequest sends one user-defined HTTP request (the request tool) and
+// returns the raw request and response for inspection.
+func (s *Server) scanRequest(w http.ResponseWriter, r *http.Request) {
+	var spec scan.RequestSpec
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&spec); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	res, err := s.scanner.SendRequest(ctx, spec)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
 // scanConfig tells the UI which scanner capabilities the server enables and,
 // when active scanning is on, the Nuclei template categories it covers (so the
 // UI can show what the checks are, not just a total).

@@ -64,6 +64,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/sync/status", s.syncStatus)
 	mux.HandleFunc("POST /api/v1/sync/{source}", s.triggerSync)
 	mux.HandleFunc("POST /api/v1/scan", s.runScan)
+	mux.HandleFunc("POST /api/v1/scan/request", s.scanRequest)
 	mux.HandleFunc("GET /api/v1/scans", s.listScans)
 	mux.HandleFunc("GET /api/v1/scans/{id}", s.getScan)
 	mux.HandleFunc("GET /api/v1/scan/jobs/{id}", s.scanJobStatus)

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import {
+  Bell,
   Boxes,
   Building2,
   Bug,
@@ -25,6 +26,7 @@ interface NavItem {
   label: string
   icon: LucideIcon
   active: (loc: Location) => boolean
+  badge?: 'alerts'
 }
 
 // Sections mirror what Pahredar does; "Known exploited" and "Likely exploited"
@@ -42,6 +44,11 @@ const SECTIONS: { title: string; dot: string; items: NavItem[] }[] = [
     title: 'Inventory',
     dot: 'bg-violet-400',
     items: [{ to: '/inventory', label: 'Assets', icon: Boxes, active: (l) => l.pathname.startsWith('/inventory') }],
+  },
+  {
+    title: 'Monitoring',
+    dot: 'bg-rose-400',
+    items: [{ to: '/alerts', label: 'Alerts', icon: Bell, active: (l) => l.pathname.startsWith('/alerts'), badge: 'alerts' }],
   },
   {
     title: 'Vulnerability intelligence',
@@ -195,6 +202,8 @@ function Sidebar({ collapsed, location, onToggle, onClose, drawer }: {
 
 function NavRow({ item, active, collapsed }: { item: NavItem; active: boolean; collapsed: boolean }) {
   const Icon = item.icon
+  const unread = useQuery({ queryKey: ['alerts-unread'], queryFn: api.alertsUnread, enabled: item.badge === 'alerts', refetchInterval: 60_000 })
+  const count = item.badge === 'alerts' ? unread.data?.unread ?? 0 : 0
   return (
     <Link
       to={item.to}
@@ -207,6 +216,11 @@ function NavRow({ item, active, collapsed }: { item: NavItem; active: boolean; c
       {active && <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-r bg-cyan-400" />}
       <Icon className={`h-[18px] w-[18px] shrink-0 ${active ? 'text-cyan-300' : 'text-zinc-400'}`} />
       {!collapsed && <span className="truncate">{item.label}</span>}
+      {count > 0 && (
+        collapsed
+          ? <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-rose-500" />
+          : <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-rose-500/20 px-1.5 text-[11px] font-semibold text-rose-300 ring-1 ring-inset ring-rose-400/30">{count}</span>
+      )}
     </Link>
   )
 }

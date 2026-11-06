@@ -789,6 +789,19 @@ export interface AssetCVE {
   first_seen: string
 }
 
+export interface Alert {
+  id: number
+  type: string
+  asset_id?: number
+  cve_id?: string
+  severity: string
+  title: string
+  detail?: string
+  created_at: string
+  read_at?: string
+  asset_value?: string
+}
+
 export interface Asset {
   id: number
   kind: string

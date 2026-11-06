@@ -226,3 +226,34 @@ func (s *Store) AssetsDueForRescan(ctx context.Context, before time.Time) ([]Ass
 	}
 	return out, rows.Err()
 }
+
+// AssetTech is a product fingerprinted on an asset.
+type AssetTech struct {
+	Vendor  string `json:"vendor"`
+	Product string `json:"product"`
+	Version string `json:"version"`
+}
+
+// ReplaceAssetTech sets the asset's fingerprinted products to the given set.
+func (s *Store) ReplaceAssetTech(ctx context.Context, assetID int64, techs []AssetTech) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `DELETE FROM asset_tech WHERE asset_id = $1`, assetID); err != nil {
+		return err
+	}
+	for _, t := range techs {
+		if t.Vendor == "" || t.Product == "" {
+			continue
+		}
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO asset_tech (asset_id, vendor, product, version) VALUES ($1, $2, $3, $4)
+			 ON CONFLICT (asset_id, vendor, product) DO UPDATE SET version = EXCLUDED.version`,
+			assetID, t.Vendor, t.Product, t.Version); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}

@@ -27,12 +27,13 @@ type Alert struct {
 func (s *Store) GenerateKEVAlerts(ctx context.Context) (int, error) {
 	rows, err := s.pool.Query(ctx, `
 		INSERT INTO alert (type, asset_id, cve_id, severity, title, detail)
-		SELECT 'kev_match', ac.asset_id, ac.cve_id, 'high',
+		SELECT DISTINCT 'kev_match', at.asset_id, ca.cve_id, 'high',
 		       'Known-exploited CVE on ' || a.value,
-		       ac.cve_id || ' matched on ' || a.value || ' is in the CISA Known Exploited Vulnerabilities catalog — patch urgently.'
-		FROM asset_cve ac
-		JOIN kev k ON k.cve_id = ac.cve_id
-		JOIN asset a ON a.id = ac.asset_id
+		       ca.cve_id || ' affects ' || at.product || ' on ' || a.value || ' and is in the CISA Known Exploited Vulnerabilities catalog — patch urgently.'
+		FROM asset_tech at
+		JOIN cve_affected ca ON ca.vendor = at.vendor AND ca.product = at.product
+		JOIN kev k ON k.cve_id = ca.cve_id
+		JOIN asset a ON a.id = at.asset_id
 		ON CONFLICT (type, asset_id, cve_id) DO NOTHING
 		RETURNING id`)
 	if err != nil {

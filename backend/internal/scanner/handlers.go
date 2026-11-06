@@ -153,6 +153,7 @@ func (s *Service) handleScanTask(ctx context.Context, payload json.RawMessage, p
 	if p.AssetID > 0 && id > 0 {
 		_ = s.Store.LinkAssetScan(saveCtx, p.AssetID, id)
 		_ = s.Store.ReplaceAssetCVEs(saveCtx, p.AssetID, assetCVEsFromReport(rep))
+		_ = s.Store.ReplaceAssetTech(saveCtx, p.AssetID, assetTechFromReport(rep))
 	}
 	return res, nil
 }
@@ -264,6 +265,25 @@ func assetCVEsFromReport(rep *scan.Report) []db.AssetCVE {
 			seen[e.ID] = true
 			out = append(out, db.AssetCVE{CVEID: e.ID, Product: t.CVEs.Product, KEV: e.KEV})
 		}
+	}
+	return out
+}
+
+// assetTechFromReport extracts the (vendor, product) pairs fingerprinted on the
+// asset, so alerting can match new KEVs for those products.
+func assetTechFromReport(rep *scan.Report) []db.AssetTech {
+	out := []db.AssetTech{}
+	seen := map[string]bool{}
+	for _, t := range rep.Tech {
+		if t.CVEs == nil || t.CVEs.Vendor == "" || t.CVEs.Product == "" {
+			continue
+		}
+		key := t.CVEs.Vendor + "/" + t.CVEs.Product
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, db.AssetTech{Vendor: t.CVEs.Vendor, Product: t.CVEs.Product, Version: t.Version})
 	}
 	return out
 }

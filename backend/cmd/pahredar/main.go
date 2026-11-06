@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/alerts"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/api"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/assets"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/config"
@@ -226,6 +227,9 @@ func serve(ctx context.Context, cfg config.Config) error {
 		go assetRescanLoop(jobsCtx, store, queue, cfg.AssetRescanInterval)
 	}
 
+	// Raise alerts for assets matched by known-exploited CVEs.
+	go alertCheckLoop(jobsCtx, store)
+
 	syncCtx, stopSync := context.WithCancel(ctx)
 	syncDone := make(chan struct{})
 	var sched *syncer.Scheduler
@@ -317,6 +321,35 @@ func assetRescanLoop(ctx context.Context, store *db.Store, queue *jobs.Queue, in
 			} else if n > 0 {
 				slog.Info("asset rescans enqueued", "count", n)
 			}
+		}
+	}
+}
+
+// alertCheckLoop generates asset alerts shortly after startup and periodically.
+func alertCheckLoop(ctx context.Context, store *db.Store) {
+	run := func() {
+		rctx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		if n, err := alerts.Check(rctx, store); err != nil {
+			slog.Warn("alert check failed", "err", err)
+		} else if n > 0 {
+			slog.Info("alerts raised", "count", n)
+		}
+	}
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(10 * time.Second):
+		run()
+	}
+	t := time.NewTicker(15 * time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			run()
 		}
 	}
 }

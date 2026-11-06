@@ -6,6 +6,7 @@ import { api } from '../api/client'
 import type { CveSummary, DailyCount, Dashboard, SeverityMix } from '../api/types'
 import { LatestAdvisoriesCard, TrendingCard } from '../components/FeedCards'
 import { MetricWidget } from '../components/MetricWidget'
+import { MonitoringStrip } from '../components/MonitoringStrip'
 import { Card, ErrorBox, ExploitTag, KevTag, PageHeader, RansomwareTag, SeverityBadge, Spinner } from '../components/ui'
 import { fmtDate, fmtEpss, fmtNumber, relativeTime } from '../lib/format'
 import { useOrigin } from '../lib/origin'
@@ -26,6 +27,7 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Dashboard" subtitle={`What changed in the CVE landscape · updated ${relativeTime(d.generated_at)} · counts use UTC days`} />
+      <MonitoringStrip />
       <Headline d={d} />
 
       <MetricWidget params={params} setParams={(p) => setParams(p, { replace: true })} />

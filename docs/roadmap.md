@@ -47,7 +47,7 @@ Outcome: new services plug in via the registry; scans are durable.
 Outcome: Pahredar becomes an inventory that tells the operator what is wrong,
 not three separate tools.
 
-### Phase 3 — Monitoring & alerting · in progress
+### Phase 3 — Monitoring & alerting · feature-complete
 
 The asset_cve reverse lookup (Phase 2 M3) is the seed: on a new KEV/CVE match,
 find the affected assets and notify.
@@ -55,16 +55,22 @@ find the affected assets and notify.
 - **M1 (done)** — alert table (migration 00023) + `internal/alerts` service; a
   periodic check raises a deduped alert when a CVE matched to a tracked asset is
   in CISA KEV. In-app alerts feed with a nav unread badge.
-- **M2 (done)** — `asset_tech` (migration 00024): the scanner records an
-  asset's products, and KEV alerting matches those against cve_affected + kev,
-  catching any known-exploited CVE for the asset's products (not just the
-  asset_cve examples) the moment the KEV catalog updates. *Still to add:
-  EPSS-spike and new-critical-finding triggers.*
-- **M3 (in progress)** — delivery out: a webhook notifier posts new alerts to
-  `ALERT_WEBHOOK_URL` (done); and an opt-in **API-key auth skeleton** (`API_KEY`
-  gates `/api/v1/*`, `/healthz` open; empty = open) so the API can be driven by
-  automation (done). *Next: email delivery, and SPA auth so the bundled UI
-  works with auth enabled.*
+- **M2 (done)** — three triggers over `asset_tech` (migration 00024): **KEV
+  match** (a known-exploited CVE for the asset's products, the moment the KEV
+  catalog updates), **high EPSS** (a non-KEV CVE at or above
+  `ALERT_EPSS_THRESHOLD`, default 0.5 — raise toward 0.7 to cut noise), and
+  **critical finding** (the scanner raises one from a critical scan result).
+- **M3 (done)** — delivery out: a notifier posts new alerts to
+  `ALERT_WEBHOOK_URL` (Slack-style JSON) and/or emails them (SMTP), delivered
+  once via `alert.delivered_at` and retried on failure; an opt-in **API-key
+  auth** (`API_KEY` gates `/api/v1/*`, `/healthz` open; empty = open) with the
+  bundled SPA prompting for the key on 401.
+- **Dashboard** — a monitoring strip surfaces the operator's own posture
+  (assets tracked, KEV exposure, unread alerts, newest alerts) above the CVE
+  landscape.
+
+Remaining (deferred): multi-user auth (per-user accounts/roles) — a later step
+for a single-operator tool.
 
 
 - **P5 auth skeleton** so the API can be driven by automation.

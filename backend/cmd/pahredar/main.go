@@ -233,7 +233,7 @@ func serve(ctx context.Context, cfg config.Config) error {
 		Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername,
 		Password: cfg.SMTPPassword, From: cfg.SMTPFrom, To: cfg.AlertEmailTo,
 	}, slog.Default())
-	go alertCheckLoop(jobsCtx, store, notifier)
+	go alertCheckLoop(jobsCtx, store, notifier, cfg.AlertEPSSThreshold)
 
 	syncCtx, stopSync := context.WithCancel(ctx)
 	syncDone := make(chan struct{})
@@ -331,11 +331,11 @@ func assetRescanLoop(ctx context.Context, store *db.Store, queue *jobs.Queue, in
 }
 
 // alertCheckLoop generates asset alerts shortly after startup and periodically.
-func alertCheckLoop(ctx context.Context, store *db.Store, notifier *alerts.Notifier) {
+func alertCheckLoop(ctx context.Context, store *db.Store, notifier *alerts.Notifier, epssThreshold float64) {
 	run := func() {
 		rctx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
-		newAlerts, err := alerts.Check(rctx, store)
+		newAlerts, err := alerts.Check(rctx, store, epssThreshold)
 		if err != nil {
 			slog.Warn("alert check failed", "err", err)
 		} else if len(newAlerts) > 0 {

@@ -69,14 +69,15 @@ func (s *Service) readAll(w http.ResponseWriter, r *http.Request) {
 	platform.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// Check generates alerts for new KEV matches and returns the new ones. Called
-// on a schedule.
-func Check(ctx context.Context, store *db.Store) ([]db.Alert, error) {
+// Check generates alerts for new KEV matches and high-EPSS CVEs (at or above
+// epssThreshold) on tracked assets and returns the new ones. Called on a
+// schedule.
+func Check(ctx context.Context, store *db.Store, epssThreshold float64) ([]db.Alert, error) {
 	kev, err := store.GenerateKEVAlerts(ctx)
 	if err != nil {
 		return nil, err
 	}
-	epss, err := store.GenerateEPSSAlerts(ctx)
+	epss, err := store.GenerateEPSSAlerts(ctx, epssThreshold)
 	if err != nil {
 		return kev, err
 	}

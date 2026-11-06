@@ -32,6 +32,10 @@ type Config struct {
 	AssetRescanInterval time.Duration
 	// AlertWebhookURL receives new alerts as JSON (Slack-style {text}); empty disables.
 	AlertWebhookURL string
+	// AlertEPSSThreshold is the minimum EPSS score (0–1) for a non-KEV CVE on a
+	// tracked asset to raise a "likely-exploited" alert. Higher = fewer, surer
+	// alerts. Default 0.5; raise toward 0.7 to cut noise.
+	AlertEPSSThreshold float64
 	// SMTP + recipient for email alert delivery; email is enabled when SMTPHost
 	// and AlertEmailTo are both set.
 	SMTPHost     string
@@ -110,6 +114,9 @@ func Load() (Config, error) {
 	}
 	if cfg.ScanActiveEnabled, err = strconv.ParseBool(getenv("SCAN_ACTIVE_ENABLED", "false")); err != nil {
 		return Config{}, errors.New("SCAN_ACTIVE_ENABLED must be true or false")
+	}
+	if cfg.AlertEPSSThreshold, err = strconv.ParseFloat(getenv("ALERT_EPSS_THRESHOLD", "0.5"), 64); err != nil || cfg.AlertEPSSThreshold < 0 || cfg.AlertEPSSThreshold > 1 {
+		return Config{}, errors.New("ALERT_EPSS_THRESHOLD must be a number between 0 and 1")
 	}
 	for _, d := range []struct {
 		key      string

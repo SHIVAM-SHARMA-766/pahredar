@@ -121,3 +121,101 @@ func (s *Store) AssetScans(ctx context.Context, assetID int64, limit int) ([]Sca
 	}
 	return out, rows.Err()
 }
+
+// AssetCVE is a CVE matched to an asset.
+type AssetCVE struct {
+	CVEID     string    `json:"cve_id"`
+	Product   string    `json:"product"`
+	KEV       bool      `json:"kev"`
+	FirstSeen time.Time `json:"first_seen"`
+}
+
+// ReplaceAssetCVEs sets the asset's matched CVEs to the given set (keeping
+// first_seen for ones already present), and removes ones no longer matched.
+func (s *Store) ReplaceAssetCVEs(ctx context.Context, assetID int64, cves []AssetCVE) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	ids := make([]string, len(cves))
+	for i, c := range cves {
+		ids[i] = c.CVEID
+	}
+	// Remove ones no longer matched.
+	if _, err := tx.Exec(ctx, `DELETE FROM asset_cve WHERE asset_id = $1 AND NOT (cve_id = ANY($2))`, assetID, ids); err != nil {
+		return err
+	}
+	for _, c := range cves {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO asset_cve (asset_id, cve_id, product, kev) VALUES ($1, $2, $3, $4)
+			ON CONFLICT (asset_id, cve_id) DO UPDATE SET product = EXCLUDED.product, kev = EXCLUDED.kev`,
+			assetID, c.CVEID, c.Product, c.KEV); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// AssetCVEs returns the CVEs matched to an asset, KEV first.
+func (s *Store) AssetCVEs(ctx context.Context, assetID int64) ([]AssetCVE, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT cve_id, product, kev, first_seen FROM asset_cve WHERE asset_id = $1 ORDER BY kev DESC, cve_id`, assetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []AssetCVE{}
+	for rows.Next() {
+		var c AssetCVE
+		if err := rows.Scan(&c.CVEID, &c.Product, &c.KEV, &c.FirstSeen); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// AssetsForCVE returns the assets matched to a CVE (the reverse lookup that
+// alerting uses).
+func (s *Store) AssetsForCVE(ctx context.Context, cveID string) ([]Asset, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT a.id, a.kind, a.value, a.label, a.tags, a.last_scan_id, a.last_scanned_at, a.created_at
+		FROM asset a JOIN asset_cve ac ON ac.asset_id = a.id
+		WHERE ac.cve_id = $1 ORDER BY a.value`, cveID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Asset{}
+	for rows.Next() {
+		var a Asset
+		if err := rows.Scan(&a.ID, &a.Kind, &a.Value, &a.Label, &a.Tags, &a.LastScanID, &a.LastScannedAt, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// AssetsDueForRescan returns scannable assets not scanned since before (or never).
+func (s *Store) AssetsDueForRescan(ctx context.Context, before time.Time) ([]Asset, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, kind, value, label, tags, last_scan_id, last_scanned_at, created_at
+		FROM asset
+		WHERE kind IN ('domain','url','ip') AND (last_scanned_at IS NULL OR last_scanned_at < $1)
+		ORDER BY last_scanned_at NULLS FIRST`, before)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Asset{}
+	for rows.Next() {
+		var a Asset
+		if err := rows.Scan(&a.ID, &a.Kind, &a.Value, &a.Label, &a.Tags, &a.LastScanID, &a.LastScannedAt, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/api"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/assets"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/config"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/jobs"
@@ -220,6 +221,11 @@ func serve(ctx context.Context, cfg config.Config) error {
 	jobsDone := make(chan struct{})
 	go func() { defer close(jobsDone); queue.Work(jobsCtx, 2) }()
 
+	// Auto re-scan tracked assets on a schedule (0 disables).
+	if cfg.AssetRescanInterval > 0 {
+		go assetRescanLoop(jobsCtx, store, queue, cfg.AssetRescanInterval)
+	}
+
 	syncCtx, stopSync := context.WithCancel(ctx)
 	syncDone := make(chan struct{})
 	var sched *syncer.Scheduler
@@ -292,6 +298,27 @@ func serve(ctx context.Context, cfg config.Config) error {
 		slog.Warn("job queue did not stop within the shutdown timeout")
 	}
 	return serveErr
+}
+
+// assetRescanLoop enqueues due asset re-scans every interval.
+func assetRescanLoop(ctx context.Context, store *db.Store, queue *jobs.Queue, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			rctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+			n, err := assets.RescanDue(rctx, store, queue, interval)
+			cancel()
+			if err != nil {
+				slog.Warn("asset rescan failed", "err", err)
+			} else if n > 0 {
+				slog.Info("asset rescans enqueued", "count", n)
+			}
+		}
+	}
 }
 
 func healthcheck() error {

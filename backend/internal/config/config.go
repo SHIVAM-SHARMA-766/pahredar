@@ -28,6 +28,8 @@ type Config struct {
 	// Endpoint scanner settings.
 	ScanAllowPrivate   bool   // allow scanning private/internal addresses
 	ScanActiveEnabled  bool   // allow active (Nuclei) scanning
+	// AssetRescanInterval auto re-scans tracked assets this often (0 disables).
+	AssetRescanInterval time.Duration
 	NucleiPath         string // nuclei binary, "" disables active scanning
 	NucleiTemplatesDir string
 	// DataDir holds temporary download artifacts (the extracted cvelist
@@ -104,6 +106,7 @@ func Load() (Config, error) {
 		{"DETECTION_SYNC_INTERVAL", &cfg.Intervals.Detection, 24 * time.Hour},
 		{"CONTEXT_SYNC_INTERVAL", &cfg.Intervals.Context, 24 * time.Hour},
 		{"GREENBONE_SYNC_INTERVAL", &cfg.Intervals.Greenbone, 7 * 24 * time.Hour},
+		{"ASSET_RESCAN_INTERVAL", &cfg.AssetRescanInterval, 24 * time.Hour},
 	} {
 		if *d.dst, err = duration(d.key, d.fallback); err != nil {
 			return Config{}, err

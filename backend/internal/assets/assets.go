@@ -31,6 +31,7 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/assets/{id}", s.delete)
 	mux.HandleFunc("POST /api/v1/assets/{id}/scan", s.scan)
 	mux.HandleFunc("GET /api/v1/assets/{id}/scans", s.scans)
+	mux.HandleFunc("GET /api/v1/assets/{id}/cves", s.cves)
 }
 
 // validKinds are the asset kinds; domain/url/ip are scannable endpoints.
@@ -97,6 +98,21 @@ func (s *Service) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	platform.WriteJSON(w, http.StatusOK, map[string]any{"deleted": id})
+}
+
+// cves returns the CVEs matched to an asset (persisted from its scans).
+func (s *Service) cves(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		platform.WriteError(w, http.StatusBadRequest, "id must be a number")
+		return
+	}
+	out, err := s.Store.AssetCVEs(r.Context(), id)
+	if err != nil {
+		platform.InternalError(w, r, err)
+		return
+	}
+	platform.WriteJSON(w, http.StatusOK, map[string]any{"items": out})
 }
 
 // scans returns an asset's scan history.

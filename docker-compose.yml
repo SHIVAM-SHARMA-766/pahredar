@@ -49,6 +49,7 @@ services:
       # single-user instance only.
       SCAN_ALLOW_PRIVATE: ${SCAN_ALLOW_PRIVATE:-false}
       SCAN_ACTIVE_ENABLED: ${SCAN_ACTIVE_ENABLED:-false}
+      ASSET_RESCAN_INTERVAL: ${ASSET_RESCAN_INTERVAL:-24h}
       NUCLEI_PATH: /usr/local/bin/nuclei
       NUCLEI_TEMPLATES_DIR: ${NUCLEI_TEMPLATES_DIR:-/opt/nuclei-templates}
     volumes:

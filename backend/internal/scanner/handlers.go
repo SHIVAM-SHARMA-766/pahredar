@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/jobs"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/platform"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/scan"
@@ -151,6 +152,7 @@ func (s *Service) handleScanTask(ctx context.Context, payload json.RawMessage, p
 	res.StoredID = id
 	if p.AssetID > 0 && id > 0 {
 		_ = s.Store.LinkAssetScan(saveCtx, p.AssetID, id)
+		_ = s.Store.ReplaceAssetCVEs(saveCtx, p.AssetID, assetCVEsFromReport(rep))
 	}
 	return res, nil
 }
@@ -244,4 +246,24 @@ func (s *Service) scanConfig(w http.ResponseWriter, r *http.Request) {
 		"active_catalog":   catalog,
 		"active_total":     total,
 	})
+}
+
+// assetCVEsFromReport extracts the notable CVEs matched to the scanned asset
+// from the technology fingerprint, deduplicated.
+func assetCVEsFromReport(rep *scan.Report) []db.AssetCVE {
+	seen := map[string]bool{}
+	out := []db.AssetCVE{}
+	for _, t := range rep.Tech {
+		if t.CVEs == nil {
+			continue
+		}
+		for _, e := range t.CVEs.Examples {
+			if e.ID == "" || seen[e.ID] {
+				continue
+			}
+			seen[e.ID] = true
+			out = append(out, db.AssetCVE{CVEID: e.ID, Product: t.CVEs.Product, KEV: e.KEV})
+		}
+	}
+	return out
 }

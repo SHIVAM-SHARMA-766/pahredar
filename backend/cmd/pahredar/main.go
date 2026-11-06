@@ -19,6 +19,7 @@ import (
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/api"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/config"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/jobs"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/platform"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/scan"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/cvelist"
@@ -213,6 +214,12 @@ func serve(ctx context.Context, cfg config.Config) error {
 	}
 	defer closeStore()
 
+	// Durable task queue + worker pool (survives restarts; see docs P2).
+	queue := jobs.New(store, slog.Default())
+	jobsCtx, stopJobs := context.WithCancel(ctx)
+	jobsDone := make(chan struct{})
+	go func() { defer close(jobsDone); queue.Work(jobsCtx, 2) }()
+
 	syncCtx, stopSync := context.WithCancel(ctx)
 	syncDone := make(chan struct{})
 	var sched *syncer.Scheduler
@@ -236,7 +243,7 @@ func serve(ctx context.Context, cfg config.Config) error {
 		close(syncDone)
 	}
 
-	plat := &platform.Platform{Store: store, Log: slog.Default()}
+	plat := &platform.Platform{Store: store, Log: slog.Default(), Jobs: queue}
 	srv := &http.Server{
 		Addr: cfg.HTTPAddr,
 		Handler: api.New(plat, sched, reports.New(fetch.NewClient(), reports.Keys{
@@ -263,6 +270,7 @@ func serve(ctx context.Context, cfg config.Config) error {
 
 	slog.Info("shutting down")
 	stopSync()
+	stopJobs()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if serveErr == nil {
@@ -277,6 +285,11 @@ func serve(ctx context.Context, cfg config.Config) error {
 	case <-syncDone:
 	case <-shutdownCtx.Done():
 		slog.Warn("sync did not stop within the shutdown timeout")
+	}
+	select {
+	case <-jobsDone:
+	case <-shutdownCtx.Done():
+		slog.Warn("job queue did not stop within the shutdown timeout")
 	}
 	return serveErr
 }

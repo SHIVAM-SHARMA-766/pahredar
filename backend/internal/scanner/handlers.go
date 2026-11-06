@@ -150,7 +150,7 @@ func (s *Service) handleScanTask(ctx context.Context, payload json.RawMessage, p
 	res.Report = rep
 	res.StoredID = id
 	if p.AssetID > 0 && id > 0 {
-		_ = s.Store.SetAssetLastScan(saveCtx, p.AssetID, id)
+		_ = s.Store.LinkAssetScan(saveCtx, p.AssetID, id)
 	}
 	return res, nil
 }

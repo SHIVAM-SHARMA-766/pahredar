@@ -91,9 +91,33 @@ func (s *Store) DeleteAsset(ctx context.Context, id int64) error {
 	return err
 }
 
-// SetAssetLastScan records the latest scan for an asset.
-func (s *Store) SetAssetLastScan(ctx context.Context, assetID, scanID int64) error {
+// LinkAssetScan records scanID as asset assetID's latest scan and tags the
+// scan row with the asset, so the asset's scan history can be queried.
+func (s *Store) LinkAssetScan(ctx context.Context, assetID, scanID int64) error {
+	if _, err := s.pool.Exec(ctx, `UPDATE scan SET asset_id = $1 WHERE id = $2`, assetID, scanID); err != nil {
+		return err
+	}
 	_, err := s.pool.Exec(ctx,
 		`UPDATE asset SET last_scan_id = $2, last_scanned_at = now() WHERE id = $1`, assetID, scanID)
 	return err
+}
+
+// AssetScans returns an asset's scan history, newest first.
+func (s *Store) AssetScans(ctx context.Context, assetID int64, limit int) ([]ScanSummary, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, target, host, grade, score, created_at FROM scan WHERE asset_id = $1 ORDER BY created_at DESC LIMIT $2`,
+		assetID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []ScanSummary{}
+	for rows.Next() {
+		var x ScanSummary
+		if err := rows.Scan(&x.ID, &x.Target, &x.Host, &x.Grade, &x.Score, &x.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
 }

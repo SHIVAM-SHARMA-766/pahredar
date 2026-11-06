@@ -30,6 +30,7 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/assets/{id}", s.get)
 	mux.HandleFunc("DELETE /api/v1/assets/{id}", s.delete)
 	mux.HandleFunc("POST /api/v1/assets/{id}/scan", s.scan)
+	mux.HandleFunc("GET /api/v1/assets/{id}/scans", s.scans)
 }
 
 // validKinds are the asset kinds; domain/url/ip are scannable endpoints.
@@ -96,6 +97,21 @@ func (s *Service) delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	platform.WriteJSON(w, http.StatusOK, map[string]any{"deleted": id})
+}
+
+// scans returns an asset's scan history.
+func (s *Service) scans(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		platform.WriteError(w, http.StatusBadRequest, "id must be a number")
+		return
+	}
+	out, err := s.Store.AssetScans(r.Context(), id, platform.BoundedInt(r, "limit", 25, 1, 100))
+	if err != nil {
+		platform.InternalError(w, r, err)
+		return
+	}
+	platform.WriteJSON(w, http.StatusOK, map[string]any{"items": out})
 }
 
 // scan enqueues a passive scan for a scannable asset and links the result.

@@ -55,9 +55,11 @@ find the affected assets and notify.
 - **M1 (done)** — alert table (migration 00023) + `internal/alerts` service; a
   periodic check raises a deduped alert when a CVE matched to a tracked asset is
   in CISA KEV. In-app alerts feed with a nav unread badge.
-- **M2 (next)** — more triggers (EPSS spikes, new critical findings) and
-  `asset_tech` so alerts catch any new KEV for an asset\'s products, not only
-  CVEs already in `asset_cve`.
+- **M2 (done)** — `asset_tech` (migration 00024): the scanner records an
+  asset's products, and KEV alerting matches those against cve_affected + kev,
+  catching any known-exploited CVE for the asset's products (not just the
+  asset_cve examples) the moment the KEV catalog updates. *Still to add:
+  EPSS-spike and new-critical-finding triggers.*
 - **M3** — delivery out (webhook, then email) and the P5 auth skeleton so the
   API can be driven by automation.
 

@@ -1,19 +1,20 @@
 // Package api assembles the HTTP handler from the product-service modules
-// (intelligence, news, scanner) over the shared platform core, plus /healthz.
-// Adding a service means adding its module to New — the others are untouched.
-// See docs/foundation.md and docs/contributing.md.
+// (intelligence, news, scanner, assets, alerts) plus the auth service, over the
+// shared platform core, and wraps it in principal resolution. Adding a service
+// means adding its module to New — the others are untouched. Per-route
+// authorization is each module's own concern via platform.Guard; the access
+// matrix lives in docs/auth.md. See also docs/foundation.md.
 package api
 
 import (
 	"context"
-	"crypto/subtle"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/alerts"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/assets"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/auth"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/intel"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/news"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/platform"
@@ -23,59 +24,24 @@ import (
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/syncer"
 )
 
-// New builds the HTTP handler: each service module registers its own routes.
-func New(p *platform.Platform, sched *syncer.Scheduler, rc *reports.Client, allowPrivate bool, active *scan.Nuclei, apiKeys []string) http.Handler {
+// New builds the HTTP handler: each service module registers its own routes,
+// and the whole mux is wrapped in principal resolution (session cookie / API
+// key / anonymous) so every route sees a principal.
+func New(p *platform.Platform, sched *syncer.Scheduler, rc *reports.Client, allowPrivate bool, active *scan.Nuclei, authOpts auth.Options) http.Handler {
 	modules := []platform.Module{
 		intel.New(p, sched, rc),
 		news.New(p),
 		scanner.New(p, allowPrivate, active),
 		assets.New(p),
 		alerts.New(p),
+		auth.New(p, authOpts),
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthz(p))
 	for _, m := range modules {
 		m.Routes(mux)
 	}
-	return withAuth(apiKeys, mux)
-}
-
-// withAuth gates the API behind an API key when any key is configured; /healthz
-// is always open. With no keys the API is open (local use).
-func withAuth(keys []string, next http.Handler) http.Handler {
-	if len(keys) == 0 {
-		return next
-	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		got := apiKeyFromRequest(r)
-		if got == "" || !keyMatches(keys, got) {
-			platform.WriteError(w, http.StatusUnauthorized, "missing or invalid API key")
-			return
-		}
-		next.ServeHTTP(w, r.WithContext(platform.WithPrincipal(r.Context(), platform.Principal{Name: "api-key"})))
-	})
-}
-
-func apiKeyFromRequest(r *http.Request) string {
-	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
-		return strings.TrimSpace(h[len("Bearer "):])
-	}
-	return strings.TrimSpace(r.Header.Get("X-API-Key"))
-}
-
-func keyMatches(keys []string, got string) bool {
-	gb := []byte(got)
-	match := false
-	for _, k := range keys {
-		if subtle.ConstantTimeCompare([]byte(k), gb) == 1 {
-			match = true
-		}
-	}
-	return match
+	return auth.Resolve(p.Store, authOpts)(mux)
 }
 
 func healthz(p *platform.Platform) http.HandlerFunc {

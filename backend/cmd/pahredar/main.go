@@ -19,6 +19,7 @@ import (
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/alerts"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/api"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/assets"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/auth"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/config"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/jobs"
@@ -216,6 +217,11 @@ func serve(ctx context.Context, cfg config.Config) error {
 	}
 	defer closeStore()
 
+	// Seed the first admin from ADMIN_EMAIL/ADMIN_PASSWORD when no users exist.
+	if err := bootstrapAdmin(ctx, store, cfg); err != nil {
+		return err
+	}
+
 	// Durable task queue + worker pool (survives restarts; see docs P2).
 	queue := jobs.New(store, slog.Default())
 	jobsCtx, stopJobs := context.WithCancel(ctx)
@@ -264,7 +270,11 @@ func serve(ctx context.Context, cfg config.Config) error {
 		Handler: api.New(plat, sched, reports.New(fetch.NewClient(), reports.Keys{
 			NVD: cfg.NVDAPIKey, GitHub: cfg.GitHubToken, OTX: cfg.OTXKey, AbuseCH: cfg.AbuseCHKey,
 			BlueskyHandle: cfg.BlueskyHandle, BlueskyPassword: cfg.BlueskyAppPassword,
-		}), cfg.ScanAllowPrivate, nucleiRunner(cfg), cfg.APIKeys),
+		}), cfg.ScanAllowPrivate, nucleiRunner(cfg), auth.Options{
+			CookieSecure: cfg.AuthCookieSecure,
+			SessionTTL:   cfg.AuthSessionTTL,
+			APIKeys:      cfg.APIKeys,
+		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -328,6 +338,33 @@ func assetRescanLoop(ctx context.Context, store *db.Store, queue *jobs.Queue, in
 			}
 		}
 	}
+}
+
+// bootstrapAdmin seeds the first admin from ADMIN_EMAIL/ADMIN_PASSWORD when the
+// user table is empty, so a fresh install has a way in. With users already
+// present it is a no-op; with no env set it only warns.
+func bootstrapAdmin(ctx context.Context, store *db.Store, cfg config.Config) error {
+	n, err := store.CountUsers(ctx)
+	if err != nil {
+		return fmt.Errorf("count users: %w", err)
+	}
+	if n > 0 {
+		return nil
+	}
+	if cfg.AdminEmail == "" || cfg.AdminPassword == "" {
+		slog.Warn("no accounts exist; set ADMIN_EMAIL and ADMIN_PASSWORD to seed the first admin (automation can still use API_KEY)")
+		return nil
+	}
+	hash, err := auth.HashPassword(cfg.AdminPassword)
+	if err != nil {
+		return fmt.Errorf("hash admin password: %w", err)
+	}
+	u, err := store.CreateUser(ctx, cfg.AdminEmail, hash, string(platform.RoleAdmin))
+	if err != nil {
+		return fmt.Errorf("create first admin: %w", err)
+	}
+	slog.Info("seeded first admin account", "user_id", u.ID, "email", u.Email)
+	return nil
 }
 
 // alertCheckLoop generates asset alerts shortly after startup and periodically.

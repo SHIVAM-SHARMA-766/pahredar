@@ -44,9 +44,17 @@ type Config struct {
 	SMTPPassword string
 	SMTPFrom     string
 	AlertEmailTo string
-	// APIKeys gate the HTTP API when non-empty (Authorization: Bearer / X-API-Key);
-	// empty means the API is open (local use).
+	// APIKeys are automation credentials: a matching key is an admin principal
+	// (Authorization: Bearer / X-API-Key). Human access is by account; empty
+	// disables key auth.
 	APIKeys []string
+	// Auth: the first admin is seeded from these when no users exist.
+	AdminEmail    string
+	AdminPassword string
+	// AuthCookieSecure sets the Secure flag on the session cookie (enable behind
+	// HTTPS). AuthSessionTTL is the session + cookie lifetime.
+	AuthCookieSecure bool
+	AuthSessionTTL   time.Duration
 	NucleiPath         string // nuclei binary, "" disables active scanning
 	NucleiTemplatesDir string
 	// DataDir holds temporary download artifacts (the extracted cvelist
@@ -97,6 +105,8 @@ func Load() (Config, error) {
 		SMTPFrom:           getenv("SMTP_FROM", "pahredar@localhost"),
 		AlertEmailTo:       getenv("ALERT_EMAIL_TO", ""),
 		APIKeys:            splitCommaNonEmpty(getenv("API_KEY", "")),
+		AdminEmail:         getenv("ADMIN_EMAIL", ""),
+		AdminPassword:      getenv("ADMIN_PASSWORD", ""),
 		DataDir:            getenv("DATA_DIR", os.TempDir()),
 	}
 	if cfg.DatabaseURL == "" {
@@ -118,6 +128,9 @@ func Load() (Config, error) {
 	if cfg.AlertEPSSThreshold, err = strconv.ParseFloat(getenv("ALERT_EPSS_THRESHOLD", "0.5"), 64); err != nil || cfg.AlertEPSSThreshold < 0 || cfg.AlertEPSSThreshold > 1 {
 		return Config{}, errors.New("ALERT_EPSS_THRESHOLD must be a number between 0 and 1")
 	}
+	if cfg.AuthCookieSecure, err = strconv.ParseBool(getenv("AUTH_COOKIE_SECURE", "false")); err != nil {
+		return Config{}, errors.New("AUTH_COOKIE_SECURE must be true or false")
+	}
 	for _, d := range []struct {
 		key      string
 		dst      *time.Duration
@@ -135,6 +148,7 @@ func Load() (Config, error) {
 		{"CONTEXT_SYNC_INTERVAL", &cfg.Intervals.Context, 24 * time.Hour},
 		{"GREENBONE_SYNC_INTERVAL", &cfg.Intervals.Greenbone, 7 * 24 * time.Hour},
 		{"ASSET_RESCAN_INTERVAL", &cfg.AssetRescanInterval, 24 * time.Hour},
+		{"AUTH_SESSION_TTL", &cfg.AuthSessionTTL, 168 * time.Hour},
 	} {
 		if *d.dst, err = duration(d.key, d.fallback); err != nil {
 			return Config{}, err

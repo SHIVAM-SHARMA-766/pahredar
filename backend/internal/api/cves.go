@@ -44,7 +44,7 @@ func (s *Server) cveFacets(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	facets, err := s.store.FacetCVEs(r.Context(), p)
+	facets, err := s.Store.FacetCVEs(r.Context(), p)
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -58,7 +58,7 @@ func (s *Server) listCVEs(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	items, total, err := s.store.ListCVEs(r.Context(), p)
+	items, total, err := s.Store.ListCVEs(r.Context(), p)
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -333,7 +333,7 @@ func (s *Server) getCVE(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "id must look like CVE-2024-12345")
 		return
 	}
-	d, err := s.store.GetCVE(r.Context(), id)
+	d, err := s.Store.GetCVE(r.Context(), id)
 	if errors.Is(err, db.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "CVE not found")
 		return

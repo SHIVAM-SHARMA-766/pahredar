@@ -55,7 +55,7 @@ func (s *Server) news(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	items, total, err := s.store.NewsArticles(r.Context(), p)
+	items, total, err := s.Store.NewsArticles(r.Context(), p)
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -71,7 +71,7 @@ func (s *Server) news(w http.ResponseWriter, r *http.Request) {
 	}
 	badges := map[string]db.CVEBadge{}
 	if len(ids) > 0 {
-		if badges, err = s.store.CVEBadges(r.Context(), ids); err != nil {
+		if badges, err = s.Store.CVEBadges(r.Context(), ids); err != nil {
 			internalError(w, r, err)
 			return
 		}
@@ -91,7 +91,7 @@ func (s *Server) setBookmark(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, `body must be {"url": "…", "bookmarked": true|false}`)
 		return
 	}
-	found, err := s.store.SetBookmark(r.Context(), body.URL, body.Bookmarked)
+	found, err := s.Store.SetBookmark(r.Context(), body.URL, body.Bookmarked)
 	if err != nil {
 		internalError(w, r, err)
 		return

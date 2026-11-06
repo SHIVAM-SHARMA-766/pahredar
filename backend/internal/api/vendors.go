@@ -19,7 +19,7 @@ func (s *Server) listVendors(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("page_size must be between 1 and %d", maxVendorPageSize))
 		return
 	}
-	vendors, err := s.store.ListVendors(r.Context(), q, limit)
+	vendors, err := s.Store.ListVendors(r.Context(), q, limit)
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -37,7 +37,7 @@ func (s *Server) listProducts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("page_size must be between 1 and %d", maxVendorPageSize))
 		return
 	}
-	products, err := s.store.ListProducts(r.Context(), q, limit)
+	products, err := s.Store.ListProducts(r.Context(), q, limit)
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -49,7 +49,7 @@ func (s *Server) listProducts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getVendor(w http.ResponseWriter, r *http.Request) {
-	d, err := s.store.GetVendor(r.Context(), cverecord.CanonicalVendor(r.PathValue("vendor")))
+	d, err := s.Store.GetVendor(r.Context(), cverecord.CanonicalVendor(r.PathValue("vendor")))
 	if errors.Is(err, db.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "vendor not found")
 		return
@@ -68,7 +68,7 @@ func (s *Server) getVendor(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getProduct(w http.ResponseWriter, r *http.Request) {
-	d, err := s.store.GetProduct(r.Context(), cverecord.CanonicalVendor(r.PathValue("vendor")), cverecord.CanonicalProduct(r.PathValue("product")))
+	d, err := s.Store.GetProduct(r.Context(), cverecord.CanonicalVendor(r.PathValue("vendor")), cverecord.CanonicalProduct(r.PathValue("product")))
 	if errors.Is(err, db.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "product not found")
 		return

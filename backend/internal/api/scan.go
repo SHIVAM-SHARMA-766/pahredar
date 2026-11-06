@@ -74,7 +74,7 @@ func (s *Server) runScan(w http.ResponseWriter, r *http.Request) {
 
 	// A recent passive scan is reused without re-running.
 	if !body.Fresh && !body.Active {
-		if id, payload, ok, err := s.store.LatestScanFor(r.Context(), host, time.Now().Add(-scanReuse)); err == nil && ok {
+		if id, payload, ok, err := s.Store.LatestScanFor(r.Context(), host, time.Now().Add(-scanReuse)); err == nil && ok {
 			var rep scan.Report
 			if json.Unmarshal(payload, &rep) == nil {
 				job := s.newJob(body.Target, host, false, nil)
@@ -126,7 +126,7 @@ func (s *Server) execJob(job *scanJob) {
 	}
 	saveCtx, saveCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer saveCancel()
-	id, _ := s.store.SaveScan(saveCtx, rep)
+	id, _ := s.Store.SaveScan(saveCtx, rep)
 	s.updateJob(job.ID, func(j *scanJob) {
 		j.Status = "done"
 		j.Report = rep
@@ -179,7 +179,7 @@ func (s *Server) reapScanJobs() {
 }
 
 func (s *Server) listScans(w http.ResponseWriter, r *http.Request) {
-	out, err := s.store.RecentScans(r.Context(), boundedInt(r, "limit", 25, 1, 100))
+	out, err := s.Store.RecentScans(r.Context(), boundedInt(r, "limit", 25, 1, 100))
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -193,7 +193,7 @@ func (s *Server) getScan(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "id must be a number")
 		return
 	}
-	payload, _, err := s.store.GetScan(r.Context(), id)
+	payload, _, err := s.Store.GetScan(r.Context(), id)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "scan not found")
 		return

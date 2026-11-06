@@ -37,7 +37,7 @@ func (s *Server) relatedCVEs(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "id must look like CVE-2024-12345")
 		return
 	}
-	d, err := s.store.GetCVE(r.Context(), id)
+	d, err := s.Store.GetCVE(r.Context(), id)
 	if errors.Is(err, db.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "CVE not found")
 		return
@@ -59,7 +59,7 @@ func (s *Server) relatedCVEs(w http.ResponseWriter, r *http.Request) {
 		if len(fresh) == 0 {
 			return nil
 		}
-		items, _, err := s.store.ListCVEs(r.Context(), db.ListCVEParams{IDs: fresh, Sort: "cvss", Desc: true, Limit: len(fresh)})
+		items, _, err := s.Store.ListCVEs(r.Context(), db.ListCVEParams{IDs: fresh, Sort: "cvss", Desc: true, Limit: len(fresh)})
 		if err != nil {
 			return err
 		}
@@ -76,7 +76,7 @@ func (s *Server) relatedCVEs(w http.ResponseWriter, r *http.Request) {
 		urls = urls[:relatedMaxURLs]
 	}
 	for _, u := range urls {
-		ids, total, err := s.store.CVEsCitingURL(r.Context(), u, id, relatedPerGroup)
+		ids, total, err := s.Store.CVEsCitingURL(r.Context(), u, id, relatedPerGroup)
 		if err != nil {
 			internalError(w, r, err)
 			return
@@ -103,7 +103,7 @@ func (s *Server) relatedCVEs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if target != nil && d.DatePublished != nil {
-		ids, total, err := s.store.CVEsForProductNear(r.Context(), target.Vendor, target.Product, *d.DatePublished, relatedWindowDays, id, relatedPerGroup)
+		ids, total, err := s.Store.CVEsForProductNear(r.Context(), target.Vendor, target.Product, *d.DatePublished, relatedWindowDays, id, relatedPerGroup)
 		if err != nil {
 			internalError(w, r, err)
 			return

@@ -101,7 +101,7 @@ func (s *Server) cveReports(w http.ResponseWriter, r *http.Request) {
 			wanted = append(wanted, src)
 		}
 	}
-	d, err := s.store.GetCVE(r.Context(), id)
+	d, err := s.Store.GetCVE(r.Context(), id)
 	if errors.Is(err, db.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "CVE not found")
 		return
@@ -119,7 +119,7 @@ func (s *Server) cveReports(w http.ResponseWriter, r *http.Request) {
 			req.Vendors = append(req.Vendors, a.Vendor)
 		}
 	}
-	cached, err := s.store.CachedReports(r.Context(), id)
+	cached, err := s.Store.CachedReports(r.Context(), id)
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -182,7 +182,7 @@ func (s *Server) fetchReport(ctx context.Context, source string, req reports.Req
 	defer saveCancel()
 	switch {
 	case errors.Is(err, reports.ErrNotFound):
-		if err := s.store.SaveReport(saveCtx, id, source, "not_found", nil); err != nil {
+		if err := s.Store.SaveReport(saveCtx, id, source, "not_found", nil); err != nil {
 			slog.Warn("cache report", "source", source, "id", id, "err", err)
 		}
 		return reportStatus{Source: source, Status: "not_found", FetchedAt: &now}, nil
@@ -194,7 +194,7 @@ func (s *Server) fetchReport(ctx context.Context, source string, req reports.Req
 	if err != nil {
 		return reportStatus{Source: source, Status: "error", Error: "could not encode report"}, nil
 	}
-	if err := s.store.SaveReport(saveCtx, id, source, "ok", payload); err != nil {
+	if err := s.Store.SaveReport(saveCtx, id, source, "ok", payload); err != nil {
 		slog.Warn("cache report", "source", source, "id", id, "err", err)
 	}
 	return reportStatus{Source: source, Status: "ok", FetchedAt: &now}, payload
@@ -236,7 +236,7 @@ func (s *Server) series(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "range is limited to about three years")
 		return
 	}
-	out, err := s.store.DailySeries(r.Context(), metric, from, to)
+	out, err := s.Store.DailySeries(r.Context(), metric, from, to)
 	if err != nil {
 		internalError(w, r, err)
 		return

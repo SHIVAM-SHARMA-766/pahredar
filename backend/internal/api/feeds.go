@@ -43,7 +43,7 @@ func (s *Server) cveArticles(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "id must look like CVE-2024-12345")
 		return
 	}
-	out, err := s.store.ArticlesForCVE(r.Context(), id, boundedInt(r, "limit", 50, 1, 200))
+	out, err := s.Store.ArticlesForCVE(r.Context(), id, boundedInt(r, "limit", 50, 1, 200))
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -61,7 +61,7 @@ type trendingItem struct {
 // `days` days (default 7), with each CVE's summary when it is published.
 func (s *Server) trending(w http.ResponseWriter, r *http.Request) {
 	days := boundedInt(r, "days", 7, 1, 90)
-	rows, err := s.store.TrendingCVEs(r.Context(), time.Now().AddDate(0, 0, -days), boundedInt(r, "limit", 10, 1, 50))
+	rows, err := s.Store.TrendingCVEs(r.Context(), time.Now().AddDate(0, 0, -days), boundedInt(r, "limit", 10, 1, 50))
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -72,7 +72,7 @@ func (s *Server) trending(w http.ResponseWriter, r *http.Request) {
 	}
 	byID := map[string]db.CVESummary{}
 	if len(ids) > 0 {
-		summaries, _, err := s.store.ListCVEs(r.Context(), db.ListCVEParams{IDs: ids, Sort: "published", Desc: true, Limit: len(ids)})
+		summaries, _, err := s.Store.ListCVEs(r.Context(), db.ListCVEParams{IDs: ids, Sort: "published", Desc: true, Limit: len(ids)})
 		if err != nil {
 			internalError(w, r, err)
 			return
@@ -100,7 +100,7 @@ func (s *Server) latestAdvisories(w http.ResponseWriter, r *http.Request) {
 			keys = append(keys, f.Key)
 		}
 	}
-	out, err := s.store.LatestArticles(r.Context(), keys, boundedInt(r, "limit", 12, 1, 100))
+	out, err := s.Store.LatestArticles(r.Context(), keys, boundedInt(r, "limit", 12, 1, 100))
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -119,7 +119,7 @@ type feedInfo struct {
 // feedList returns every configured feed with how many articles it has
 // contributed.
 func (s *Server) feedList(w http.ResponseWriter, r *http.Request) {
-	stats, err := s.store.FeedStats(r.Context())
+	stats, err := s.Store.FeedStats(r.Context())
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -146,7 +146,7 @@ func (s *Server) cveDetection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "id must look like CVE-2024-12345")
 		return
 	}
-	out, err := s.store.DetectionForCVE(r.Context(), id, 500)
+	out, err := s.Store.DetectionForCVE(r.Context(), id, 500)
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -165,7 +165,7 @@ func (s *Server) cveAttack(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "id must look like CVE-2024-12345")
 		return
 	}
-	d, err := s.store.GetCVE(r.Context(), id)
+	d, err := s.Store.GetCVE(r.Context(), id)
 	if errors.Is(err, db.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "CVE not found")
 		return
@@ -174,12 +174,12 @@ func (s *Server) cveAttack(w http.ResponseWriter, r *http.Request) {
 		internalError(w, r, err)
 		return
 	}
-	mappings, err := s.store.AttackMappings(r.Context(), id)
+	mappings, err := s.Store.AttackMappings(r.Context(), id)
 	if err != nil {
 		internalError(w, r, err)
 		return
 	}
-	patterns, err := s.store.CAPECForCWEs(r.Context(), d.CWEIDs, 8)
+	patterns, err := s.Store.CAPECForCWEs(r.Context(), d.CWEIDs, 8)
 	if err != nil {
 		internalError(w, r, err)
 		return

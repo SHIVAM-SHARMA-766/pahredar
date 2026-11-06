@@ -19,6 +19,7 @@ import (
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/api"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/config"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/platform"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/scan"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/cvelist"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/sources/detection"
@@ -235,9 +236,10 @@ func serve(ctx context.Context, cfg config.Config) error {
 		close(syncDone)
 	}
 
+	plat := &platform.Platform{Store: store, Log: slog.Default()}
 	srv := &http.Server{
 		Addr: cfg.HTTPAddr,
-		Handler: api.New(store, sched, reports.New(fetch.NewClient(), reports.Keys{
+		Handler: api.New(plat, sched, reports.New(fetch.NewClient(), reports.Keys{
 			NVD: cfg.NVDAPIKey, GitHub: cfg.GitHubToken, OTX: cfg.OTXKey, AbuseCH: cfg.AbuseCHKey,
 			BlueskyHandle: cfg.BlueskyHandle, BlueskyPassword: cfg.BlueskyAppPassword,
 		}), cfg.ScanAllowPrivate, nucleiRunner(cfg)).Handler(),

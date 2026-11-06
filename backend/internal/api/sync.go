@@ -18,12 +18,12 @@ type syncStatusResponse struct {
 }
 
 func (s *Server) syncStatus(w http.ResponseWriter, r *http.Request) {
-	states, err := s.store.SyncStates(r.Context())
+	states, err := s.Store.SyncStates(r.Context())
 	if err != nil {
 		internalError(w, r, err)
 		return
 	}
-	runs, err := s.store.RecentRuns(r.Context(), recentRunsLimit)
+	runs, err := s.Store.RecentRuns(r.Context(), recentRunsLimit)
 	if err != nil {
 		internalError(w, r, err)
 		return
@@ -53,7 +53,7 @@ func (s *Server) triggerSync(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
-	d, err := s.store.Dashboard(r.Context(), time.Now())
+	d, err := s.Store.Dashboard(r.Context(), time.Now())
 	if err != nil {
 		internalError(w, r, err)
 		return

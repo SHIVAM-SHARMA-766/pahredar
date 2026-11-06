@@ -30,11 +30,15 @@ scan jobs, no asset inventory, no auth, no alerting.
 
 Outcome: new services plug in via the registry; scans are durable.
 
-### Phase 2 — Asset platform
+### Phase 2 — Asset platform · in progress
 
-- **P3 asset model** — `asset` + `asset_scan` / `asset_tech` / `asset_cve`.
-- Scanner writes results against an asset; intel matches tech → CVE per asset.
-- A simple inventory UI (assets, their findings, their matched CVEs).
+- **M1 (done)** — `asset` table + `internal/assets` service (CRUD + scan an
+  asset), an Inventory nav/page, and scan→asset linking (an asset shows its
+  latest scan's grade). Adding the service was one line in `api.New` — the
+  module foundation proven.
+- **M2 (next)** — asset detail: its scans, the tech fingerprinted on it, and the
+  CVEs matched to that tech (`asset_tech` / `asset_cve`, derived from scans).
+- **M3** — scheduled re-scans of assets on the durable queue.
 
 Outcome: Pahredar becomes an inventory that tells the operator what is wrong,
 not three separate tools.

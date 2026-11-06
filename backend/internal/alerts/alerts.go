@@ -72,5 +72,13 @@ func (s *Service) readAll(w http.ResponseWriter, r *http.Request) {
 // Check generates alerts for new KEV matches and returns the new ones. Called
 // on a schedule.
 func Check(ctx context.Context, store *db.Store) ([]db.Alert, error) {
-	return store.GenerateKEVAlerts(ctx)
+	kev, err := store.GenerateKEVAlerts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	epss, err := store.GenerateEPSSAlerts(ctx)
+	if err != nil {
+		return kev, err
+	}
+	return append(kev, epss...), nil
 }

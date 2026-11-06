@@ -25,7 +25,7 @@ type Alert struct {
 // Returns the new alerts. This is the "a new KEV matches your asset" trigger;
 // it is safe to run repeatedly (deduped on type+asset+cve).
 func (s *Store) GenerateKEVAlerts(ctx context.Context) ([]Alert, error) {
-	rows, err := s.pool.Query(ctx, `
+	return s.genAlerts(ctx, `
 		INSERT INTO alert (type, asset_id, cve_id, severity, title, detail)
 		SELECT DISTINCT 'kev_match', at.asset_id, ca.cve_id, 'high',
 		       'Known-exploited CVE on ' || a.value,
@@ -36,6 +36,30 @@ func (s *Store) GenerateKEVAlerts(ctx context.Context) ([]Alert, error) {
 		JOIN asset a ON a.id = at.asset_id
 		ON CONFLICT (type, asset_id, cve_id) DO NOTHING
 		RETURNING id, type, asset_id, cve_id, severity, title, detail, created_at`)
+}
+
+// GenerateEPSSAlerts raises an alert for a CVE affecting an asset's products
+// that has a high EPSS exploitation probability but is not yet in KEV — the
+// "likely to be exploited soon" signal, deduped.
+func (s *Store) GenerateEPSSAlerts(ctx context.Context) ([]Alert, error) {
+	return s.genAlerts(ctx, `
+		INSERT INTO alert (type, asset_id, cve_id, severity, title, detail)
+		SELECT DISTINCT ON (at.asset_id, ca.cve_id) 'epss_high', at.asset_id, ca.cve_id, 'medium',
+		       'Likely-exploited CVE on ' || a.value,
+		       ca.cve_id || ' affects ' || at.product || ' on ' || a.value || ' and has a high EPSS exploitation probability (' || round(e.score * 100) || '%).'
+		FROM asset_tech at
+		JOIN cve_affected ca ON ca.vendor = at.vendor AND ca.product = at.product
+		JOIN epss e ON e.cve_id = ca.cve_id AND e.score >= 0.5
+		LEFT JOIN kev k ON k.cve_id = ca.cve_id
+		JOIN asset a ON a.id = at.asset_id
+		WHERE k.cve_id IS NULL
+		ON CONFLICT (type, asset_id, cve_id) DO NOTHING
+		RETURNING id, type, asset_id, cve_id, severity, title, detail, created_at`)
+}
+
+// genAlerts runs an INSERT ... RETURNING that yields new alert rows.
+func (s *Store) genAlerts(ctx context.Context, query string) ([]Alert, error) {
+	rows, err := s.pool.Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}

@@ -47,3 +47,17 @@ func TestSplitPipe(t *testing.T) {
 		t.Errorf("firstField wrong")
 	}
 }
+
+func TestMMH3Hash32(t *testing.T) {
+	cases := map[string]int32{
+		"":                    0,
+		"hello":               613153351,
+		"The quick brown fox": 1621279277,
+		"pahredar":            1819315621,
+	}
+	for in, want := range cases {
+		if got := mmh3Hash32([]byte(in), 0); got != want {
+			t.Errorf("mmh3Hash32(%q) = %d, want %d", in, got, want)
+		}
+	}
+}

@@ -10,15 +10,18 @@ import (
 
 // DNSInfo holds the records the scan looked up.
 type DNSInfo struct {
-	A     []string `json:"a"`
-	AAAA  []string `json:"aaaa"`
-	MX    []string `json:"mx"`
-	NS    []string `json:"ns"`
-	TXT   []string `json:"txt"`
-	CAA   []string `json:"caa"`
-	SPF   string   `json:"spf"`
-	DMARC string   `json:"dmarc"`
-	DKIM  []string `json:"dkim"` // selectors found (e.g. "google", "selector1")
+	A      []string `json:"a"`
+	AAAA   []string `json:"aaaa"`
+	MX     []string `json:"mx"`
+	NS     []string `json:"ns"`
+	TXT    []string `json:"txt"`
+	CAA    []string `json:"caa"`
+	SPF    string   `json:"spf"`
+	DMARC  string   `json:"dmarc"`
+	DKIM   []string `json:"dkim"`    // selectors found (e.g. "google", "selector1")
+	MTASTS string   `json:"mta_sts"` // policy mode (enforce/testing/none) or "" if absent
+	TLSRPT bool     `json:"tls_rpt"`
+	BIMI   bool     `json:"bimi"`
 }
 
 // dkimSelectors are common DKIM selector names to probe.
@@ -98,6 +101,41 @@ func (sc *Scanner) checkDNS(ctx context.Context, host string, rep *Report, mu *s
 	}
 	dkwg.Wait()
 	sort.Strings(info.DKIM)
+
+	// MTA-STS: the DNS record signals a policy; fetch it for the mode.
+	if txts, err := r.LookupTXT(ctx, "_mta-sts."+host); err == nil {
+		for _, t := range txts {
+			if strings.Contains(strings.ToLower(t), "v=stsv1") {
+				info.MTASTS = "present"
+				break
+			}
+		}
+	}
+	if info.MTASTS != "" {
+		if resp, body, err := sc.get(ctx, "https://mta-sts."+host+"/.well-known/mta-sts.txt"); err == nil {
+			resp.Body.Close()
+			for _, line := range strings.Split(string(body), "\n") {
+				if v, ok := strings.CutPrefix(strings.ToLower(strings.TrimSpace(line)), "mode:"); ok {
+					info.MTASTS = strings.TrimSpace(v)
+				}
+			}
+		}
+	}
+	// TLS-RPT and BIMI are presence-only here.
+	if txts, err := r.LookupTXT(ctx, "_smtp._tls."+host); err == nil {
+		for _, t := range txts {
+			if strings.Contains(strings.ToLower(t), "v=tlsrptv1") {
+				info.TLSRPT = true
+			}
+		}
+	}
+	if txts, err := r.LookupTXT(ctx, "default._bimi."+host); err == nil {
+		for _, t := range txts {
+			if strings.Contains(strings.ToLower(t), "v=bimi1") {
+				info.BIMI = true
+			}
+		}
+	}
 
 	mu.Lock()
 	defer mu.Unlock()

@@ -2,11 +2,15 @@ package scan
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -396,4 +400,99 @@ func (sc *Scanner) portOpen(ctx context.Context, ip string, port int) bool {
 	}
 	conn.Close()
 	return true
+}
+
+// FaviconInfo is the site's favicon and its hashes. The mmh3 value matches
+// Shodan's http.favicon.hash, so it can be pivoted on to find related hosts.
+type FaviconInfo struct {
+	URL    string `json:"url"`
+	MMH3   string `json:"mmh3"`
+	SHA256 string `json:"sha256"`
+	Size   int    `json:"size"`
+}
+
+// checkFavicon fetches /favicon.ico and computes its Shodan-style mmh3 hash.
+func (sc *Scanner) checkFavicon(ctx context.Context, base *url.URL, rep *Report, mu *sync.Mutex) {
+	u := strings.TrimRight(base.String(), "/") + "/favicon.ico"
+	resp, body, err := sc.get(ctx, u)
+	if err != nil {
+		return
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 || len(body) == 0 {
+		return
+	}
+	ct := normType(resp)
+	if ct != "" && !strings.HasPrefix(ct, "image/") && !strings.Contains(ct, "icon") {
+		return // an HTML 200 (SPA shell), not a real icon
+	}
+	sum := sha256.Sum256(body)
+	fav := &FaviconInfo{
+		URL:    u,
+		MMH3:   strconv.FormatInt(int64(mmh3Hash32(faviconB64(body), 0)), 10),
+		SHA256: hex.EncodeToString(sum[:]),
+		Size:   len(body),
+	}
+	mu.Lock()
+	rep.Favicon = fav
+	mu.Unlock()
+}
+
+// faviconB64 base64-encodes data the way Python's base64.encodebytes does (a
+// newline every 76 characters and a trailing newline), which is what Shodan
+// hashes.
+func faviconB64(data []byte) []byte {
+	enc := base64.StdEncoding.EncodeToString(data)
+	var b strings.Builder
+	for i := 0; i < len(enc); i += 76 {
+		end := i + 76
+		if end > len(enc) {
+			end = len(enc)
+		}
+		b.WriteString(enc[i:end])
+		b.WriteByte('\n')
+	}
+	return []byte(b.String())
+}
+
+// mmh3Hash32 is MurmurHash3 x86_32, returned as a signed int32 (Shodan's
+// convention for favicon hashes).
+func mmh3Hash32(data []byte, seed uint32) int32 {
+	const c1 = 0xcc9e2d51
+	const c2 = 0x1b873593
+	h := seed
+	n := len(data)
+	nblocks := n / 4
+	for i := 0; i < nblocks; i++ {
+		k := uint32(data[i*4]) | uint32(data[i*4+1])<<8 | uint32(data[i*4+2])<<16 | uint32(data[i*4+3])<<24
+		k *= c1
+		k = (k << 15) | (k >> 17)
+		k *= c2
+		h ^= k
+		h = (h << 13) | (h >> 19)
+		h = h*5 + 0xe6546b64
+	}
+	var k uint32
+	tail := data[nblocks*4:]
+	switch len(tail) {
+	case 3:
+		k ^= uint32(tail[2]) << 16
+		fallthrough
+	case 2:
+		k ^= uint32(tail[1]) << 8
+		fallthrough
+	case 1:
+		k ^= uint32(tail[0])
+		k *= c1
+		k = (k << 15) | (k >> 17)
+		k *= c2
+		h ^= k
+	}
+	h ^= uint32(n)
+	h ^= h >> 16
+	h *= 0x85ebca6b
+	h ^= h >> 13
+	h *= 0xc2b2ae35
+	h ^= h >> 16
+	return int32(h)
 }

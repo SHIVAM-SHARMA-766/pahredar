@@ -715,6 +715,9 @@ export interface ScanReport {
     spf: string
     dmarc: string
     dkim: string[]
+    mta_sts: string
+    tls_rpt: boolean
+    bimi: boolean
   } | null
   tls: {
     supported: boolean
@@ -740,6 +743,7 @@ export interface ScanReport {
     methods: string[]
   } | null
   waf: string
+  favicon: { url: string; mmh3: string; sha256: string; size: number } | null
   headers: { name: string; present: boolean; value?: string }[]
   all_headers: { name: string; value: string }[]
   cookies: { name: string; secure: boolean; http_only: boolean; same_site: string }[]

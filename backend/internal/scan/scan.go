@@ -80,31 +80,32 @@ type Evidence struct {
 // discoverable about the target from public sources) plus the security
 // findings derived from it.
 type Report struct {
-	Target     string      `json:"target"`
-	URL        string      `json:"url"`
-	Host       string      `json:"host"`
-	IP         string      `json:"ip"`
-	ScannedAt  time.Time   `json:"scanned_at"`
-	Duration   string      `json:"duration"`
-	Grade      string      `json:"grade"`
-	Score      int         `json:"score"`
-	Findings   []Finding   `json:"findings"`
-	Domain     *DomainInfo `json:"domain"`
-	Net        *NetInfo    `json:"net"`
-	DNS        *DNSInfo    `json:"dns"`
-	TLS        *TLSInfo    `json:"tls"`
-	HTTP       *HTTPInfo   `json:"http"`
-	WAF        string      `json:"waf"`
-	Headers    []HeaderOut `json:"headers"`     // the graded security headers
-	AllHeaders []HeaderKV  `json:"all_headers"` // every response header, raw
-	Cookies    []CookieOut `json:"cookies"`
-	Tech       []TechOut   `json:"tech"`
-	Paths      []PathOut   `json:"paths"`
-	Subdomains []string    `json:"subdomains"` // from certificate SANs and CT logs
-	Related    *Related    `json:"related"`
-	Ports      []PortOut   `json:"ports"` // active scan only
-	Active     *ActiveScan `json:"active"`
-	Errors     []string    `json:"errors"`
+	Target     string       `json:"target"`
+	URL        string       `json:"url"`
+	Host       string       `json:"host"`
+	IP         string       `json:"ip"`
+	ScannedAt  time.Time    `json:"scanned_at"`
+	Duration   string       `json:"duration"`
+	Grade      string       `json:"grade"`
+	Score      int          `json:"score"`
+	Findings   []Finding    `json:"findings"`
+	Domain     *DomainInfo  `json:"domain"`
+	Net        *NetInfo     `json:"net"`
+	DNS        *DNSInfo     `json:"dns"`
+	TLS        *TLSInfo     `json:"tls"`
+	HTTP       *HTTPInfo    `json:"http"`
+	WAF        string       `json:"waf"`
+	Favicon    *FaviconInfo `json:"favicon"`
+	Headers    []HeaderOut  `json:"headers"`     // the graded security headers
+	AllHeaders []HeaderKV   `json:"all_headers"` // every response header, raw
+	Cookies    []CookieOut  `json:"cookies"`
+	Tech       []TechOut    `json:"tech"`
+	Paths      []PathOut    `json:"paths"`
+	Subdomains []string     `json:"subdomains"` // from certificate SANs and CT logs
+	Related    *Related     `json:"related"`
+	Ports      []PortOut    `json:"ports"` // active scan only
+	Active     *ActiveScan  `json:"active"`
+	Errors     []string     `json:"errors"`
 }
 
 // HeaderKV is one raw response header.
@@ -295,9 +296,10 @@ func (sc *Scanner) Scan(ctx context.Context, target string, active bool, filter 
 	// Recon from public third-party sources (registration, hosting, CT logs).
 	phased("recon", "Registration & hosting", func(c context.Context) error {
 		var w sync.WaitGroup
-		w.Add(2)
+		w.Add(3)
 		go func() { defer w.Done(); fail("domain", sc.checkDomain(c, host, rep, &mu)) }()
 		go func() { defer w.Done(); fail("net", sc.checkNet(c, dst.String(), rep, &mu)) }()
+		go func() { defer w.Done(); sc.checkFavicon(c, base, rep, &mu) }()
 		w.Wait()
 		return nil
 	})

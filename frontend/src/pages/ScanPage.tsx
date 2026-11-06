@@ -642,6 +642,7 @@ function HostCard({ report }: { report: ScanReport }) {
         {report.http && <Row label="Status">{report.http.status}</Row>}
         {report.http?.server && <Row label="Server">{report.http.server}</Row>}
         {report.waf && <Row label="WAF / CDN"><span className="rounded bg-violet-500/15 px-1.5 py-0.5 text-xs text-violet-300 ring-1 ring-inset ring-violet-400/30">{report.waf}</span></Row>}
+        {report.favicon && <Row label="Favicon hash"><span className="font-mono text-xs">{report.favicon.mmh3}</span> <a href={`https://www.shodan.io/search?query=http.favicon.hash%3A${report.favicon.mmh3}`} target="_blank" rel="noreferrer" className={`ml-1 text-xs ${link}`}>pivot on Shodan →</a></Row>}
         {report.http?.powered_by && <Row label="Powered by">{report.http.powered_by}</Row>}
         {report.http && <Row label="https redirect">{report.http.https_redirect ? 'yes' : 'no'}</Row>}
         {report.http && report.http.methods.length > 0 && <Row label="Methods">{report.http.methods.join(', ')}</Row>}
@@ -683,6 +684,9 @@ function DnsCard({ dns }: { dns: NonNullable<ScanReport['dns']> }) {
         <Row label="SPF">{dns.spf ? <span className="font-mono text-xs break-all">{dns.spf}</span> : <span className="text-red-400">missing</span>}</Row>
         <Row label="DMARC">{dns.dmarc ? <span className="font-mono text-xs break-all">{dns.dmarc}</span> : <span className="text-red-400">missing</span>}</Row>
         <Row label="DKIM">{dns.dkim.length > 0 ? dns.dkim.join(', ') : <span className="text-zinc-500">no common selector found</span>}</Row>
+        <Row label="MTA-STS">{dns.mta_sts ? <span className="text-emerald-300">{dns.mta_sts}</span> : <span className="text-zinc-500">not published</span>}</Row>
+        <Row label="TLS-RPT">{dns.tls_rpt ? <span className="text-emerald-300">published</span> : <span className="text-zinc-500">not published</span>}</Row>
+        <Row label="BIMI">{dns.bimi ? <span className="text-emerald-300">published</span> : <span className="text-zinc-500">not published</span>}</Row>
         {dns.txt.length > 0 && <Row label="TXT"><div className="space-y-0.5">{dns.txt.map((t, i) => <div key={i} className="font-mono text-xs break-all text-zinc-400">{t}</div>)}</div></Row>}
       </dl>
     </Card>

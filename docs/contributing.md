@@ -33,21 +33,20 @@ Never edit a migration that may already be applied — always add a new one.
 These files are used by every service. Changing them in two places at once
 causes conflicts, so keep edits minimal and say when you touch them:
 
-- `backend/internal/api/api.go` — route registration and the server struct
+- `backend/internal/api/api.go` — the assembler that wires the service modules
 - `backend/internal/db/{db,store}.go` — pool, migration runner, store wiring
 - `backend/cmd/pahredar/main.go` — process wiring
 - `frontend/src/api/{client,types}.ts` — shared API client and types
 - `frontend/src/components/Layout.tsx` — navigation
 - `docker-compose.yml`, the Dockerfiles
 
-Until the P1 module pattern (see foundation.md) lands, these are edited
-directly; keep additions grouped by service (see Rule 4) to shrink the conflict
-surface.
+Most changes stay inside a single service package (`internal/intel`,
+`internal/news`, `internal/scanner`) and do not touch these.
 
 ## Rule 4 — Add, don't weave
 
-- **Backend routes:** put handlers in your service's `api/<service>.go`; in
-  `api.go` add the `mux.HandleFunc` lines in your service's block, not scattered.
+- **Backend routes:** add handlers in your service package and register them
+  in that package's `Routes` method — the `api` assembler is untouched.
 - **Backend data access:** add to your service's `db/*.go` files; do not reach
   into another service's queries — go through a documented interface (e.g. the
   scanner uses `scan.TechMatcher` to read intel's data, never intel's db

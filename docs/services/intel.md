@@ -18,8 +18,8 @@ The largest service and the source of truth other services read from.
 
 **Backend**
 
-- `internal/api/`: `cves.go`, `vendors.go`, `related.go`, `reports.go`,
-  `sync.go`, `assess_test.go`
+- `internal/intel/`: `service.go` (module + routes), `cves.go`, `vendors.go`,
+  `related.go`, `reports.go`, `sync.go`, `detection_attack.go`, `assess_test.go`
 - `internal/db/`: `cve_read.go`, `cve_write.go`, `vendor_read.go`,
   `enrichment_write.go`, `detection.go`, `related_read.go`, `dashboard_read.go`,
   `series_read.go`, `report_cache.go`, `vulncheck.go`, `context.go`,

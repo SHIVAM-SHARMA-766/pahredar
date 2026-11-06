@@ -21,9 +21,9 @@ scan jobs, no asset inventory, no auth, no alerting.
 ### Phase 1 — The spine (foundation) · done
 
 - **P1 module pattern** — `internal/platform` holds a shared `Platform` (store,
-  logger, job queue); `internal/api` embeds it and registers routes per service
-  via a `modules()` registry. *Remaining (P1b): extract each service's route
-  group into its own package.*
+  logger, job queue); each service is its own package (`internal/intel`,
+  `internal/news`, `internal/scanner`) implementing `platform.Module`, and
+  `internal/api` is a thin assembler that registers them.
 - **P2 durable jobs** — `task` table + `internal/jobs` worker pool; endpoint
   scans run as `scan.run` tasks and survive a restart. *(The periodic sync
   scheduler stays as-is; the queue is for discrete/triggered work.)*
@@ -64,10 +64,6 @@ Kept here (not in the README) on purpose.
 
 - **No authentication.** The API is open; run it only on trusted/local
   networks until P5 lands.
-- **Services are route groups on one `api.Server`, not yet separate packages.**
-  P1 added the `Platform` + module registry; the per-service package split
-  (P1b) is still pending, so handlers from different services share the `api`
-  package.
 - **Active scan depends on Nuclei templates bundled in the image.** They are
   pinned, not self-updating; refresh by rebuilding with a newer template tag.
 - **`api/types.ts` is hand-maintained** against the Go types — they can drift;

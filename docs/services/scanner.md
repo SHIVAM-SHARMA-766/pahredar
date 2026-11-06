@@ -18,7 +18,7 @@ cleanest module and a good template for new services.
 
 **Backend**
 
-- `internal/api/scan.go` — job lifecycle (in-memory jobs today; see roadmap P2)
+- `internal/scanner/`: `scanner.go` (module + routes + scan.run handler registration), `handlers.go` (job lifecycle on the durable queue)
 - `internal/scan/` (self-contained):
   - `scan.go` — orchestration, scoring, public-only dialer
   - recon: `dns.go`, `tls.go`, `http.go`, `paths.go`, `tech.go`, `recon.go`

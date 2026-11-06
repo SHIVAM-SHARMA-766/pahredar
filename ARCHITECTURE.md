@@ -64,8 +64,8 @@ and can be worked on in parallel.
 
 Cross-service reads go through named interfaces, not another service's
 internals: Scanner → Intel via `scan.TechMatcher` (tech → CVE); News → Intel for
-CVE badges. The full per-service specs, the target `Module`/`Platform` pattern
-that will remove the `api.Server` god-struct, the foundational pillars, and the
+CVE badges. The full per-service specs, the `Module`/`Platform` pattern
+(each service is its own package), the foundational pillars, and the
 parallel-work conventions live in
 [`docs/`](docs/README.md): `foundation.md`, `roadmap.md`, `contributing.md`,
 `services/*`.
@@ -479,6 +479,7 @@ and alerting. Specific product ideas still on the list:
 | 2026-11-06 | Recon deepened: email security (MTA-STS with policy mode, TLS-RPT, BIMI) and a Shodan-style favicon mmh3 hash (plus SHA-256) with a pivot link; `internal/scan/recon.go`, `waf.go`, `requesttool.go`. |
 | 2026-11-06 | Defined the project as a modular monolith: three product services (Vulnerability Intelligence, Security News, Endpoint Scanner) over a shared core, with named cross-service interfaces; migrations stay a single sequential series (rename on the rare collision). Documented the platform foundation (module/`Platform` pattern to replace the `api.Server` god-struct, durable job queue, asset-centric model, events/notifications, auth skeleton, CI) and a phased roadmap in `docs/`. Docs only; no code moved yet. |
 | 2026-11-06 | Phase 1 (the spine) implemented: `internal/platform` (shared Platform: store, logger, job queue) + a module registry in `internal/api` (per-service route registration); and `internal/jobs`, a durable Postgres-backed task queue (`task` table, migration 00019) with a worker pool. Endpoint scans now run as `scan.run` tasks and survive a restart (was an in-memory map). Remaining P1b: extract each service into its own package. |
+| 2026-11-06 | Phase 1 P1b: each service extracted into its own package implementing `platform.Module` — `internal/intel`, `internal/news`, `internal/scanner`; shared HTTP helpers moved to `platform`; `internal/api` reduced to a thin assembler. A change can now stay within one service package. All routes verified. |
 | 2026-11-03 | The scanner also does active (intrusive) checks with bundled Nuclei, off by default (`SCAN_ACTIVE_ENABLED`): its community templates actively verify vulnerabilities (not destructive exploitation; denial-of-service and fuzzing excluded), gated by a per-request authorisation confirmation. Nuclei (v3.11.1, SHA-pinned) and its templates (v10.5.0) are bundled in the backend image; the self-update was unreliable here. Scanning private/internal targets is a separate opt-in (`SCAN_ALLOW_PRIVATE`) for assessing one's own infrastructure; `host.docker.internal` reaches the Docker host. Both default off — enable only on a trusted single-user instance. |
 | 2026-11-03 | The sidebar has no search box; CVE search lives in the explorer's query bar only. |
 | 2026-11-03 | Phone layout: the CVE explorer switches to cards, tab strips scroll sideways in one row instead of wrapping, the at-a-glance rows stack, and wide tables keep a minimum width and scroll inside their card rather than squeezing columns. Checked at 390 px on every page: no page scrolls sideways. |

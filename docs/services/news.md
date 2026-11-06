@@ -14,7 +14,7 @@ CVEs" view. A thin service that leans on Intelligence for CVE context.
 
 **Backend**
 
-- `internal/api/`: `feeds.go`, `news.go`
+- `internal/news/`: `service.go` (module + routes), `news.go`, `feeds.go` (incl. the CVE-articles handler mounted at /cves/{id}/articles)
 - `internal/db/`: `feed_article.go`
 - `internal/sources/feeds` — the feed reader (RSS/Atom + per-source parsing),
   run by the syncer scheduler

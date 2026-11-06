@@ -32,6 +32,14 @@ type Config struct {
 	AssetRescanInterval time.Duration
 	// AlertWebhookURL receives new alerts as JSON (Slack-style {text}); empty disables.
 	AlertWebhookURL string
+	// SMTP + recipient for email alert delivery; email is enabled when SMTPHost
+	// and AlertEmailTo are both set.
+	SMTPHost     string
+	SMTPPort     string
+	SMTPUsername string
+	SMTPPassword string
+	SMTPFrom     string
+	AlertEmailTo string
 	// APIKeys gate the HTTP API when non-empty (Authorization: Bearer / X-API-Key);
 	// empty means the API is open (local use).
 	APIKeys []string
@@ -78,6 +86,12 @@ func Load() (Config, error) {
 		NucleiPath:         getenv("NUCLEI_PATH", "nuclei"),
 		NucleiTemplatesDir: getenv("NUCLEI_TEMPLATES_DIR", "/opt/nuclei-templates"),
 		AlertWebhookURL:    getenv("ALERT_WEBHOOK_URL", ""),
+		SMTPHost:           getenv("SMTP_HOST", ""),
+		SMTPPort:           getenv("SMTP_PORT", "587"),
+		SMTPUsername:       getenv("SMTP_USERNAME", ""),
+		SMTPPassword:       getenv("SMTP_PASSWORD", ""),
+		SMTPFrom:           getenv("SMTP_FROM", "pahredar@localhost"),
+		AlertEmailTo:       getenv("ALERT_EMAIL_TO", ""),
 		APIKeys:            splitCommaNonEmpty(getenv("API_KEY", "")),
 		DataDir:            getenv("DATA_DIR", os.TempDir()),
 	}

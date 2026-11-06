@@ -229,7 +229,10 @@ func serve(ctx context.Context, cfg config.Config) error {
 
 	// Raise alerts for assets matched by known-exploited CVEs, and deliver
 	// new ones to the configured webhook.
-	notifier := alerts.NewNotifier(cfg.AlertWebhookURL, slog.Default())
+	notifier := alerts.NewNotifier(cfg.AlertWebhookURL, alerts.Mail{
+		Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername,
+		Password: cfg.SMTPPassword, From: cfg.SMTPFrom, To: cfg.AlertEmailTo,
+	}, slog.Default())
 	go alertCheckLoop(jobsCtx, store, notifier)
 
 	syncCtx, stopSync := context.WithCancel(ctx)

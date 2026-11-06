@@ -15,15 +15,18 @@ import (
 // scanReuse: a passive scan of a host within this window is reused.
 const scanReuse = 60 * time.Second
 
-// scanTaskType is the durable task queue type for endpoint scans.
-const scanTaskType = "scan.run"
+// TaskType is the durable task queue type for endpoint scans. Other
+// services (e.g. assets) enqueue a scan by this type with a TaskPayload.
+const TaskType = "scan.run"
 
-// scanTaskPayload is what runScan enqueues.
-type scanTaskPayload struct {
-	Target string               `json:"target"`
-	Host   string               `json:"host"`
-	Active bool                 `json:"active"`
-	Filter *scan.TemplateFilter `json:"filter,omitempty"`
+// TaskPayload is what a scan task carries. AssetID links the result to an
+// asset (0 when the scan is ad hoc).
+type TaskPayload struct {
+	Target  string               `json:"target"`
+	Host    string               `json:"host"`
+	Active  bool                 `json:"active"`
+	Filter  *scan.TemplateFilter `json:"filter,omitempty"`
+	AssetID int64                `json:"asset_id,omitempty"`
 }
 
 // scanTaskResult is stored on the task as progress accrues and on completion.
@@ -53,7 +56,7 @@ type scanJobView struct {
 // registerScanJobs wires the scan task handler onto the queue. Called from New.
 func (s *Service) registerScanJobs() {
 	if s.Jobs != nil {
-		s.Jobs.Register(scanTaskType, s.handleScanTask)
+		s.Jobs.Register(TaskType, s.handleScanTask)
 	}
 }
 
@@ -86,7 +89,7 @@ func (s *Service) runScan(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	payload := scanTaskPayload{Target: body.Target, Host: host, Active: body.Active, Filter: body.Templates}
+	payload := TaskPayload{Target: body.Target, Host: host, Active: body.Active, Filter: body.Templates}
 
 	// A recent passive scan is reused without re-running: record it as an
 	// already-done task so the client polls it the same way.
@@ -95,7 +98,7 @@ func (s *Service) runScan(w http.ResponseWriter, r *http.Request) {
 			var rep scan.Report
 			if json.Unmarshal(raw, &rep) == nil {
 				result := scanTaskResult{Host: host, Report: &rep, StoredID: id, Cached: true}
-				if jobID, eerr := s.Jobs.EnqueueDone(r.Context(), scanTaskType, payload, result); eerr == nil {
+				if jobID, eerr := s.Jobs.EnqueueDone(r.Context(), TaskType, payload, result); eerr == nil {
 					platform.WriteJSON(w, http.StatusOK, map[string]any{"id": jobID})
 					return
 				}
@@ -103,7 +106,7 @@ func (s *Service) runScan(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	jobID, err := s.Jobs.Enqueue(r.Context(), scanTaskType, payload, 1)
+	jobID, err := s.Jobs.Enqueue(r.Context(), TaskType, payload, 1)
 	if err != nil {
 		platform.InternalError(w, r, err)
 		return
@@ -114,7 +117,7 @@ func (s *Service) runScan(w http.ResponseWriter, r *http.Request) {
 // handleScanTask runs one scan task, streaming progress onto the task row and
 // storing the final report.
 func (s *Service) handleScanTask(ctx context.Context, payload json.RawMessage, progress jobs.Progress) (any, error) {
-	var p scanTaskPayload
+	var p TaskPayload
 	if err := json.Unmarshal(payload, &p); err != nil {
 		return nil, err
 	}
@@ -146,6 +149,9 @@ func (s *Service) handleScanTask(ctx context.Context, payload json.RawMessage, p
 	id, _ := s.Store.SaveScan(saveCtx, rep)
 	res.Report = rep
 	res.StoredID = id
+	if p.AssetID > 0 && id > 0 {
+		_ = s.Store.SetAssetLastScan(saveCtx, p.AssetID, id)
+	}
 	return res, nil
 }
 
@@ -163,7 +169,7 @@ func (s *Service) scanJobStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view := scanJobView{ID: t.ID, Status: t.Status, Error: t.Error}
-	var p scanTaskPayload
+	var p TaskPayload
 	if json.Unmarshal(t.Payload, &p) == nil {
 		view.Target, view.Host, view.Active = p.Target, p.Host, p.Active
 	}

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/assets"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/intel"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/news"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/platform"
@@ -25,6 +26,7 @@ func New(p *platform.Platform, sched *syncer.Scheduler, rc *reports.Client, allo
 		intel.New(p, sched, rc),
 		news.New(p),
 		scanner.New(p, allowPrivate, active),
+		assets.New(p),
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthz(p))

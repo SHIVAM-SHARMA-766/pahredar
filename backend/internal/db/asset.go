@@ -1,0 +1,99 @@
+package db
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+)
+
+// Asset is one tracked target (domain, URL, IP, product, or repo).
+type Asset struct {
+	ID            int64      `json:"id"`
+	Kind          string     `json:"kind"`
+	Value         string     `json:"value"`
+	Label         string     `json:"label"`
+	Tags          []string   `json:"tags"`
+	LastScanID    *int64     `json:"last_scan_id,omitempty"`
+	LastScannedAt *time.Time `json:"last_scanned_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	// LastGrade/LastScore are joined from the latest scan when available.
+	LastGrade string `json:"last_grade,omitempty"`
+	LastScore *int   `json:"last_score,omitempty"`
+}
+
+// CreateAsset inserts an asset (idempotent on kind+value: returns the existing
+// one's id if it already exists).
+func (s *Store) CreateAsset(ctx context.Context, kind, value, label string, tags []string) (int64, error) {
+	if tags == nil {
+		tags = []string{}
+	}
+	var id int64
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO asset (kind, value, label, tags) VALUES ($1, $2, $3, $4)
+		ON CONFLICT (kind, value) DO UPDATE SET label = EXCLUDED.label, tags = EXCLUDED.tags
+		RETURNING id`, kind, value, label, tags).Scan(&id)
+	return id, err
+}
+
+// ListAssets returns all assets, newest first, with the latest scan's grade.
+func (s *Store) ListAssets(ctx context.Context) ([]Asset, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT a.id, a.kind, a.value, a.label, a.tags, a.last_scan_id, a.last_scanned_at, a.created_at,
+		       sc.grade, sc.score
+		FROM asset a
+		LEFT JOIN scan sc ON sc.id = a.last_scan_id
+		ORDER BY a.created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Asset{}
+	for rows.Next() {
+		var a Asset
+		var grade *string
+		if err := rows.Scan(&a.ID, &a.Kind, &a.Value, &a.Label, &a.Tags, &a.LastScanID, &a.LastScannedAt, &a.CreatedAt, &grade, &a.LastScore); err != nil {
+			return nil, err
+		}
+		if grade != nil {
+			a.LastGrade = *grade
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// GetAsset returns one asset by id.
+func (s *Store) GetAsset(ctx context.Context, id int64) (*Asset, error) {
+	var a Asset
+	var grade *string
+	err := s.pool.QueryRow(ctx, `
+		SELECT a.id, a.kind, a.value, a.label, a.tags, a.last_scan_id, a.last_scanned_at, a.created_at, sc.grade, sc.score
+		FROM asset a LEFT JOIN scan sc ON sc.id = a.last_scan_id
+		WHERE a.id = $1`, id).
+		Scan(&a.ID, &a.Kind, &a.Value, &a.Label, &a.Tags, &a.LastScanID, &a.LastScannedAt, &a.CreatedAt, &grade, &a.LastScore)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if grade != nil {
+		a.LastGrade = *grade
+	}
+	return &a, nil
+}
+
+// DeleteAsset removes an asset.
+func (s *Store) DeleteAsset(ctx context.Context, id int64) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM asset WHERE id = $1`, id)
+	return err
+}
+
+// SetAssetLastScan records the latest scan for an asset.
+func (s *Store) SetAssetLastScan(ctx context.Context, assetID, scanID int64) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE asset SET last_scan_id = $2, last_scanned_at = now() WHERE id = $1`, assetID, scanID)
+	return err
+}

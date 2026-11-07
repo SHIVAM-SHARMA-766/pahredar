@@ -7,7 +7,7 @@ WORKDIR /src
 # before the source copy so editing Go code does not re-fetch them (the layer
 # cache stays valid across code changes); wget retries ride out flaky networks.
 ARG TARGETARCH
-RUN apk add --no-cache unzip
+RUN apk add --no-cache unzip wget
 RUN NUCLEI_VERSION=3.11.1 && \
     case "$TARGETARCH" in \
       amd64) SUM=ea63d4ae232808cd7c6bc00d0142428e231fab59dae01042246097d195835ab6 ;; \

@@ -2,7 +2,7 @@
 
 Assesses a public (or, when enabled, private) endpoint: a details-first recon
 profile of everything discoverable, plus optional active checks that probe with
-attack patterns, plus a request tool for manual testing. Self-contained — the
+attack patterns. Self-contained — the
 cleanest module and a good template for new services.
 
 ## Owns
@@ -11,7 +11,6 @@ cleanest module and a good template for new services.
 
 - `POST /api/v1/scan` — start a scan job (passive, or active with
   `authorized: true`; optional `templates` filter)
-- `POST /api/v1/scan/request` — the request tool (send one crafted request)
 - `GET /api/v1/scan/jobs/{id}` — poll a running job (streams findings)
 - `GET /api/v1/scans`, `GET /api/v1/scans/{id}` — stored results
 - `GET /api/v1/scan/config` — capabilities (active available, allow private)
@@ -26,12 +25,11 @@ cleanest module and a good template for new services.
     email security)
   - active: `verify.go` (native evidence checks), `active.go` (Nuclei runner),
     `waf.go` (WAF/CDN fingerprint)
-  - `requesttool.go` (the Repeater)
 - `internal/db/scan.go` — `SaveScan`, `GetScan`, `RecentScans`, `MatchTech`
 
 **Frontend**
 
-- Page: `ScanPage` (scan landing + result + request tool tab)
+- Page: `ScanPage` (scan landing + result)
 
 **Tables** (new migrations use the next sequential number — see [../contributing.md](../contributing.md))
 

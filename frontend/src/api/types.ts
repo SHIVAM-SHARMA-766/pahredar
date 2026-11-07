@@ -834,29 +834,6 @@ export interface Asset {
   kev_count: number
 }
 
-export interface ScanRequestSpec {
-  method: string
-  url: string
-  headers: { name: string; value: string }[]
-  body: string
-  follow_redirects: boolean
-}
-
-export interface ScanRequestResult {
-  request: string
-  url: string
-  status: number
-  status_text: string
-  proto: string
-  headers: { name: string; value: string }[]
-  body: string
-  body_size: number
-  time_ms: number
-  waf?: string
-  blocked: boolean
-  remote_ip?: string
-}
-
 export interface ScanConfig {
   active_available: boolean
   allow_private: boolean

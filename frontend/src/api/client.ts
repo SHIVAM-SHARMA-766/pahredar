@@ -15,8 +15,6 @@ import type {
   NewsPage,
   NewsQuery,
   ScanConfig,
-  ScanRequestResult,
-  ScanRequestSpec,
   ScanJob,
   ScanReport,
   ScanSummary,
@@ -102,7 +100,6 @@ export const api = {
   alertsUnread: () => request<{ unread: number }>('/api/v1/alerts/unread-count'),
   markAlertRead: (id: number) => request<{ ok: boolean }>(`/api/v1/alerts/${id}/read`, { method: 'PUT' }),
   markAllAlertsRead: () => request<{ ok: boolean }>('/api/v1/alerts/read-all', { method: 'PUT' }),
-  scanRequest: (spec: ScanRequestSpec) => request<ScanRequestResult>('/api/v1/scan/request', { method: 'POST', body: JSON.stringify(spec) }),
   recentScans: () => request<{ items: ScanSummary[] }>('/api/v1/scans'),
   getScan: (id: number) => request<ScanReport>(`/api/v1/scans/${id}`),
   setBookmark: (url: string, bookmarked: boolean) =>

@@ -13,7 +13,7 @@ Feature work on the existing services continues in parallel.
 Three services share one database and one HTTP server:
 Vulnerability Intelligence, Security News, Endpoint Scanner (see
 `docs/services/`). Data sync runs on a scheduler. The scanner does passive
-recon, active (Nuclei + native) checks, and a request tool.
+recon and active (Nuclei + native) checks.
 
 Core limitations this roadmap removes: the `api.Server` god-struct, in-memory
 scan jobs, no asset inventory, no auth, no alerting.

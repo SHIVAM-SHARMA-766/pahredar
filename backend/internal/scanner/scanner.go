@@ -1,5 +1,5 @@
-// Package scanner is the Endpoint Scanner service: recon, active scanning, the
-// request tool, and stored results. It registers its routes and its scan.run
+// Package scanner is the Endpoint Scanner service: recon, active scanning, and
+// stored results. It registers its routes and its scan.run
 // job handler against the shared platform.
 package scanner
 
@@ -36,7 +36,6 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	// gated inside runScan (operator+, content-based). Listing all scans is an
 	// operator overview. See docs/auth.md.
 	mux.HandleFunc("POST /api/v1/scan", s.runScan)
-	mux.HandleFunc("POST /api/v1/scan/request", s.scanRequest)
 	mux.HandleFunc("GET /api/v1/scans", platform.Guard(platform.RoleOperator, s.listScans))
 	mux.HandleFunc("GET /api/v1/scans/{id}", s.getScan)
 	mux.HandleFunc("GET /api/v1/scan/jobs/{id}", s.scanJobStatus)

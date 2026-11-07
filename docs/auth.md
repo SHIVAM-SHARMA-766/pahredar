@@ -32,7 +32,7 @@ Public = anonymous and up. Each row names the **minimum** role.
 | Dashboard, CVEs, vendors, products, stats, detection, ATT&CK | public | `GET /cves*`, `/vendors*`, `/products`, `/stats/*` |
 | Security news, feeds, advisories, trending, CVE articles | public | `GET /news`, `/feeds*`, `/stats/trending`, `/cves/{id}/articles` |
 | Sync status | public | `GET /sync/status` |
-| **Passive** scan + its results | public | `POST /scan` (passive), `POST /scan/request`, `GET /scans/{id}`, `/scan/jobs/{id}`, `/scan/config` |
+| **Passive** scan + its results | public | `POST /scan` (passive), `GET /scans/{id}`, `/scan/jobs/{id}`, `/scan/config` |
 | News bookmark toggle | operator | `PUT /news/bookmark` |
 | Scan list (all scans) | operator | `GET /scans` |
 | **Active** scan (intrusive Nuclei) | operator | `POST /scan` with `active: true` — content-based |

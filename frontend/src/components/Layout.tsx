@@ -13,6 +13,7 @@ import {
   Newspaper,
   Radar,
   RefreshCw,
+  Send,
   Users,
   X,
   type LucideIcon,
@@ -55,7 +56,10 @@ const SECTIONS: { title: string; dot: string; minRole?: Role; items: NavItem[] }
     title: 'Monitoring',
     dot: 'bg-rose-400',
     minRole: 'viewer',
-    items: [{ to: '/incidents', label: 'Incidents', icon: Bell, active: (l) => l.pathname.startsWith('/incidents'), badge: 'incidents' }],
+    items: [
+      { to: '/incidents', label: 'Incidents', icon: Bell, active: (l) => l.pathname.startsWith('/incidents'), badge: 'incidents' },
+      { to: '/notifications', label: 'Notifications', icon: Send, active: (l) => l.pathname.startsWith('/notifications') },
+    ],
   },
   {
     title: 'Vulnerability intelligence',

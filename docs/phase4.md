@@ -1,7 +1,8 @@
 # Phase 4 — Multi-tenant platform + incident management
 
-Status: **in progress**. Design record and milestone tracker. Builds on the
-Phase 3 multi-user auth (docs/auth.md).
+Status: **feature-complete** (all milestones done; pending live verification on a
+stack rebuild). Design record and milestone tracker. Builds on the Phase 3
+multi-user auth (docs/auth.md).
 
 ## What changes and why
 
@@ -131,7 +132,12 @@ Tenancy is the foundation (everything scopes by client), so it goes first.
     `/oncall-shifts/{id}`). An escalation step with `notify_oncall` now emails
     whoever's shift covers "now" in the incident's client schedule (else global).
     Build + vet green.
-  - **M4** suppression windows; frontend for all of the above.
+  - **M4** (suppression + frontend) — **done**: `suppression` table (migration
+    00033) — mute notifications for an asset / client / globally during a window;
+    the delivery walk skips a suppressed incident (keeping it in-app). CRUD at
+    `/api/v1/suppressions`. **Notifications page** (frontend) manages all of 4C:
+    channels, escalation policies (with a step editor), on-call schedules +
+    shifts, and suppression windows. tsc + build green.
 
 Delivered incrementally; each milestone builds and is verified before the next.
 The existing `alert` tables are migrated into `incident`/`incident_item` in 4B.

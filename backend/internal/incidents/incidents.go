@@ -54,6 +54,11 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/oncall-schedules/{id}", platform.Guard(platform.RoleOperator, s.deleteSchedule))
 	mux.HandleFunc("POST /api/v1/oncall-schedules/{id}/shifts", platform.Guard(platform.RoleOperator, s.addShift))
 	mux.HandleFunc("DELETE /api/v1/oncall-shifts/{id}", platform.Guard(platform.RoleOperator, s.deleteShift))
+
+	// Suppression windows (Phase 4C-M4).
+	mux.HandleFunc("GET /api/v1/suppressions", platform.Guard(platform.RoleViewer, s.listSuppressions))
+	mux.HandleFunc("POST /api/v1/suppressions", platform.Guard(platform.RoleOperator, s.createSuppression))
+	mux.HandleFunc("DELETE /api/v1/suppressions/{id}", platform.Guard(platform.RoleOperator, s.deleteSuppression))
 }
 
 func (s *Service) list(w http.ResponseWriter, r *http.Request) {

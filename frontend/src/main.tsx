@@ -24,6 +24,7 @@ const IncidentsPage = lazy(() => import('./pages/IncidentsPage').then((m) => ({ 
 const SyncPage = lazy(() => import('./pages/SyncPage').then((m) => ({ default: m.SyncPage })))
 const UsersPage = lazy(() => import('./pages/UsersPage').then((m) => ({ default: m.UsersPage })))
 const ClientsPage = lazy(() => import('./pages/ClientsPage').then((m) => ({ default: m.ClientsPage })))
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage })))
 
 const page = (el: ReactNode) => <Suspense fallback={<Spinner />}>{el}</Suspense>
 
@@ -52,6 +53,7 @@ const router = createBrowserRouter([
       { path: 'inventory', element: page(<AssetsPage />) },
       { path: 'inventory/:id', element: page(<AssetDetailPage />) },
       { path: 'incidents', element: page(<IncidentsPage />) },
+      { path: 'notifications', element: page(<NotificationsPage />) },
       { path: 'sync', element: page(<SyncPage />) },
       { path: 'users', element: page(<UsersPage />) },
       { path: 'clients', element: page(<ClientsPage />) },

@@ -4,8 +4,11 @@ import type {
   AssetCVE,
   AttackMapping,
   CapecPattern,
+  Channel,
   Client,
   CveDetail,
+  EscalationPolicy,
+  EscalationStep,
   CveFacets,
   CveList,
   CveReports,
@@ -15,6 +18,8 @@ import type {
   Incident,
   Me,
   NewsPage,
+  OnCallSchedule,
+  OnCallShift,
   NewsQuery,
   ScanConfig,
   ScanRequestResult,
@@ -28,6 +33,7 @@ import type {
   RelatedGroup,
   Series,
   TrendingItem,
+  Suppression,
   SyncStatus,
   User,
   VendorDetail,
@@ -161,4 +167,37 @@ export const api = {
   userClients: (id: number) => request<{ items: Client[] }>(`/api/v1/users/${id}/clients`),
   setUserClients: (id: number, clientIds: number[]) =>
     request<{ ok: boolean }>(`/api/v1/users/${id}/clients`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_ids: clientIds }) }),
+
+  // Notification channels.
+  channels: () => request<{ items: Channel[] }>('/api/v1/channels'),
+  createChannel: (body: { client_id?: number | null; type: string; name: string; target: string }) =>
+    request<Channel>('/api/v1/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  updateChannel: (id: number, body: { name?: string; target?: string; enabled?: boolean }) =>
+    request<Channel>(`/api/v1/channels/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  deleteChannel: (id: number) => request<{ deleted: number }>(`/api/v1/channels/${id}`, { method: 'DELETE' }),
+
+  // Escalation policies.
+  escalationPolicies: () => request<{ items: EscalationPolicy[] }>('/api/v1/escalation-policies'),
+  createEscalationPolicy: (body: { client_id?: number | null; name: string; is_default?: boolean; steps?: EscalationStep[] }) =>
+    request<EscalationPolicy>('/api/v1/escalation-policies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  updateEscalationPolicy: (id: number, body: { name?: string; is_default?: boolean }) =>
+    request<EscalationPolicy>(`/api/v1/escalation-policies/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  setPolicySteps: (id: number, steps: EscalationStep[]) =>
+    request<{ ok: boolean }>(`/api/v1/escalation-policies/${id}/steps`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ steps }) }),
+  deleteEscalationPolicy: (id: number) => request<{ deleted: number }>(`/api/v1/escalation-policies/${id}`, { method: 'DELETE' }),
+
+  // On-call schedules.
+  oncallSchedules: () => request<{ items: OnCallSchedule[] }>('/api/v1/oncall-schedules'),
+  createOncallSchedule: (body: { client_id?: number | null; name: string }) =>
+    request<OnCallSchedule>('/api/v1/oncall-schedules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  deleteOncallSchedule: (id: number) => request<{ deleted: number }>(`/api/v1/oncall-schedules/${id}`, { method: 'DELETE' }),
+  addOncallShift: (id: number, body: { user_id: number; starts_at: string; ends_at: string }) =>
+    request<OnCallShift>(`/api/v1/oncall-schedules/${id}/shifts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  deleteOncallShift: (id: number) => request<{ deleted: number }>(`/api/v1/oncall-shifts/${id}`, { method: 'DELETE' }),
+
+  // Suppression windows.
+  suppressions: () => request<{ items: Suppression[] }>('/api/v1/suppressions'),
+  createSuppression: (body: { client_id?: number | null; asset_id?: number | null; reason?: string; starts_at: string; ends_at: string }) =>
+    request<Suppression>('/api/v1/suppressions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  deleteSuppression: (id: number) => request<{ deleted: number }>(`/api/v1/suppressions/${id}`, { method: 'DELETE' }),
 }

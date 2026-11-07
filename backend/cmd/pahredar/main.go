@@ -419,6 +419,9 @@ func incidentCheckLoop(ctx context.Context, store *db.Store, notifier *alerts.No
 func deliverPending(ctx context.Context, store *db.Store, notifier *alerts.Notifier, incs []db.IncidentEsc) {
 	now := time.Now()
 	for _, e := range incs {
+		if sup, err := store.IncidentSuppressed(ctx, e.ClientID, e.AssetID); err == nil && sup {
+			continue // maintenance window — keep the incident, send nothing
+		}
 		policyID := int64(0)
 		if e.PolicyID != nil {
 			policyID = *e.PolicyID

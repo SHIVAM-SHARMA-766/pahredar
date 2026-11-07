@@ -821,6 +821,68 @@ export interface Client {
   created_at: string
 }
 
+// Channel is a notification target (webhook/email), global or per-client.
+export interface Channel {
+  id: number
+  client_id?: number
+  type: 'webhook' | 'email'
+  name: string
+  target: string
+  enabled: boolean
+  created_at: string
+}
+
+// EscalationStep notifies a channel and/or the on-call user, then waits.
+export interface EscalationStep {
+  id?: number
+  position?: number
+  delay_minutes: number
+  channel_id?: number | null
+  notify_oncall: boolean
+}
+
+// EscalationPolicy is an ordered set of steps.
+export interface EscalationPolicy {
+  id: number
+  client_id?: number
+  name: string
+  is_default: boolean
+  created_at: string
+  steps: EscalationStep[]
+}
+
+// OnCallShift is one user on call for a window.
+export interface OnCallShift {
+  id: number
+  schedule_id: number
+  user_id: number
+  user_email?: string
+  starts_at: string
+  ends_at: string
+}
+
+// OnCallSchedule is a rota, global or per-client.
+export interface OnCallSchedule {
+  id: number
+  client_id?: number
+  name: string
+  created_at: string
+  shifts?: OnCallShift[]
+}
+
+// Suppression mutes notifications for a scope during a window.
+export interface Suppression {
+  id: number
+  client_id?: number
+  asset_id?: number
+  reason?: string
+  starts_at: string
+  ends_at: string
+  created_at: string
+  client_name?: string
+  asset_value?: string
+}
+
 // Incident is a per-asset rollup of its problems.
 export interface Incident {
   id: number

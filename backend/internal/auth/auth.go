@@ -38,6 +38,13 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/auth/login", s.login)
 	mux.HandleFunc("POST /api/v1/auth/logout", s.logout)
 	mux.HandleFunc("GET /api/v1/auth/me", s.me)
+
+	// User management — admin only (see docs/auth.md).
+	mux.HandleFunc("GET /api/v1/users", platform.Guard(platform.RoleAdmin, s.listUsers))
+	mux.HandleFunc("POST /api/v1/users", platform.Guard(platform.RoleAdmin, s.createUser))
+	mux.HandleFunc("PATCH /api/v1/users/{id}", platform.Guard(platform.RoleAdmin, s.patchUser))
+	mux.HandleFunc("PUT /api/v1/users/{id}/password", platform.Guard(platform.RoleAdmin, s.resetUserPassword))
+	mux.HandleFunc("DELETE /api/v1/users/{id}", platform.Guard(platform.RoleAdmin, s.deleteUser))
 }
 
 type loginRequest struct {

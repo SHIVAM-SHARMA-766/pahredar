@@ -82,7 +82,10 @@ active scan. The scanner handler enforces it from the principal on the context.
 - **M2 — authorization** (done): `platform.Guard` applied across the matrix
   (assets/alerts, scan list, sync, news bookmark) and the content-based
   active-scan gate in the scanner. Verified end-to-end per role.
-- **M3 — user management** (admin CRUD API for accounts + roles).
+- **M3 — user management** (done): admin CRUD API — `GET/POST /users`,
+  `PATCH /users/{id}` (role / disable), `PUT /users/{id}/password`,
+  `DELETE /users/{id}`. Refuses demoting, disabling, or deleting the last
+  enabled admin; disabling or a password reset drops that user's sessions.
 - **M4 — frontend** (login page, auth context, role-gated nav and controls;
   replace the API-key AuthGate; hide the active-scan toggle for non-operators).
 

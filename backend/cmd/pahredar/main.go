@@ -384,11 +384,11 @@ func incidentCheckLoop(ctx context.Context, store *db.Store, notifier *alerts.No
 		// channel applies. An incident is marked delivered when at least one
 		// target succeeds, or when there is nothing to send; failures leave it
 		// pending for the next tick.
-		pending, perr := store.PendingIncidents(rctx, 100)
+		open, perr := store.OpenIncidentsForEscalation(rctx, 200)
 		if perr != nil {
-			slog.Warn("pending incidents query failed", "err", perr)
+			slog.Warn("open incidents query failed", "err", perr)
 		} else {
-			deliverPending(rctx, store, notifier, pending)
+			deliverPending(rctx, store, notifier, open)
 		}
 	}
 	select {
@@ -409,47 +409,107 @@ func incidentCheckLoop(ctx context.Context, store *db.Store, notifier *alerts.No
 	}
 }
 
-// deliverPending routes each pending incident to its client's channels (plus
-// global channels); when none apply it falls back to the env webhook/email. An
-// incident is marked delivered on the first successful target, or when there is
-// nothing to send to.
-func deliverPending(ctx context.Context, store *db.Store, notifier *alerts.Notifier, pending []db.Incident) {
-	delivered := []int64{}
-	for _, inc := range pending {
-		chans, err := store.ChannelsForClient(ctx, inc.ClientID)
-		if err != nil {
-			slog.Warn("channels lookup failed", "err", err)
+// deliverPending drives notification for open incidents. With an escalation
+// policy (the incident's, else the client/global default) it walks the policy's
+// steps: it notifies step 0 first, re-notifies the current step on new activity,
+// and escalates to the next step once a step's delay passes without an
+// acknowledgement. Without a policy it falls back to a one-shot delivery to the
+// client's channels (or the env webhook/email). (Suppression windows are
+// applied in 4C-M4.)
+func deliverPending(ctx context.Context, store *db.Store, notifier *alerts.Notifier, incs []db.IncidentEsc) {
+	now := time.Now()
+	for _, e := range incs {
+		policyID := int64(0)
+		if e.PolicyID != nil {
+			policyID = *e.PolicyID
+		}
+		if policyID == 0 {
+			policyID, _ = store.DefaultPolicyID(ctx, e.ClientID)
+		}
+
+		// No policy: one-shot to the incident's channels on new activity.
+		if policyID == 0 {
+			if !e.Delivered {
+				deliverToTargets(ctx, store, notifier, resolveTargets(ctx, store, notifier, e.ClientID), e)
+			}
 			continue
 		}
-		targets := make([]alerts.Target, 0, len(chans))
-		for _, c := range chans {
-			targets = append(targets, alerts.Target{Type: c.Type, Target: c.Target})
-		}
-		if len(targets) == 0 {
-			targets = notifier.EnvTargets() // fallback to env config
-		}
-		if len(targets) == 0 {
-			delivered = append(delivered, inc.ID) // nothing configured; in-app only
+
+		steps, err := store.StepsForPolicy(ctx, policyID)
+		if err != nil || len(steps) == 0 {
+			if !e.Delivered {
+				deliverToTargets(ctx, store, notifier, resolveTargets(ctx, store, notifier, e.ClientID), e)
+			}
 			continue
 		}
-		ok := false
-		for _, t := range targets {
-			if derr := notifier.DeliverIncidentTo(ctx, t.Type, t.Target, inc); derr != nil {
-				slog.Warn("incident channel delivery failed", "type", t.Type, "err", derr)
-			} else {
-				ok = true
+
+		target, notify := e.EscStep, false
+		if e.EscStep < 0 {
+			target, notify = 0, true // first notification
+		} else {
+			if e.Status == "triggered" && e.EscStep+1 < len(steps) && e.EscNotifiedAt != nil &&
+				now.Sub(*e.EscNotifiedAt) >= time.Duration(steps[e.EscStep].DelayMinutes)*time.Minute {
+				target, notify = e.EscStep+1, true // escalate
+			}
+			if !e.Delivered {
+				notify = true // new activity → re-notify current step
 			}
 		}
-		if ok {
-			delivered = append(delivered, inc.ID)
+		if notify {
+			deliverToTargets(ctx, store, notifier, stepTargets(ctx, store, steps[target]), e)
+			if err := store.SetIncidentEscalation(ctx, e.ID, target, policyID); err != nil {
+				slog.Warn("set incident escalation failed", "err", err)
+			}
 		}
 	}
-	if len(delivered) > 0 {
-		if err := store.MarkIncidentsDelivered(ctx, delivered); err != nil {
-			slog.Warn("mark delivered failed", "err", err)
-		} else {
-			slog.Info("incidents delivered", "count", len(delivered))
+}
+
+// resolveTargets returns a client's channels (plus global), or the env config
+// when none are set.
+func resolveTargets(ctx context.Context, store *db.Store, notifier *alerts.Notifier, clientID *int64) []alerts.Target {
+	chans, err := store.ChannelsForClient(ctx, clientID)
+	if err != nil {
+		slog.Warn("channels lookup failed", "err", err)
+	}
+	targets := make([]alerts.Target, 0, len(chans))
+	for _, c := range chans {
+		targets = append(targets, alerts.Target{Type: c.Type, Target: c.Target})
+	}
+	if len(targets) == 0 {
+		targets = notifier.EnvTargets()
+	}
+	return targets
+}
+
+// stepTargets returns the delivery targets for one escalation step (its channel;
+// on-call is added in 4C-M3).
+func stepTargets(ctx context.Context, store *db.Store, step db.EscalationStep) []alerts.Target {
+	targets := []alerts.Target{}
+	if step.ChannelID != nil {
+		if c, err := store.GetChannel(ctx, *step.ChannelID); err == nil && c.Enabled {
+			targets = append(targets, alerts.Target{Type: c.Type, Target: c.Target})
 		}
+	}
+	return targets
+}
+
+// deliverToTargets sends the incident to each target and, on the first success
+// (or when there is nothing to send), stamps it delivered.
+func deliverToTargets(ctx context.Context, store *db.Store, notifier *alerts.Notifier, targets []alerts.Target, e db.IncidentEsc) {
+	if len(targets) == 0 {
+		_ = store.MarkIncidentsDelivered(ctx, []int64{e.ID}) // nothing to send; in-app only
+		return
+	}
+	ok := false
+	for _, t := range targets {
+		if err := notifier.DeliverIncidentTo(ctx, t.Type, t.Target, e.Incident); err != nil {
+			slog.Warn("incident channel delivery failed", "type", t.Type, "err", err)
+		} else {
+			ok = true
+		}
+	}
+	if ok {
+		_ = store.MarkIncidentsDelivered(ctx, []int64{e.ID})
 	}
 }
 

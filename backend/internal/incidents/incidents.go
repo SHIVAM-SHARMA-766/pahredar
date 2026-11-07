@@ -33,11 +33,19 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/incidents/{id}/acknowledge", platform.Guard(platform.RoleOperator, s.acknowledge))
 	mux.HandleFunc("PUT /api/v1/incidents/{id}/resolve", platform.Guard(platform.RoleOperator, s.resolve))
 
-	// Notification channels (Phase 4C).
+	// Notification channels (Phase 4C-M1).
 	mux.HandleFunc("GET /api/v1/channels", platform.Guard(platform.RoleViewer, s.listChannels))
 	mux.HandleFunc("POST /api/v1/channels", platform.Guard(platform.RoleOperator, s.createChannel))
 	mux.HandleFunc("PATCH /api/v1/channels/{id}", platform.Guard(platform.RoleOperator, s.patchChannel))
 	mux.HandleFunc("DELETE /api/v1/channels/{id}", platform.Guard(platform.RoleOperator, s.deleteChannel))
+
+	// Escalation policies (Phase 4C-M2).
+	mux.HandleFunc("GET /api/v1/escalation-policies", platform.Guard(platform.RoleViewer, s.listPolicies))
+	mux.HandleFunc("POST /api/v1/escalation-policies", platform.Guard(platform.RoleOperator, s.createPolicy))
+	mux.HandleFunc("GET /api/v1/escalation-policies/{id}", platform.Guard(platform.RoleViewer, s.getPolicy))
+	mux.HandleFunc("PATCH /api/v1/escalation-policies/{id}", platform.Guard(platform.RoleOperator, s.patchPolicy))
+	mux.HandleFunc("PUT /api/v1/escalation-policies/{id}/steps", platform.Guard(platform.RoleOperator, s.setPolicySteps))
+	mux.HandleFunc("DELETE /api/v1/escalation-policies/{id}", platform.Guard(platform.RoleOperator, s.deletePolicy))
 }
 
 func (s *Service) list(w http.ResponseWriter, r *http.Request) {

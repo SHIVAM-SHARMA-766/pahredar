@@ -117,7 +117,14 @@ Tenancy is the foundation (everything scopes by client), so it goes first.
     global ones, falling back to the env `ALERT_WEBHOOK_URL`/SMTP when none apply;
     marked delivered on the first success. Build + vet green. *Frontend (channel
     management UI) comes with M4.*
-  - **M2** escalation policies + delivery walk.
+  - **M2** (escalation) — **done (backend)**: `escalation_policy` + `escalation_step`
+    (migration 00031), global or per-client, one default per scope. CRUD at
+    `/api/v1/escalation-policies` (+ `/{id}/steps`). The delivery loop now walks
+    the policy: notify step 0, re-notify the current step on new activity, and
+    escalate to the next step once a step's `delay_minutes` passes without an
+    acknowledgement (acknowledged incidents stop escalating). No policy → the M1
+    one-shot channel delivery. Incident carries `policy_id`/`esc_step`/
+    `esc_notified_at`. Build + vet green.
   - **M3** on-call schedules + rotations.
   - **M4** suppression windows; frontend for all of the above.
 

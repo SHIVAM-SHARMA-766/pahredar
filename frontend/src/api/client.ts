@@ -4,6 +4,7 @@ import type {
   AssetCVE,
   AttackMapping,
   CapecPattern,
+  Client,
   CveDetail,
   CveFacets,
   CveList,
@@ -11,6 +12,7 @@ import type {
   DetectionRule,
   FeedArticle,
   FeedInfo,
+  Incident,
   Me,
   NewsPage,
   NewsQuery,
@@ -92,16 +94,22 @@ export const api = {
   scanConfig: () => request<ScanConfig>('/api/v1/scan/config'),
   assets: () => request<{ items: Asset[] }>('/api/v1/assets'),
   getAsset: (id: number) => request<Asset>(`/api/v1/assets/${id}`),
-  createAsset: (body: { kind: string; value: string; label?: string; tags?: string[] }) =>
+  createAsset: (body: { client_id: number; kind: string; value: string; label?: string; tags?: string[] }) =>
     request<{ id: number }>('/api/v1/assets', { method: 'POST', body: JSON.stringify(body) }),
   deleteAsset: (id: number) => request<{ deleted: number }>(`/api/v1/assets/${id}`, { method: 'DELETE' }),
   scanAsset: (id: number) => request<{ job_id: number }>(`/api/v1/assets/${id}/scan`, { method: 'POST' }),
   assetScans: (id: number) => request<{ items: ScanSummary[] }>(`/api/v1/assets/${id}/scans`),
   assetCves: (id: number) => request<{ items: AssetCVE[] }>(`/api/v1/assets/${id}/cves`),
-  alerts: (unread?: boolean) => request<{ items: Alert[] }>(`/api/v1/alerts${unread ? '?unread=1' : ''}`),
-  alertsUnread: () => request<{ unread: number }>('/api/v1/alerts/unread-count'),
-  markAlertRead: (id: number) => request<{ ok: boolean }>(`/api/v1/alerts/${id}/read`, { method: 'PUT' }),
-  markAllAlertsRead: () => request<{ ok: boolean }>('/api/v1/alerts/read-all', { method: 'PUT' }),
+
+  // Incidents (per-asset rollups).
+  incidents: () => request<{ items: Incident[] }>('/api/v1/incidents'),
+  incidentsUnread: () => request<{ unread: number }>('/api/v1/incidents/unread-count'),
+  getIncident: (id: number) => request<Incident>(`/api/v1/incidents/${id}`),
+  incidentItems: (id: number) => request<{ items: Alert[] }>(`/api/v1/incidents/${id}/items`),
+  markIncidentRead: (id: number) => request<{ ok: boolean }>(`/api/v1/incidents/${id}/read`, { method: 'PUT' }),
+  markAllIncidentsRead: () => request<{ ok: boolean }>('/api/v1/incidents/read-all', { method: 'PUT' }),
+  acknowledgeIncident: (id: number) => request<{ ok: boolean }>(`/api/v1/incidents/${id}/acknowledge`, { method: 'PUT' }),
+  resolveIncident: (id: number) => request<{ ok: boolean }>(`/api/v1/incidents/${id}/resolve`, { method: 'PUT' }),
   scanRequest: (spec: ScanRequestSpec) => request<ScanRequestResult>('/api/v1/scan/request', { method: 'POST', body: JSON.stringify(spec) }),
   recentScans: () => request<{ items: ScanSummary[] }>('/api/v1/scans'),
   getScan: (id: number) => request<ScanReport>(`/api/v1/scans/${id}`),
@@ -142,4 +150,15 @@ export const api = {
   resetUserPassword: (id: number, password: string) =>
     request<{ ok: boolean }>(`/api/v1/users/${id}/password`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) }),
   deleteUser: (id: number) => request<{ deleted: number }>(`/api/v1/users/${id}`, { method: 'DELETE' }),
+
+  // Clients (tenants).
+  clients: () => request<{ items: Client[] }>('/api/v1/clients'),
+  createClient: (body: { name: string; slug?: string; notes?: string }) =>
+    request<Client>('/api/v1/clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  updateClient: (id: number, body: { name: string; notes?: string }) =>
+    request<Client>(`/api/v1/clients/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  deleteClient: (id: number) => request<{ deleted: number }>(`/api/v1/clients/${id}`, { method: 'DELETE' }),
+  userClients: (id: number) => request<{ items: Client[] }>(`/api/v1/users/${id}/clients`),
+  setUserClients: (id: number, clientIds: number[]) =>
+    request<{ ok: boolean }>(`/api/v1/users/${id}/clients`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_ids: clientIds }) }),
 }

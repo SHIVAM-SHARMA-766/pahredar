@@ -808,6 +808,35 @@ export interface Me {
   user_id: number
   name: string
   role: 'anonymous' | 'viewer' | 'operator' | 'admin'
+  all_clients: boolean
+  client_ids: number[] | null
+}
+
+// Client is a tenant.
+export interface Client {
+  id: number
+  name: string
+  slug: string
+  notes?: string
+  created_at: string
+}
+
+// Incident is a per-asset rollup of its problems.
+export interface Incident {
+  id: number
+  asset_id: number
+  client_id?: number
+  status: 'triggered' | 'acknowledged' | 'resolved'
+  severity: string
+  title: string
+  item_count: number
+  opened_at: string
+  last_event_at: string
+  acknowledged_at?: string
+  resolved_at?: string
+  read_at?: string
+  asset_value?: string
+  client_name?: string
 }
 
 // User is an account (admin user-management views).
@@ -821,6 +850,7 @@ export interface User {
 
 export interface Asset {
   id: number
+  client_id?: number
   kind: string
   value: string
   label: string

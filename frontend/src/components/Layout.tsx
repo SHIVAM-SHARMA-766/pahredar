@@ -30,7 +30,7 @@ interface NavItem {
   label: string
   icon: LucideIcon
   active: (loc: Location) => boolean
-  badge?: 'alerts'
+  badge?: 'incidents'
 }
 
 // Sections mirror what Pahredar does; "Known exploited" and "Likely exploited"
@@ -55,7 +55,7 @@ const SECTIONS: { title: string; dot: string; minRole?: Role; items: NavItem[] }
     title: 'Monitoring',
     dot: 'bg-rose-400',
     minRole: 'viewer',
-    items: [{ to: '/alerts', label: 'Alerts', icon: Bell, active: (l) => l.pathname.startsWith('/alerts'), badge: 'alerts' }],
+    items: [{ to: '/incidents', label: 'Incidents', icon: Bell, active: (l) => l.pathname.startsWith('/incidents'), badge: 'incidents' }],
   },
   {
     title: 'Vulnerability intelligence',
@@ -77,8 +77,9 @@ const SECTIONS: { title: string; dot: string; minRole?: Role; items: NavItem[] }
     dot: 'bg-emerald-400',
     minRole: 'admin',
     items: [
-      { to: '/sync', label: 'Data sync', icon: RefreshCw, active: (l) => l.pathname === '/sync' },
+      { to: '/clients', label: 'Clients', icon: Building2, active: (l) => l.pathname.startsWith('/clients') },
       { to: '/users', label: 'Users', icon: Users, active: (l) => l.pathname.startsWith('/users') },
+      { to: '/sync', label: 'Data sync', icon: RefreshCw, active: (l) => l.pathname === '/sync' },
     ],
   },
 ]
@@ -216,8 +217,8 @@ function Sidebar({ collapsed, location, onToggle, onClose, drawer }: {
 
 function NavRow({ item, active, collapsed }: { item: NavItem; active: boolean; collapsed: boolean }) {
   const Icon = item.icon
-  const unread = useQuery({ queryKey: ['alerts-unread'], queryFn: api.alertsUnread, enabled: item.badge === 'alerts', refetchInterval: 60_000 })
-  const count = item.badge === 'alerts' ? unread.data?.unread ?? 0 : 0
+  const unread = useQuery({ queryKey: ['incidents-unread'], queryFn: api.incidentsUnread, enabled: item.badge === 'incidents', refetchInterval: 60_000 })
+  const count = item.badge === 'incidents' ? unread.data?.unread ?? 0 : 0
   return (
     <Link
       to={item.to}

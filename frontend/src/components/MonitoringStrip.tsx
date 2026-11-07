@@ -3,29 +3,24 @@ import { Bell, Boxes, ShieldAlert } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { api } from '../api/client'
-import type { Alert } from '../api/types'
-import { Tag } from './ui'
+import type { Incident } from '../api/types'
 import { useAuth } from '../lib/auth'
 import { relativeTime } from '../lib/format'
 
 // The operator's own posture, surfaced on the dashboard: what they track, what
-// is at risk, and the newest alerts. The CVE landscape below it is "the world";
-// this strip is "what's mine". Composed from the assets + alerts endpoints, so
-// it needs no new backend route.
+// is at risk, and the newest incidents. The CVE landscape below it is "the
+// world"; this strip is "what's mine". Composed from the assets + incidents
+// endpoints, so it needs no new backend route.
 
-const alertTag: Record<string, ReactNode> = {
-  kev_match: <Tag tone="red">KEV</Tag>,
-  epss_high: <Tag tone="amber">High EPSS</Tag>,
-  critical_finding: <Tag tone="red">Critical</Tag>,
-}
+const sevDot: Record<string, string> = { critical: 'bg-red-500', high: 'bg-orange-500', medium: 'bg-amber-500', low: 'bg-sky-500', info: 'bg-zinc-500' }
 
 export function MonitoringStrip() {
   // Monitoring data is private (viewer+). Anonymous visitors on the public
   // dashboard see no strip, and the queries stay disabled so they never 401.
   const { isAuthenticated } = useAuth()
   const assets = useQuery({ queryKey: ['assets'], queryFn: api.assets, refetchInterval: 5 * 60_000, enabled: isAuthenticated })
-  const unread = useQuery({ queryKey: ['alerts-unread'], queryFn: api.alertsUnread, refetchInterval: 60_000, enabled: isAuthenticated })
-  const recent = useQuery({ queryKey: ['alerts', false], queryFn: () => api.alerts(false), refetchInterval: 60_000, enabled: isAuthenticated })
+  const unread = useQuery({ queryKey: ['incidents-unread'], queryFn: api.incidentsUnread, refetchInterval: 60_000, enabled: isAuthenticated })
+  const recent = useQuery({ queryKey: ['incidents'], queryFn: api.incidents, refetchInterval: 60_000, enabled: isAuthenticated })
 
   if (!isAuthenticated) return null
 
@@ -49,7 +44,7 @@ export function MonitoringStrip() {
   const total = items.length
   const atRisk = items.filter((a) => a.kev_count > 0).length
   const unreadCount = unread.data?.unread ?? 0
-  const feed = (recent.data?.items ?? []).slice(0, 4)
+  const feed = (recent.data?.items ?? []).filter((i) => i.status !== 'resolved').slice(0, 4)
 
   return (
     <div className="grid gap-px overflow-hidden rounded-lg border border-zinc-800 bg-zinc-800 lg:grid-cols-[repeat(3,minmax(0,1fr))_2fr]">
@@ -62,22 +57,22 @@ export function MonitoringStrip() {
         tone={atRisk > 0 ? 'bad' : undefined}
       />
       <StatTile
-        to="/alerts"
+        to="/incidents"
         icon={<Bell className={`h-4 w-4 ${unreadCount > 0 ? 'text-cyan-300' : 'text-zinc-400'}`} />}
-        label="Unread alerts"
+        label="Unread incidents"
         value={unreadCount}
         tone={unreadCount > 0 ? 'alert' : undefined}
       />
       <div className="flex min-w-0 flex-col bg-zinc-900 px-5 py-3">
         <div className="mb-1 flex items-center justify-between">
-          <span className="text-xs font-medium text-zinc-400">Recent alerts</span>
-          <Link to="/alerts" className="text-xs text-cyan-300 hover:text-cyan-200">View all →</Link>
+          <span className="text-xs font-medium text-zinc-400">Open incidents</span>
+          <Link to="/incidents" className="text-xs text-cyan-300 hover:text-cyan-200">View all →</Link>
         </div>
         {feed.length === 0 ? (
-          <p className="flex flex-1 items-center text-xs text-zinc-500">No alerts yet — your tracked assets are clear.</p>
+          <p className="flex flex-1 items-center text-xs text-zinc-500">No open incidents — your tracked assets are clear.</p>
         ) : (
           <ul className="divide-y divide-zinc-800/70 text-sm">
-            {feed.map((a) => <AlertLine key={a.id} a={a} />)}
+            {feed.map((i) => <IncidentLine key={i.id} inc={i} />)}
           </ul>
         )}
       </div>
@@ -95,14 +90,14 @@ function StatTile({ to, icon, label, value, tone }: { to: string; icon: ReactNod
   )
 }
 
-function AlertLine({ a }: { a: Alert }) {
-  const unread = !a.read_at
+function IncidentLine({ inc }: { inc: Incident }) {
+  const unread = !inc.read_at
   return (
     <li className={`flex items-center gap-2 py-1.5 ${unread ? '' : 'opacity-60'}`}>
-      {alertTag[a.type] ?? <Tag tone="zinc">alert</Tag>}
-      <span className="min-w-0 flex-1 truncate text-zinc-300" title={a.title}>{a.title}</span>
-      {a.asset_value && <span className="shrink-0 truncate font-mono text-xs text-zinc-500">{a.asset_value}</span>}
-      <span className="shrink-0 text-xs text-zinc-600">{relativeTime(a.created_at)}</span>
+      <span className={`h-2 w-2 shrink-0 rounded-full ${sevDot[inc.severity] ?? 'bg-zinc-500'}`} />
+      <span className="min-w-0 flex-1 truncate font-mono text-zinc-300" title={inc.asset_value}>{inc.asset_value || inc.title}</span>
+      <span className="shrink-0 text-xs text-zinc-500">{inc.item_count} issue{inc.item_count === 1 ? '' : 's'}</span>
+      <span className="shrink-0 text-xs text-zinc-600">{relativeTime(inc.last_event_at)}</span>
     </li>
   )
 }

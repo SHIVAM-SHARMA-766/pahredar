@@ -87,7 +87,9 @@ Tenancy is the foundation (everything scopes by client), so it goes first.
     clients; `GetAsset`/mutations behind an access check (tenant mismatch → 404);
     create requires an accessible `client_id`. Build-verified; live HTTP check
     deferred to the next stack rebuild (host→DB password is blocked here).
-  - **M3** (frontend): client switcher, per-client inventory, client admin UI.
+  - **M3** (frontend) — **done**: admin Clients page (CRUD), per-user client
+    assignment on the Users page, client picker + filter + client column on the
+    inventory, and `/auth/me` client scope in the auth context. tsc + build green.
 - **4B — Incidents**
   - **M1** (model + rollup) — **done**: `incident` table (migration 00029), one
     open incident per asset. `RefreshIncidents` rolls the asset's alert rows up
@@ -103,7 +105,10 @@ Tenancy is the foundation (everything scopes by client), so it goes first.
     opens new ones separately, so a **resolved incident re-opens only when an
     alert newer than its resolved_at arrives** (no spurious re-open while its
     alerts persist). Build + vet green; live check deferred to the stack rebuild.
-  - **M3** (frontend): incident feed and detail, replacing the alerts page.
+  - **M3** (frontend) — **done**: Incidents page (one row per asset, Open/All
+    filter, expand to see the rolled-up issues, acknowledge/resolve, mark read)
+    replacing the alerts page; nav + dashboard strip + unread badge now use
+    incidents. tsc + build green.
 - **4C — Notification & escalation**
   - **M1** channels + routing rules (replace the single webhook/email).
   - **M2** escalation policies + delivery walk.

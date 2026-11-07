@@ -73,7 +73,12 @@ func (n *Notifier) Deliver(ctx context.Context, alerts []db.Alert) error {
 }
 
 func (n *Notifier) sendWebhook(ctx context.Context, text string, alerts []db.Alert) error {
-	body, err := json.Marshal(map[string]any{"text": text, "alerts": alerts})
+	return n.postWebhook(ctx, map[string]any{"text": text, "alerts": alerts})
+}
+
+// postWebhook POSTs a JSON payload to the configured webhook.
+func (n *Notifier) postWebhook(ctx context.Context, payload any) error {
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
@@ -94,16 +99,21 @@ func (n *Notifier) sendWebhook(ctx context.Context, text string, alerts []db.Ale
 }
 
 func (n *Notifier) sendEmail(text string, alerts []db.Alert) error {
+	subject := fmt.Sprintf("Pahredar: %d new alert", len(alerts))
+	if len(alerts) != 1 {
+		subject += "s"
+	}
+	return n.sendMail(subject, text)
+}
+
+// sendMail sends a plain-text email to the configured recipient.
+func (n *Notifier) sendMail(subject, body string) error {
 	m := n.mail
 	var auth smtp.Auth
 	if m.Username != "" {
 		auth = smtp.PlainAuth("", m.Username, m.Password, m.Host)
 	}
-	subject := fmt.Sprintf("Pahredar: %d new alert", len(alerts))
-	if len(alerts) != 1 {
-		subject += "s"
-	}
-	msg := buildEmail(m.From, m.To, subject, text)
+	msg := buildEmail(m.From, m.To, subject, body)
 	return smtp.SendMail(net.JoinHostPort(m.Host, m.Port), auth, m.From, []string{m.To}, msg)
 }
 
@@ -118,6 +128,62 @@ func buildEmail(from, to, subject, body string) []byte {
 	b.WriteString(strings.ReplaceAll(body, "\n", "\r\n"))
 	b.WriteString("\r\n")
 	return []byte(b.String())
+}
+
+// DeliverIncidents sends incident updates to every configured channel. Same
+// semantics as Deliver: an error only when all channels fail.
+func (n *Notifier) DeliverIncidents(ctx context.Context, incidents []db.Incident) error {
+	if !n.Enabled() || len(incidents) == 0 {
+		return nil
+	}
+	text := summarizeIncidents(incidents)
+	channels, failures := 0, 0
+	if n.webhookURL != "" {
+		channels++
+		if err := n.postWebhook(ctx, map[string]any{"text": text, "incidents": incidents}); err != nil {
+			n.log.Warn("incident webhook delivery failed", "err", err)
+			failures++
+		}
+	}
+	if n.mail.enabled() {
+		channels++
+		subject := fmt.Sprintf("Pahredar: %d incident update", len(incidents))
+		if len(incidents) != 1 {
+			subject += "s"
+		}
+		if err := n.sendMail(subject, text); err != nil {
+			n.log.Warn("incident email delivery failed", "err", err)
+			failures++
+		}
+	}
+	if channels > 0 && failures == channels {
+		return fmt.Errorf("all %d delivery channel(s) failed", channels)
+	}
+	n.log.Info("incidents delivered", "count", len(incidents), "channels", channels-failures)
+	return nil
+}
+
+// summarizeIncidents builds a human-readable message for incident delivery.
+func summarizeIncidents(incidents []db.Incident) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "🚨 Pahredar: %d incident update", len(incidents))
+	if len(incidents) != 1 {
+		b.WriteString("s")
+	}
+	b.WriteString("\n")
+	const max = 10
+	for i, inc := range incidents {
+		if i >= max {
+			fmt.Fprintf(&b, "…and %d more", len(incidents)-max)
+			break
+		}
+		fmt.Fprintf(&b, "• [%s] %s — %d issue", strings.ToUpper(inc.Severity), inc.AssetValue, inc.ItemCount)
+		if inc.ItemCount != 1 {
+			b.WriteString("s")
+		}
+		b.WriteString("\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // summarize builds a human-readable message for the webhook/email body.

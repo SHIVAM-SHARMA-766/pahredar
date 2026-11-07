@@ -1,5 +1,5 @@
 // Package api assembles the HTTP handler from the product-service modules
-// (intelligence, news, scanner, assets, alerts) plus the auth service, over the
+// (intelligence, news, scanner, assets, incidents) plus the auth service, over the
 // shared platform core, and wraps it in principal resolution. Adding a service
 // means adding its module to New — the others are untouched. Per-route
 // authorization is each module's own concern via platform.Guard; the access
@@ -12,9 +12,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/alerts"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/assets"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/auth"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/incidents"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/intel"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/news"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/platform"
@@ -33,7 +33,7 @@ func New(p *platform.Platform, sched *syncer.Scheduler, rc *reports.Client, allo
 		news.New(p),
 		scanner.New(p, allowPrivate, active),
 		assets.New(p),
-		alerts.New(p),
+		incidents.New(p),
 		auth.New(p, authOpts),
 	}
 	mux := http.NewServeMux()

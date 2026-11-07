@@ -22,6 +22,7 @@ import (
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/auth"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/config"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/incidents"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/jobs"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/platform"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/scan"
@@ -233,13 +234,14 @@ func serve(ctx context.Context, cfg config.Config) error {
 		go assetRescanLoop(jobsCtx, store, queue, cfg.AssetRescanInterval)
 	}
 
-	// Raise alerts for assets matched by known-exploited CVEs, and deliver
-	// new ones to the configured webhook.
+	// Raise alerts for assets matched by known-exploited CVEs, roll them up into
+	// per-asset incidents, and deliver new/updated incidents to the configured
+	// channels (Phase 4B).
 	notifier := alerts.NewNotifier(cfg.AlertWebhookURL, alerts.Mail{
 		Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername,
 		Password: cfg.SMTPPassword, From: cfg.SMTPFrom, To: cfg.AlertEmailTo,
 	}, slog.Default())
-	go alertCheckLoop(jobsCtx, store, notifier, cfg.AlertEPSSThreshold)
+	go incidentCheckLoop(jobsCtx, store, notifier, cfg.AlertEPSSThreshold)
 
 	syncCtx, stopSync := context.WithCancel(ctx)
 	syncDone := make(chan struct{})
@@ -367,32 +369,31 @@ func bootstrapAdmin(ctx context.Context, store *db.Store, cfg config.Config) err
 	return nil
 }
 
-// alertCheckLoop generates asset alerts shortly after startup and periodically.
-func alertCheckLoop(ctx context.Context, store *db.Store, notifier *alerts.Notifier, epssThreshold float64) {
+// incidentCheckLoop runs the detectors, rolls alerts up into per-asset
+// incidents, and delivers undelivered incidents, shortly after startup and
+// periodically.
+func incidentCheckLoop(ctx context.Context, store *db.Store, notifier *alerts.Notifier, epssThreshold float64) {
 	run := func() {
 		rctx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
-		newAlerts, err := alerts.Check(rctx, store, epssThreshold)
-		if err != nil {
-			slog.Warn("alert check failed", "err", err)
-		} else if len(newAlerts) > 0 {
-			slog.Info("alerts raised", "count", len(newAlerts))
+		if err := incidents.Check(rctx, store, epssThreshold); err != nil {
+			slog.Warn("incident check failed", "err", err)
 		}
-		// Deliver any undelivered alerts (periodic or scan-triggered); failures
-		// leave them pending for the next tick.
+		// Deliver undelivered incidents (new or re-surfaced); failures leave them
+		// pending for the next tick.
 		if notifier.Enabled() {
-			pending, perr := store.PendingAlerts(rctx, 100)
+			pending, perr := store.PendingIncidents(rctx, 100)
 			if perr != nil {
-				slog.Warn("pending alerts query failed", "err", perr)
+				slog.Warn("pending incidents query failed", "err", perr)
 			} else if len(pending) > 0 {
-				if derr := notifier.Deliver(rctx, pending); derr != nil {
-					slog.Warn("alert delivery failed", "err", derr)
+				if derr := notifier.DeliverIncidents(rctx, pending); derr != nil {
+					slog.Warn("incident delivery failed", "err", derr)
 				} else {
 					ids := make([]int64, len(pending))
-					for i, a := range pending {
-						ids[i] = a.ID
+					for i, inc := range pending {
+						ids[i] = inc.ID
 					}
-					if merr := store.MarkAlertsDelivered(rctx, ids); merr != nil {
+					if merr := store.MarkIncidentsDelivered(rctx, ids); merr != nil {
 						slog.Warn("mark delivered failed", "err", merr)
 					}
 				}

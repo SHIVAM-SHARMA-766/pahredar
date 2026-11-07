@@ -89,9 +89,17 @@ Tenancy is the foundation (everything scopes by client), so it goes first.
     deferred to the next stack rebuild (host→DB password is blocked here).
   - **M3** (frontend): client switcher, per-client inventory, client admin UI.
 - **4B — Incidents**
-  - **M1** (model + migration): `incident` + `incident_item`; detectors write
-    items and open/update incidents instead of per-CVE alerts; one per asset.
-  - **M2** (lifecycle): acknowledge / resolve / re-open; re-alert on new item.
+  - **M1** (model + rollup) — **done**: `incident` table (migration 00029), one
+    open incident per asset. `RefreshIncidents` rolls the asset's alert rows up
+    into a single incident (severity = max, item_count, title), and **re-surfaces
+    it (clears read_at) and re-queues delivery (clears delivered_at) when a new
+    alert appears** — the "one incident per asset, re-alert on new vuln"
+    requirement. The `incidents` service (list/get/items/read, client-scoped)
+    replaces the alerts service; delivery and the check loop now work on
+    incidents. Alert generation (KEV/EPSS/finding) is unchanged, so the scanner
+    is untouched. Build + vet green; live check deferred to the stack rebuild.
+  - **M2** (lifecycle): acknowledge / resolve / re-open (resolved incidents
+    re-open on a newer alert); surface item-level ack.
   - **M3** (frontend): incident feed and detail, replacing the alerts page.
 - **4C — Notification & escalation**
   - **M1** channels + routing rules (replace the single webhook/email).

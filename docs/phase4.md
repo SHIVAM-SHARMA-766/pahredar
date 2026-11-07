@@ -110,7 +110,13 @@ Tenancy is the foundation (everything scopes by client), so it goes first.
     replacing the alerts page; nav + dashboard strip + unread badge now use
     incidents. tsc + build green.
 - **4C — Notification & escalation**
-  - **M1** channels + routing rules (replace the single webhook/email).
+  - **M1** (channels + routing) — **done (backend)**: `channel` table (migration
+    00030) — webhook/email targets, global (no client) or per-client. CRUD at
+    `/api/v1/channels` (global channels admin-only; client channels need client
+    access). Delivery now routes each incident to its client's channels plus
+    global ones, falling back to the env `ALERT_WEBHOOK_URL`/SMTP when none apply;
+    marked delivered on the first success. Build + vet green. *Frontend (channel
+    management UI) comes with M4.*
   - **M2** escalation policies + delivery walk.
   - **M3** on-call schedules + rotations.
   - **M4** suppression windows; frontend for all of the above.

@@ -32,6 +32,12 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/incidents/{id}/read", platform.Guard(platform.RoleOperator, s.read))
 	mux.HandleFunc("PUT /api/v1/incidents/{id}/acknowledge", platform.Guard(platform.RoleOperator, s.acknowledge))
 	mux.HandleFunc("PUT /api/v1/incidents/{id}/resolve", platform.Guard(platform.RoleOperator, s.resolve))
+
+	// Notification channels (Phase 4C).
+	mux.HandleFunc("GET /api/v1/channels", platform.Guard(platform.RoleViewer, s.listChannels))
+	mux.HandleFunc("POST /api/v1/channels", platform.Guard(platform.RoleOperator, s.createChannel))
+	mux.HandleFunc("PATCH /api/v1/channels/{id}", platform.Guard(platform.RoleOperator, s.patchChannel))
+	mux.HandleFunc("DELETE /api/v1/channels/{id}", platform.Guard(platform.RoleOperator, s.deleteChannel))
 }
 
 func (s *Service) list(w http.ResponseWriter, r *http.Request) {

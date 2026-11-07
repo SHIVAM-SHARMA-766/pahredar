@@ -379,25 +379,16 @@ func incidentCheckLoop(ctx context.Context, store *db.Store, notifier *alerts.No
 		if err := incidents.Check(rctx, store, epssThreshold); err != nil {
 			slog.Warn("incident check failed", "err", err)
 		}
-		// Deliver undelivered incidents (new or re-surfaced); failures leave them
+		// Deliver undelivered incidents, each routed to its client's channels
+		// (plus global ones); the env webhook/email is a fallback when no DB
+		// channel applies. An incident is marked delivered when at least one
+		// target succeeds, or when there is nothing to send; failures leave it
 		// pending for the next tick.
-		if notifier.Enabled() {
-			pending, perr := store.PendingIncidents(rctx, 100)
-			if perr != nil {
-				slog.Warn("pending incidents query failed", "err", perr)
-			} else if len(pending) > 0 {
-				if derr := notifier.DeliverIncidents(rctx, pending); derr != nil {
-					slog.Warn("incident delivery failed", "err", derr)
-				} else {
-					ids := make([]int64, len(pending))
-					for i, inc := range pending {
-						ids[i] = inc.ID
-					}
-					if merr := store.MarkIncidentsDelivered(rctx, ids); merr != nil {
-						slog.Warn("mark delivered failed", "err", merr)
-					}
-				}
-			}
+		pending, perr := store.PendingIncidents(rctx, 100)
+		if perr != nil {
+			slog.Warn("pending incidents query failed", "err", perr)
+		} else {
+			deliverPending(rctx, store, notifier, pending)
 		}
 	}
 	select {
@@ -414,6 +405,50 @@ func incidentCheckLoop(ctx context.Context, store *db.Store, notifier *alerts.No
 			return
 		case <-t.C:
 			run()
+		}
+	}
+}
+
+// deliverPending routes each pending incident to its client's channels (plus
+// global channels); when none apply it falls back to the env webhook/email. An
+// incident is marked delivered on the first successful target, or when there is
+// nothing to send to.
+func deliverPending(ctx context.Context, store *db.Store, notifier *alerts.Notifier, pending []db.Incident) {
+	delivered := []int64{}
+	for _, inc := range pending {
+		chans, err := store.ChannelsForClient(ctx, inc.ClientID)
+		if err != nil {
+			slog.Warn("channels lookup failed", "err", err)
+			continue
+		}
+		targets := make([]alerts.Target, 0, len(chans))
+		for _, c := range chans {
+			targets = append(targets, alerts.Target{Type: c.Type, Target: c.Target})
+		}
+		if len(targets) == 0 {
+			targets = notifier.EnvTargets() // fallback to env config
+		}
+		if len(targets) == 0 {
+			delivered = append(delivered, inc.ID) // nothing configured; in-app only
+			continue
+		}
+		ok := false
+		for _, t := range targets {
+			if derr := notifier.DeliverIncidentTo(ctx, t.Type, t.Target, inc); derr != nil {
+				slog.Warn("incident channel delivery failed", "type", t.Type, "err", derr)
+			} else {
+				ok = true
+			}
+		}
+		if ok {
+			delivered = append(delivered, inc.ID)
+		}
+	}
+	if len(delivered) > 0 {
+		if err := store.MarkIncidentsDelivered(ctx, delivered); err != nil {
+			slog.Warn("mark delivered failed", "err", err)
+		} else {
+			slog.Info("incidents delivered", "count", len(delivered))
 		}
 	}
 }

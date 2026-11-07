@@ -23,10 +23,11 @@ func New(p *platform.Platform) *Service { return &Service{Platform: p} }
 func (s *Service) Name() string { return "alerts" }
 
 func (s *Service) Routes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/v1/alerts", s.list)
-	mux.HandleFunc("GET /api/v1/alerts/unread-count", s.unreadCount)
-	mux.HandleFunc("PUT /api/v1/alerts/read-all", s.readAll)
-	mux.HandleFunc("PUT /api/v1/alerts/{id}/read", s.read)
+	// Alerts are private monitoring: viewer+ reads, operator+ marks read. See docs/auth.md.
+	mux.HandleFunc("GET /api/v1/alerts", platform.Guard(platform.RoleViewer, s.list))
+	mux.HandleFunc("GET /api/v1/alerts/unread-count", platform.Guard(platform.RoleViewer, s.unreadCount))
+	mux.HandleFunc("PUT /api/v1/alerts/read-all", platform.Guard(platform.RoleOperator, s.readAll))
+	mux.HandleFunc("PUT /api/v1/alerts/{id}/read", platform.Guard(platform.RoleOperator, s.read))
 }
 
 func (s *Service) list(w http.ResponseWriter, r *http.Request) {

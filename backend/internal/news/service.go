@@ -24,6 +24,6 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/feeds", s.feedList)
 	mux.HandleFunc("GET /api/v1/feeds/advisories", s.latestAdvisories)
 	mux.HandleFunc("GET /api/v1/news", s.news)
-	mux.HandleFunc("PUT /api/v1/news/bookmark", s.setBookmark)
+	mux.HandleFunc("PUT /api/v1/news/bookmark", platform.Guard(platform.RoleOperator, s.setBookmark))
 	mux.HandleFunc("GET /api/v1/cves/{id}/articles", s.cveArticles)
 }

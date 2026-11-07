@@ -81,6 +81,16 @@ func (s *Service) runScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Active {
+		// Active scanning is intrusive — operator or admin only (content-based
+		// gate; passive scans stay public). See docs/auth.md.
+		if p := platform.PrincipalFrom(r.Context()); !p.Role.AtLeast(platform.RoleOperator) {
+			if p.Role == platform.RoleAnonymous {
+				platform.WriteError(w, http.StatusUnauthorized, "active scanning requires an operator account")
+			} else {
+				platform.WriteError(w, http.StatusForbidden, "active scanning requires the operator role")
+			}
+			return
+		}
 		if !s.scanner.ActiveAvailable() {
 			platform.WriteError(w, http.StatusBadRequest, "active scanning is not enabled on this server (set SCAN_ACTIVE_ENABLED=true)")
 			return

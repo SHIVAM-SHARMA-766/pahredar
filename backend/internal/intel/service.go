@@ -41,5 +41,5 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/vendors/{vendor}", s.getVendor)
 	mux.HandleFunc("GET /api/v1/vendors/{vendor}/products/{product}", s.getProduct)
 	mux.HandleFunc("GET /api/v1/sync/status", s.syncStatus)
-	mux.HandleFunc("POST /api/v1/sync/{source}", s.triggerSync)
+	mux.HandleFunc("POST /api/v1/sync/{source}", platform.Guard(platform.RoleAdmin, s.triggerSync))
 }

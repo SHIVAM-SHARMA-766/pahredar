@@ -32,9 +32,12 @@ func New(p *platform.Platform, allowPrivate bool, active *scan.Nuclei) *Service 
 func (s *Service) Name() string { return "scanner" }
 
 func (s *Service) Routes(mux *http.ServeMux) {
+	// Passive scanning and viewing a result are public; an active scan is
+	// gated inside runScan (operator+, content-based). Listing all scans is an
+	// operator overview. See docs/auth.md.
 	mux.HandleFunc("POST /api/v1/scan", s.runScan)
 	mux.HandleFunc("POST /api/v1/scan/request", s.scanRequest)
-	mux.HandleFunc("GET /api/v1/scans", s.listScans)
+	mux.HandleFunc("GET /api/v1/scans", platform.Guard(platform.RoleOperator, s.listScans))
 	mux.HandleFunc("GET /api/v1/scans/{id}", s.getScan)
 	mux.HandleFunc("GET /api/v1/scan/jobs/{id}", s.scanJobStatus)
 	mux.HandleFunc("GET /api/v1/scan/config", s.scanConfig)

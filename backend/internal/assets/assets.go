@@ -25,13 +25,14 @@ func New(p *platform.Platform) *Service { return &Service{Platform: p} }
 func (s *Service) Name() string { return "assets" }
 
 func (s *Service) Routes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/v1/assets", s.list)
-	mux.HandleFunc("POST /api/v1/assets", s.create)
-	mux.HandleFunc("GET /api/v1/assets/{id}", s.get)
-	mux.HandleFunc("DELETE /api/v1/assets/{id}", s.delete)
-	mux.HandleFunc("POST /api/v1/assets/{id}/scan", s.scan)
-	mux.HandleFunc("GET /api/v1/assets/{id}/scans", s.scans)
-	mux.HandleFunc("GET /api/v1/assets/{id}/cves", s.cves)
+	// Inventory is private: viewer+ reads, operator+ mutates/scans. See docs/auth.md.
+	mux.HandleFunc("GET /api/v1/assets", platform.Guard(platform.RoleViewer, s.list))
+	mux.HandleFunc("POST /api/v1/assets", platform.Guard(platform.RoleOperator, s.create))
+	mux.HandleFunc("GET /api/v1/assets/{id}", platform.Guard(platform.RoleViewer, s.get))
+	mux.HandleFunc("DELETE /api/v1/assets/{id}", platform.Guard(platform.RoleOperator, s.delete))
+	mux.HandleFunc("POST /api/v1/assets/{id}/scan", platform.Guard(platform.RoleOperator, s.scan))
+	mux.HandleFunc("GET /api/v1/assets/{id}/scans", platform.Guard(platform.RoleViewer, s.scans))
+	mux.HandleFunc("GET /api/v1/assets/{id}/cves", platform.Guard(platform.RoleViewer, s.cves))
 }
 
 // validKinds are the asset kinds; domain/url/ip are scannable endpoints.

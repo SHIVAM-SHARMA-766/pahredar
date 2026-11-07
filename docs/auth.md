@@ -77,10 +77,11 @@ active scan. The scanner handler enforces it from the principal on the context.
 
 ## Milestones
 
-- **M1 — auth core** (schema, argon2id, sessions, `Role`/`Principal`, login /
-  logout / me, resolve middleware, admin bootstrap). Routes not yet gated.
-- **M2 — authorization** (apply `Guard` across the matrix; content-based
-  active-scan gate in the scanner).
+- **M1 — auth core** (done): schema, argon2id, sessions, `Role`/`Principal`,
+  login / logout / me, resolve middleware, admin bootstrap.
+- **M2 — authorization** (done): `platform.Guard` applied across the matrix
+  (assets/alerts, scan list, sync, news bookmark) and the content-based
+  active-scan gate in the scanner. Verified end-to-end per role.
 - **M3 — user management** (admin CRUD API for accounts + roles).
 - **M4 — frontend** (login page, auth context, role-gated nav and controls;
   replace the API-key AuthGate; hide the active-scan toggle for non-operators).

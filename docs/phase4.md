@@ -125,7 +125,12 @@ Tenancy is the foundation (everything scopes by client), so it goes first.
     acknowledgement (acknowledged incidents stop escalating). No policy → the M1
     one-shot channel delivery. Incident carries `policy_id`/`esc_step`/
     `esc_notified_at`. Build + vet green.
-  - **M3** on-call schedules + rotations.
+  - **M3** (on-call) — **done (backend)**: `oncall_schedule` + `oncall_shift`
+    (migration 00032), global or per-client, shifts as explicit user + time
+    windows. CRUD at `/api/v1/oncall-schedules` (+ `/{id}/shifts`,
+    `/oncall-shifts/{id}`). An escalation step with `notify_oncall` now emails
+    whoever's shift covers "now" in the incident's client schedule (else global).
+    Build + vet green.
   - **M4** suppression windows; frontend for all of the above.
 
 Delivered incrementally; each milestone builds and is verified before the next.

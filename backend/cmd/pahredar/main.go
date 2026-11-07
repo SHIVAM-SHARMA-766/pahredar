@@ -456,7 +456,7 @@ func deliverPending(ctx context.Context, store *db.Store, notifier *alerts.Notif
 			}
 		}
 		if notify {
-			deliverToTargets(ctx, store, notifier, stepTargets(ctx, store, steps[target]), e)
+			deliverToTargets(ctx, store, notifier, stepTargets(ctx, store, steps[target], e.ClientID), e)
 			if err := store.SetIncidentEscalation(ctx, e.ID, target, policyID); err != nil {
 				slog.Warn("set incident escalation failed", "err", err)
 			}
@@ -481,13 +481,18 @@ func resolveTargets(ctx context.Context, store *db.Store, notifier *alerts.Notif
 	return targets
 }
 
-// stepTargets returns the delivery targets for one escalation step (its channel;
-// on-call is added in 4C-M3).
-func stepTargets(ctx context.Context, store *db.Store, step db.EscalationStep) []alerts.Target {
+// stepTargets returns the delivery targets for one escalation step: its channel,
+// plus (when notify_oncall) an email to whoever is on call for the client now.
+func stepTargets(ctx context.Context, store *db.Store, step db.EscalationStep, clientID *int64) []alerts.Target {
 	targets := []alerts.Target{}
 	if step.ChannelID != nil {
 		if c, err := store.GetChannel(ctx, *step.ChannelID); err == nil && c.Enabled {
 			targets = append(targets, alerts.Target{Type: c.Type, Target: c.Target})
+		}
+	}
+	if step.NotifyOncall {
+		if email, ok := store.OnCallEmail(ctx, clientID, time.Now()); ok {
+			targets = append(targets, alerts.Target{Type: "email", Target: email})
 		}
 	}
 	return targets

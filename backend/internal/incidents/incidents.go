@@ -46,6 +46,14 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/v1/escalation-policies/{id}", platform.Guard(platform.RoleOperator, s.patchPolicy))
 	mux.HandleFunc("PUT /api/v1/escalation-policies/{id}/steps", platform.Guard(platform.RoleOperator, s.setPolicySteps))
 	mux.HandleFunc("DELETE /api/v1/escalation-policies/{id}", platform.Guard(platform.RoleOperator, s.deletePolicy))
+
+	// On-call schedules (Phase 4C-M3).
+	mux.HandleFunc("GET /api/v1/oncall-schedules", platform.Guard(platform.RoleViewer, s.listSchedules))
+	mux.HandleFunc("POST /api/v1/oncall-schedules", platform.Guard(platform.RoleOperator, s.createSchedule))
+	mux.HandleFunc("GET /api/v1/oncall-schedules/{id}", platform.Guard(platform.RoleViewer, s.getSchedule))
+	mux.HandleFunc("DELETE /api/v1/oncall-schedules/{id}", platform.Guard(platform.RoleOperator, s.deleteSchedule))
+	mux.HandleFunc("POST /api/v1/oncall-schedules/{id}/shifts", platform.Guard(platform.RoleOperator, s.addShift))
+	mux.HandleFunc("DELETE /api/v1/oncall-shifts/{id}", platform.Guard(platform.RoleOperator, s.deleteShift))
 }
 
 func (s *Service) list(w http.ResponseWriter, r *http.Request) {

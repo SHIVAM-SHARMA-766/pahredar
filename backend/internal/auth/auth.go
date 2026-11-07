@@ -45,6 +45,15 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/v1/users/{id}", platform.Guard(platform.RoleAdmin, s.patchUser))
 	mux.HandleFunc("PUT /api/v1/users/{id}/password", platform.Guard(platform.RoleAdmin, s.resetUserPassword))
 	mux.HandleFunc("DELETE /api/v1/users/{id}", platform.Guard(platform.RoleAdmin, s.deleteUser))
+	mux.HandleFunc("GET /api/v1/users/{id}/clients", platform.Guard(platform.RoleAdmin, s.getUserClients))
+	mux.HandleFunc("PUT /api/v1/users/{id}/clients", platform.Guard(platform.RoleAdmin, s.setUserClients))
+
+	// Clients (tenants, Phase 4). Listing is scoped to the caller's access;
+	// managing clients is admin only. See docs/phase4.md.
+	mux.HandleFunc("GET /api/v1/clients", platform.Guard(platform.RoleViewer, s.listClients))
+	mux.HandleFunc("POST /api/v1/clients", platform.Guard(platform.RoleAdmin, s.createClient))
+	mux.HandleFunc("PATCH /api/v1/clients/{id}", platform.Guard(platform.RoleAdmin, s.patchClient))
+	mux.HandleFunc("DELETE /api/v1/clients/{id}", platform.Guard(platform.RoleAdmin, s.deleteClient))
 }
 
 type loginRequest struct {
@@ -115,5 +124,7 @@ func (s *Service) me(w http.ResponseWriter, r *http.Request) {
 		"user_id":       p.UserID,
 		"name":          p.Name,
 		"role":          p.Role,
+		"all_clients":   p.AllClients,
+		"client_ids":    p.ClientIDs,
 	})
 }

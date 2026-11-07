@@ -40,6 +40,23 @@ type Principal struct {
 	UserID int64 // 0 for anonymous and the API-key principal
 	Name   string
 	Role   Role
+	// Client scope (Phase 4 tenancy). AllClients grants every client (admins and
+	// the API key); otherwise ClientIDs lists the accessible clients.
+	AllClients bool
+	ClientIDs  []int64
+}
+
+// CanAccessClient reports whether the principal may act within a client.
+func (p Principal) CanAccessClient(id int64) bool {
+	if p.AllClients {
+		return true
+	}
+	for _, c := range p.ClientIDs {
+		if c == id {
+			return true
+		}
+	}
+	return false
 }
 
 // Anonymous is the principal for an unauthenticated caller.

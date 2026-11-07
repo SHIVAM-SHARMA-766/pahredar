@@ -23,6 +23,13 @@ func Resolve(store *db.Store, opts Options) func(http.Handler) http.Handler {
 				su, serr := store.SessionUserByToken(r.Context(), tokenHash(c.Value))
 				if serr == nil {
 					p = platform.Principal{UserID: su.UserID, Name: su.Email, Role: platform.Role(su.Role)}
+					// Client scope: admins reach every client; others only their
+					// assigned ones (Phase 4 tenancy).
+					if p.Role == platform.RoleAdmin {
+						p.AllClients = true
+					} else if ids, ierr := store.ClientIDsForUser(r.Context(), su.UserID); ierr == nil {
+						p.ClientIDs = ids
+					}
 				} else if db.IsNotFound(serr) {
 					clearSessionCookie(w, opts.CookieSecure) // stale/invalid cookie
 				}
@@ -30,7 +37,7 @@ func Resolve(store *db.Store, opts Options) func(http.Handler) http.Handler {
 
 			if p.Role == platform.RoleAnonymous {
 				if key := apiKeyFromRequest(r); key != "" && keyMatches(opts.APIKeys, key) {
-					p = platform.Principal{Name: "api-key", Role: platform.RoleAdmin}
+					p = platform.Principal{Name: "api-key", Role: platform.RoleAdmin, AllClients: true}
 				}
 			}
 

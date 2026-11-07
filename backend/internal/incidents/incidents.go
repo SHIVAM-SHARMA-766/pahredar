@@ -32,6 +32,33 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/incidents/{id}/read", platform.Guard(platform.RoleOperator, s.read))
 	mux.HandleFunc("PUT /api/v1/incidents/{id}/acknowledge", platform.Guard(platform.RoleOperator, s.acknowledge))
 	mux.HandleFunc("PUT /api/v1/incidents/{id}/resolve", platform.Guard(platform.RoleOperator, s.resolve))
+
+	// Notification channels (Phase 4C-M1).
+	mux.HandleFunc("GET /api/v1/channels", platform.Guard(platform.RoleViewer, s.listChannels))
+	mux.HandleFunc("POST /api/v1/channels", platform.Guard(platform.RoleOperator, s.createChannel))
+	mux.HandleFunc("PATCH /api/v1/channels/{id}", platform.Guard(platform.RoleOperator, s.patchChannel))
+	mux.HandleFunc("DELETE /api/v1/channels/{id}", platform.Guard(platform.RoleOperator, s.deleteChannel))
+
+	// Escalation policies (Phase 4C-M2).
+	mux.HandleFunc("GET /api/v1/escalation-policies", platform.Guard(platform.RoleViewer, s.listPolicies))
+	mux.HandleFunc("POST /api/v1/escalation-policies", platform.Guard(platform.RoleOperator, s.createPolicy))
+	mux.HandleFunc("GET /api/v1/escalation-policies/{id}", platform.Guard(platform.RoleViewer, s.getPolicy))
+	mux.HandleFunc("PATCH /api/v1/escalation-policies/{id}", platform.Guard(platform.RoleOperator, s.patchPolicy))
+	mux.HandleFunc("PUT /api/v1/escalation-policies/{id}/steps", platform.Guard(platform.RoleOperator, s.setPolicySteps))
+	mux.HandleFunc("DELETE /api/v1/escalation-policies/{id}", platform.Guard(platform.RoleOperator, s.deletePolicy))
+
+	// On-call schedules (Phase 4C-M3).
+	mux.HandleFunc("GET /api/v1/oncall-schedules", platform.Guard(platform.RoleViewer, s.listSchedules))
+	mux.HandleFunc("POST /api/v1/oncall-schedules", platform.Guard(platform.RoleOperator, s.createSchedule))
+	mux.HandleFunc("GET /api/v1/oncall-schedules/{id}", platform.Guard(platform.RoleViewer, s.getSchedule))
+	mux.HandleFunc("DELETE /api/v1/oncall-schedules/{id}", platform.Guard(platform.RoleOperator, s.deleteSchedule))
+	mux.HandleFunc("POST /api/v1/oncall-schedules/{id}/shifts", platform.Guard(platform.RoleOperator, s.addShift))
+	mux.HandleFunc("DELETE /api/v1/oncall-shifts/{id}", platform.Guard(platform.RoleOperator, s.deleteShift))
+
+	// Suppression windows (Phase 4C-M4).
+	mux.HandleFunc("GET /api/v1/suppressions", platform.Guard(platform.RoleViewer, s.listSuppressions))
+	mux.HandleFunc("POST /api/v1/suppressions", platform.Guard(platform.RoleOperator, s.createSuppression))
+	mux.HandleFunc("DELETE /api/v1/suppressions/{id}", platform.Guard(platform.RoleOperator, s.deleteSuppression))
 }
 
 func (s *Service) list(w http.ResponseWriter, r *http.Request) {

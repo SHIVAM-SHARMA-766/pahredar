@@ -1,7 +1,8 @@
 # Phase 4 — Multi-tenant platform + incident management
 
-Status: **in progress**. Design record and milestone tracker. Builds on the
-Phase 3 multi-user auth (docs/auth.md).
+Status: **feature-complete** (all milestones done; pending live verification on a
+stack rebuild). Design record and milestone tracker. Builds on the Phase 3
+multi-user auth (docs/auth.md).
 
 ## What changes and why
 
@@ -87,7 +88,9 @@ Tenancy is the foundation (everything scopes by client), so it goes first.
     clients; `GetAsset`/mutations behind an access check (tenant mismatch → 404);
     create requires an accessible `client_id`. Build-verified; live HTTP check
     deferred to the next stack rebuild (host→DB password is blocked here).
-  - **M3** (frontend): client switcher, per-client inventory, client admin UI.
+  - **M3** (frontend) — **done**: admin Clients page (CRUD), per-user client
+    assignment on the Users page, client picker + filter + client column on the
+    inventory, and `/auth/me` client scope in the auth context. tsc + build green.
 - **4B — Incidents**
   - **M1** (model + rollup) — **done**: `incident` table (migration 00029), one
     open incident per asset. `RefreshIncidents` rolls the asset's alert rows up
@@ -103,12 +106,38 @@ Tenancy is the foundation (everything scopes by client), so it goes first.
     opens new ones separately, so a **resolved incident re-opens only when an
     alert newer than its resolved_at arrives** (no spurious re-open while its
     alerts persist). Build + vet green; live check deferred to the stack rebuild.
-  - **M3** (frontend): incident feed and detail, replacing the alerts page.
+  - **M3** (frontend) — **done**: Incidents page (one row per asset, Open/All
+    filter, expand to see the rolled-up issues, acknowledge/resolve, mark read)
+    replacing the alerts page; nav + dashboard strip + unread badge now use
+    incidents. tsc + build green.
 - **4C — Notification & escalation**
-  - **M1** channels + routing rules (replace the single webhook/email).
-  - **M2** escalation policies + delivery walk.
-  - **M3** on-call schedules + rotations.
-  - **M4** suppression windows; frontend for all of the above.
+  - **M1** (channels + routing) — **done (backend)**: `channel` table (migration
+    00030) — webhook/email targets, global (no client) or per-client. CRUD at
+    `/api/v1/channels` (global channels admin-only; client channels need client
+    access). Delivery now routes each incident to its client's channels plus
+    global ones, falling back to the env `ALERT_WEBHOOK_URL`/SMTP when none apply;
+    marked delivered on the first success. Build + vet green. *Frontend (channel
+    management UI) comes with M4.*
+  - **M2** (escalation) — **done (backend)**: `escalation_policy` + `escalation_step`
+    (migration 00031), global or per-client, one default per scope. CRUD at
+    `/api/v1/escalation-policies` (+ `/{id}/steps`). The delivery loop now walks
+    the policy: notify step 0, re-notify the current step on new activity, and
+    escalate to the next step once a step's `delay_minutes` passes without an
+    acknowledgement (acknowledged incidents stop escalating). No policy → the M1
+    one-shot channel delivery. Incident carries `policy_id`/`esc_step`/
+    `esc_notified_at`. Build + vet green.
+  - **M3** (on-call) — **done (backend)**: `oncall_schedule` + `oncall_shift`
+    (migration 00032), global or per-client, shifts as explicit user + time
+    windows. CRUD at `/api/v1/oncall-schedules` (+ `/{id}/shifts`,
+    `/oncall-shifts/{id}`). An escalation step with `notify_oncall` now emails
+    whoever's shift covers "now" in the incident's client schedule (else global).
+    Build + vet green.
+  - **M4** (suppression + frontend) — **done**: `suppression` table (migration
+    00033) — mute notifications for an asset / client / globally during a window;
+    the delivery walk skips a suppressed incident (keeping it in-app). CRUD at
+    `/api/v1/suppressions`. **Notifications page** (frontend) manages all of 4C:
+    channels, escalation policies (with a step editor), on-call schedules +
+    shifts, and suppression windows. tsc + build green.
 
 Delivered incrementally; each milestone builds and is verified before the next.
 The existing `alert` tables are migrated into `incident`/`incident_item` in 4B.

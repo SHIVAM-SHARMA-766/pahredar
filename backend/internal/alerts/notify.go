@@ -76,13 +76,18 @@ func (n *Notifier) sendWebhook(ctx context.Context, text string, alerts []db.Ale
 	return n.postWebhook(ctx, map[string]any{"text": text, "alerts": alerts})
 }
 
-// postWebhook POSTs a JSON payload to the configured webhook.
+// postWebhook POSTs a JSON payload to the configured (env) webhook.
 func (n *Notifier) postWebhook(ctx context.Context, payload any) error {
+	return n.postWebhookTo(ctx, n.webhookURL, payload)
+}
+
+// postWebhookTo POSTs a JSON payload to an arbitrary webhook URL.
+func (n *Notifier) postWebhookTo(ctx context.Context, url string, payload any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, n.webhookURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -106,15 +111,64 @@ func (n *Notifier) sendEmail(text string, alerts []db.Alert) error {
 	return n.sendMail(subject, text)
 }
 
-// sendMail sends a plain-text email to the configured recipient.
+// sendMail sends a plain-text email to the configured (env) recipient.
 func (n *Notifier) sendMail(subject, body string) error {
+	return n.sendMailTo(n.mail.To, subject, body)
+}
+
+// sendMailTo sends a plain-text email to an arbitrary recipient using the
+// configured SMTP server. Requires SMTP host configured.
+func (n *Notifier) sendMailTo(to, subject, body string) error {
 	m := n.mail
+	if m.Host == "" || to == "" {
+		return fmt.Errorf("email channel needs SMTP_HOST configured")
+	}
 	var auth smtp.Auth
 	if m.Username != "" {
 		auth = smtp.PlainAuth("", m.Username, m.Password, m.Host)
 	}
-	msg := buildEmail(m.From, m.To, subject, body)
-	return smtp.SendMail(net.JoinHostPort(m.Host, m.Port), auth, m.From, []string{m.To}, msg)
+	msg := buildEmail(m.From, to, subject, body)
+	return smtp.SendMail(net.JoinHostPort(m.Host, m.Port), auth, m.From, []string{to}, msg)
+}
+
+// SMTPConfigured reports whether the SMTP server is set (needed for email channels).
+func (n *Notifier) SMTPConfigured() bool { return n != nil && n.mail.Host != "" }
+
+// Target is a resolved delivery destination (channel type + address).
+type Target struct {
+	Type   string
+	Target string
+}
+
+// EnvTargets returns the delivery targets from the env config (ALERT_WEBHOOK_URL
+// and SMTP + ALERT_EMAIL_TO), used as a fallback when no DB channels apply.
+func (n *Notifier) EnvTargets() []Target {
+	var t []Target
+	if n == nil {
+		return t
+	}
+	if n.webhookURL != "" {
+		t = append(t, Target{Type: "webhook", Target: n.webhookURL})
+	}
+	if n.mail.enabled() {
+		t = append(t, Target{Type: "email", Target: n.mail.To})
+	}
+	return t
+}
+
+// DeliverIncidentTo sends one incident to a single channel target (a webhook URL
+// or an email address), chosen by typ.
+func (n *Notifier) DeliverIncidentTo(ctx context.Context, typ, target string, inc db.Incident) error {
+	text := summarizeIncidents([]db.Incident{inc})
+	switch typ {
+	case "webhook":
+		return n.postWebhookTo(ctx, target, map[string]any{"text": text, "incidents": []db.Incident{inc}})
+	case "email":
+		subject := fmt.Sprintf("Pahredar incident: %s", inc.AssetValue)
+		return n.sendMailTo(target, subject, text)
+	default:
+		return fmt.Errorf("unknown channel type %q", typ)
+	}
 }
 
 func buildEmail(from, to, subject, body string) []byte {

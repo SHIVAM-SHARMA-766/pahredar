@@ -4,15 +4,22 @@ import type {
   AssetCVE,
   AttackMapping,
   CapecPattern,
+  Channel,
+  Client,
   CveDetail,
+  EscalationPolicy,
+  EscalationStep,
   CveFacets,
   CveList,
   CveReports,
   DetectionRule,
   FeedArticle,
   FeedInfo,
+  Incident,
   Me,
   NewsPage,
+  OnCallSchedule,
+  OnCallShift,
   NewsQuery,
   ScanConfig,
   ScanJob,
@@ -24,6 +31,7 @@ import type {
   RelatedGroup,
   Series,
   TrendingItem,
+  Suppression,
   SyncStatus,
   User,
   VendorDetail,
@@ -90,16 +98,22 @@ export const api = {
   scanConfig: () => request<ScanConfig>('/api/v1/scan/config'),
   assets: () => request<{ items: Asset[] }>('/api/v1/assets'),
   getAsset: (id: number) => request<Asset>(`/api/v1/assets/${id}`),
-  createAsset: (body: { kind: string; value: string; label?: string; tags?: string[] }) =>
+  createAsset: (body: { client_id: number; kind: string; value: string; label?: string; tags?: string[] }) =>
     request<{ id: number }>('/api/v1/assets', { method: 'POST', body: JSON.stringify(body) }),
   deleteAsset: (id: number) => request<{ deleted: number }>(`/api/v1/assets/${id}`, { method: 'DELETE' }),
   scanAsset: (id: number) => request<{ job_id: number }>(`/api/v1/assets/${id}/scan`, { method: 'POST' }),
   assetScans: (id: number) => request<{ items: ScanSummary[] }>(`/api/v1/assets/${id}/scans`),
   assetCves: (id: number) => request<{ items: AssetCVE[] }>(`/api/v1/assets/${id}/cves`),
-  alerts: (unread?: boolean) => request<{ items: Alert[] }>(`/api/v1/alerts${unread ? '?unread=1' : ''}`),
-  alertsUnread: () => request<{ unread: number }>('/api/v1/alerts/unread-count'),
-  markAlertRead: (id: number) => request<{ ok: boolean }>(`/api/v1/alerts/${id}/read`, { method: 'PUT' }),
-  markAllAlertsRead: () => request<{ ok: boolean }>('/api/v1/alerts/read-all', { method: 'PUT' }),
+
+  // Incidents (per-asset rollups).
+  incidents: () => request<{ items: Incident[] }>('/api/v1/incidents'),
+  incidentsUnread: () => request<{ unread: number }>('/api/v1/incidents/unread-count'),
+  getIncident: (id: number) => request<Incident>(`/api/v1/incidents/${id}`),
+  incidentItems: (id: number) => request<{ items: Alert[] }>(`/api/v1/incidents/${id}/items`),
+  markIncidentRead: (id: number) => request<{ ok: boolean }>(`/api/v1/incidents/${id}/read`, { method: 'PUT' }),
+  markAllIncidentsRead: () => request<{ ok: boolean }>('/api/v1/incidents/read-all', { method: 'PUT' }),
+  acknowledgeIncident: (id: number) => request<{ ok: boolean }>(`/api/v1/incidents/${id}/acknowledge`, { method: 'PUT' }),
+  resolveIncident: (id: number) => request<{ ok: boolean }>(`/api/v1/incidents/${id}/resolve`, { method: 'PUT' }),
   recentScans: () => request<{ items: ScanSummary[] }>('/api/v1/scans'),
   getScan: (id: number) => request<ScanReport>(`/api/v1/scans/${id}`),
   setBookmark: (url: string, bookmarked: boolean) =>
@@ -139,4 +153,48 @@ export const api = {
   resetUserPassword: (id: number, password: string) =>
     request<{ ok: boolean }>(`/api/v1/users/${id}/password`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) }),
   deleteUser: (id: number) => request<{ deleted: number }>(`/api/v1/users/${id}`, { method: 'DELETE' }),
+
+  // Clients (tenants).
+  clients: () => request<{ items: Client[] }>('/api/v1/clients'),
+  createClient: (body: { name: string; slug?: string; notes?: string }) =>
+    request<Client>('/api/v1/clients', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  updateClient: (id: number, body: { name: string; notes?: string }) =>
+    request<Client>(`/api/v1/clients/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  deleteClient: (id: number) => request<{ deleted: number }>(`/api/v1/clients/${id}`, { method: 'DELETE' }),
+  userClients: (id: number) => request<{ items: Client[] }>(`/api/v1/users/${id}/clients`),
+  setUserClients: (id: number, clientIds: number[]) =>
+    request<{ ok: boolean }>(`/api/v1/users/${id}/clients`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_ids: clientIds }) }),
+
+  // Notification channels.
+  channels: () => request<{ items: Channel[] }>('/api/v1/channels'),
+  createChannel: (body: { client_id?: number | null; type: string; name: string; target: string }) =>
+    request<Channel>('/api/v1/channels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  updateChannel: (id: number, body: { name?: string; target?: string; enabled?: boolean }) =>
+    request<Channel>(`/api/v1/channels/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  deleteChannel: (id: number) => request<{ deleted: number }>(`/api/v1/channels/${id}`, { method: 'DELETE' }),
+
+  // Escalation policies.
+  escalationPolicies: () => request<{ items: EscalationPolicy[] }>('/api/v1/escalation-policies'),
+  createEscalationPolicy: (body: { client_id?: number | null; name: string; is_default?: boolean; steps?: EscalationStep[] }) =>
+    request<EscalationPolicy>('/api/v1/escalation-policies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  updateEscalationPolicy: (id: number, body: { name?: string; is_default?: boolean }) =>
+    request<EscalationPolicy>(`/api/v1/escalation-policies/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  setPolicySteps: (id: number, steps: EscalationStep[]) =>
+    request<{ ok: boolean }>(`/api/v1/escalation-policies/${id}/steps`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ steps }) }),
+  deleteEscalationPolicy: (id: number) => request<{ deleted: number }>(`/api/v1/escalation-policies/${id}`, { method: 'DELETE' }),
+
+  // On-call schedules.
+  oncallSchedules: () => request<{ items: OnCallSchedule[] }>('/api/v1/oncall-schedules'),
+  createOncallSchedule: (body: { client_id?: number | null; name: string }) =>
+    request<OnCallSchedule>('/api/v1/oncall-schedules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  deleteOncallSchedule: (id: number) => request<{ deleted: number }>(`/api/v1/oncall-schedules/${id}`, { method: 'DELETE' }),
+  addOncallShift: (id: number, body: { user_id: number; starts_at: string; ends_at: string }) =>
+    request<OnCallShift>(`/api/v1/oncall-schedules/${id}/shifts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  deleteOncallShift: (id: number) => request<{ deleted: number }>(`/api/v1/oncall-shifts/${id}`, { method: 'DELETE' }),
+
+  // Suppression windows.
+  suppressions: () => request<{ items: Suppression[] }>('/api/v1/suppressions'),
+  createSuppression: (body: { client_id?: number | null; asset_id?: number | null; reason?: string; starts_at: string; ends_at: string }) =>
+    request<Suppression>('/api/v1/suppressions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  deleteSuppression: (id: number) => request<{ deleted: number }>(`/api/v1/suppressions/${id}`, { method: 'DELETE' }),
 }

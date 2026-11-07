@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { KeyRound, Loader2, Plus, Trash2, UserX } from 'lucide-react'
+import { Building2, KeyRound, Loader2, Plus, Trash2, UserX } from 'lucide-react'
 import { useState } from 'react'
 import { api } from '../api/client'
 import type { User } from '../api/types'
@@ -80,6 +80,7 @@ export function UsersPage() {
 
 function UserRow({ u, isSelf, onChange }: { u: User; isSelf: boolean; onChange: () => void }) {
   const [err, setErr] = useState('')
+  const [showClients, setShowClients] = useState(false)
   const disabled = !!u.disabled_at
 
   const run = (p: Promise<unknown>) => { setErr(''); p.then(onChange).catch((e) => setErr(e instanceof Error ? e.message : 'Action failed.')) }
@@ -92,32 +93,83 @@ function UserRow({ u, isSelf, onChange }: { u: User; isSelf: boolean; onChange: 
   const remove = () => { if (window.confirm(`Delete ${u.email}? This cannot be undone.`)) run(api.deleteUser(u.id)) }
 
   return (
-    <li className={`flex flex-wrap items-center gap-3 py-3 ${disabled ? 'opacity-60' : ''}`}>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="truncate text-sm font-medium text-zinc-100">{u.email}</span>
-          {isSelf && <Tag tone="cyan">you</Tag>}
-          {disabled && <Tag tone="zinc">disabled</Tag>}
+    <li className={`py-3 ${disabled ? 'opacity-60' : ''}`}>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="truncate text-sm font-medium text-zinc-100">{u.email}</span>
+            {isSelf && <Tag tone="cyan">you</Tag>}
+            {disabled && <Tag tone="zinc">disabled</Tag>}
+          </div>
+          <div className="mt-0.5 text-xs text-zinc-500">added {relativeTime(u.created_at)}</div>
+          {err && <p className="mt-1 text-xs text-red-300">{err}</p>}
         </div>
-        <div className="mt-0.5 text-xs text-zinc-500">added {relativeTime(u.created_at)}</div>
-        {err && <p className="mt-1 text-xs text-red-300">{err}</p>}
+
+        <Tag tone={roleTone[u.role] ?? 'zinc'}>{u.role}</Tag>
+        <select value={u.role} onChange={(e) => setRole(e.target.value)} title="Change role"
+          className="rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-200 focus:border-cyan-400/40 focus:outline-none">
+          {ROLES.map((r) => <option key={r}>{r}</option>)}
+        </select>
+
+        {u.role === 'admin' ? (
+          <span className="text-xs text-zinc-500" title="Admins can access every client">all clients</span>
+        ) : (
+          <button onClick={() => setShowClients((s) => !s)} title="Assign clients" className="inline-flex items-center gap-1 rounded-lg border border-zinc-800 px-2 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">
+            <Building2 className="h-3.5 w-3.5" /> Clients
+          </button>
+        )}
+        <button onClick={resetPw} title="Reset password" className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-cyan-300">
+          <KeyRound className="h-4 w-4" />
+        </button>
+        <button onClick={toggleDisabled} title={disabled ? 'Enable' : 'Disable'} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-amber-300">
+          <UserX className="h-4 w-4" />
+        </button>
+        <button onClick={remove} title="Delete user" className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-red-300">
+          <Trash2 className="h-4 w-4" />
+        </button>
       </div>
-
-      <Tag tone={roleTone[u.role] ?? 'zinc'}>{u.role}</Tag>
-      <select value={u.role} onChange={(e) => setRole(e.target.value)} title="Change role"
-        className="rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-200 focus:border-cyan-400/40 focus:outline-none">
-        {ROLES.map((r) => <option key={r}>{r}</option>)}
-      </select>
-
-      <button onClick={resetPw} title="Reset password" className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-cyan-300">
-        <KeyRound className="h-4 w-4" />
-      </button>
-      <button onClick={toggleDisabled} title={disabled ? 'Enable' : 'Disable'} className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-amber-300">
-        <UserX className="h-4 w-4" />
-      </button>
-      <button onClick={remove} title="Delete user" className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-red-300">
-        <Trash2 className="h-4 w-4" />
-      </button>
+      {showClients && u.role !== 'admin' && (
+        <div className="mt-2 rounded-lg border border-zinc-800 bg-zinc-950/50 p-2">
+          <p className="mb-2 text-[11px] tracking-wider text-zinc-500 uppercase">Clients this user can access</p>
+          <ClientsControl userId={u.id} />
+        </div>
+      )}
     </li>
+  )
+}
+
+// ClientsControl toggles a user's client assignments (chips: on = assigned).
+function ClientsControl({ userId }: { userId: number }) {
+  const qc = useQueryClient()
+  const all = useQuery({ queryKey: ['clients'], queryFn: api.clients })
+  const mine = useQuery({ queryKey: ['user-clients', userId], queryFn: () => api.userClients(userId) })
+  const [saving, setSaving] = useState(false)
+  const assigned = new Set((mine.data?.items ?? []).map((c) => c.id))
+
+  const toggle = (id: number) => {
+    const next = new Set(assigned)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSaving(true)
+    api.setUserClients(userId, [...next]).finally(() => {
+      setSaving(false)
+      qc.invalidateQueries({ queryKey: ['user-clients', userId] })
+    })
+  }
+
+  if (all.isPending || mine.isPending) return <Spinner />
+  if ((all.data?.items.length ?? 0) === 0) return <p className="text-xs text-zinc-500">No clients yet — add some on the Clients page.</p>
+  return (
+    <div className="flex flex-wrap gap-2">
+      {all.data!.items.map((c) => {
+        const on = assigned.has(c.id)
+        return (
+          <button key={c.id} onClick={() => toggle(c.id)} disabled={saving}
+            className={`rounded px-2 py-0.5 text-xs ring-1 ring-inset disabled:opacity-50 ${on ? 'bg-violet-500/15 text-violet-200 ring-violet-400/30' : 'text-zinc-400 ring-zinc-700 hover:bg-zinc-800'}`}>
+            {c.name}
+          </button>
+        )
+      })}
+    </div>
   )
 }

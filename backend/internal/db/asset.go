@@ -11,6 +11,7 @@ import (
 // Asset is one tracked target (domain, URL, IP, product, or repo).
 type Asset struct {
 	ID            int64      `json:"id"`
+	ClientID      *int64     `json:"client_id,omitempty"`
 	Kind          string     `json:"kind"`
 	Value         string     `json:"value"`
 	Label         string     `json:"label"`
@@ -26,30 +27,42 @@ type Asset struct {
 	KEVCount int `json:"kev_count"`
 }
 
-// CreateAsset inserts an asset (idempotent on kind+value: returns the existing
-// one's id if it already exists).
-func (s *Store) CreateAsset(ctx context.Context, kind, value, label string, tags []string) (int64, error) {
+// CreateAsset inserts an asset for a client (idempotent on client+kind+value:
+// returns the existing one's id if it already exists).
+func (s *Store) CreateAsset(ctx context.Context, clientID int64, kind, value, label string, tags []string) (int64, error) {
 	if tags == nil {
 		tags = []string{}
 	}
 	var id int64
 	err := s.pool.QueryRow(ctx, `
-		INSERT INTO asset (kind, value, label, tags) VALUES ($1, $2, $3, $4)
-		ON CONFLICT (kind, value) DO UPDATE SET label = EXCLUDED.label, tags = EXCLUDED.tags
-		RETURNING id`, kind, value, label, tags).Scan(&id)
+		INSERT INTO asset (client_id, kind, value, label, tags) VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (client_id, kind, value) DO UPDATE SET label = EXCLUDED.label, tags = EXCLUDED.tags
+		RETURNING id`, clientID, kind, value, label, tags).Scan(&id)
 	return id, err
 }
 
-// ListAssets returns all assets, newest first, with the latest scan's grade.
-func (s *Store) ListAssets(ctx context.Context) ([]Asset, error) {
+// ListAssets returns assets newest first, with the latest scan's grade, scoped
+// to the caller's clients. When allClients is true (admin) every asset is
+// returned; otherwise only assets whose client_id is in clientIDs.
+func (s *Store) ListAssets(ctx context.Context, allClients bool, clientIDs []int64) ([]Asset, error) {
+	where := ""
+	args := []any{}
+	if !allClients {
+		if len(clientIDs) == 0 {
+			return []Asset{}, nil // no client access → nothing to show
+		}
+		where = "WHERE a.client_id = ANY($1)"
+		args = append(args, clientIDs)
+	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT a.id, a.kind, a.value, a.label, a.tags, a.last_scan_id, a.last_scanned_at, a.created_at,
+		SELECT a.id, a.client_id, a.kind, a.value, a.label, a.tags, a.last_scan_id, a.last_scanned_at, a.created_at,
 		       sc.grade, sc.score,
 		       COALESCE(ac.cve_count, 0), COALESCE(ac.kev_count, 0)
 		FROM asset a
 		LEFT JOIN scan sc ON sc.id = a.last_scan_id
 		LEFT JOIN (SELECT asset_id, count(*) AS cve_count, count(*) FILTER (WHERE kev) AS kev_count FROM asset_cve GROUP BY asset_id) ac ON ac.asset_id = a.id
-		ORDER BY a.created_at DESC`)
+		`+where+`
+		ORDER BY a.created_at DESC`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +71,7 @@ func (s *Store) ListAssets(ctx context.Context) ([]Asset, error) {
 	for rows.Next() {
 		var a Asset
 		var grade *string
-		if err := rows.Scan(&a.ID, &a.Kind, &a.Value, &a.Label, &a.Tags, &a.LastScanID, &a.LastScannedAt, &a.CreatedAt, &grade, &a.LastScore, &a.CVECount, &a.KEVCount); err != nil {
+		if err := rows.Scan(&a.ID, &a.ClientID, &a.Kind, &a.Value, &a.Label, &a.Tags, &a.LastScanID, &a.LastScannedAt, &a.CreatedAt, &grade, &a.LastScore, &a.CVECount, &a.KEVCount); err != nil {
 			return nil, err
 		}
 		if grade != nil {
@@ -74,12 +87,12 @@ func (s *Store) GetAsset(ctx context.Context, id int64) (*Asset, error) {
 	var a Asset
 	var grade *string
 	err := s.pool.QueryRow(ctx, `
-		SELECT a.id, a.kind, a.value, a.label, a.tags, a.last_scan_id, a.last_scanned_at, a.created_at, sc.grade, sc.score,
+		SELECT a.id, a.client_id, a.kind, a.value, a.label, a.tags, a.last_scan_id, a.last_scanned_at, a.created_at, sc.grade, sc.score,
 		       (SELECT count(*) FROM asset_cve WHERE asset_id = a.id),
 		       (SELECT count(*) FROM asset_cve WHERE asset_id = a.id AND kev)
 		FROM asset a LEFT JOIN scan sc ON sc.id = a.last_scan_id
 		WHERE a.id = $1`, id).
-		Scan(&a.ID, &a.Kind, &a.Value, &a.Label, &a.Tags, &a.LastScanID, &a.LastScannedAt, &a.CreatedAt, &grade, &a.LastScore, &a.CVECount, &a.KEVCount)
+		Scan(&a.ID, &a.ClientID, &a.Kind, &a.Value, &a.Label, &a.Tags, &a.LastScanID, &a.LastScannedAt, &a.CreatedAt, &grade, &a.LastScore, &a.CVECount, &a.KEVCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}

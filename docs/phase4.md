@@ -82,8 +82,11 @@ Tenancy is the foundation (everything scopes by client), so it goes first.
     (`PUT /users/{id}/clients`), scoped `GET /clients`, and principal client
     scope (`AllClients` / `ClientIDs`, on `/auth/me`). No asset enforcement yet
     (4A-M2). Verified: CRUD + slug + dup 409, admin-only create, per-user scope.
-  - **M2** (scope assets + scans): `asset.client_id`; list/mutate scoped and
-    enforced; create requires a client the caller may access.
+  - **M2** (scope assets) — **done**: `asset.client_id` (migration 00028;
+    uniqueness → (client_id, kind, value)); `ListAssets` scoped to the caller's
+    clients; `GetAsset`/mutations behind an access check (tenant mismatch → 404);
+    create requires an accessible `client_id`. Build-verified; live HTTP check
+    deferred to the next stack rebuild (host→DB password is blocked here).
   - **M3** (frontend): client switcher, per-client inventory, client admin UI.
 - **4B — Incidents**
   - **M1** (model + migration): `incident` + `incident_item`; detectors write

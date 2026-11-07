@@ -26,32 +26,75 @@ type Incident struct {
 	ClientName string `json:"client_name,omitempty"`
 }
 
-// RefreshIncidents rolls each asset's alert rows up into a single open incident:
-// it upserts one incident per asset that has alerts, recomputing severity, title
-// and item count. When new alerts have appeared since the incident last changed,
-// it re-surfaces the incident (clears read_at) and re-queues it for delivery
-// (clears delivered_at). Safe to run repeatedly.
+// RefreshIncidents rolls each asset's alert rows up into a single open incident.
+// It (1) updates any existing open incident from the asset's current alerts, and
+// (2) opens a new incident for an asset that has no open one — but only if the
+// asset is not already covered by a resolution (a resolved incident whose
+// resolved_at is at or after the newest alert). So a resolved incident re-opens
+// only when a newer alert arrives. When new alerts appear the incident
+// re-surfaces (clears read_at) and re-queues for delivery (clears delivered_at).
+// Safe to run repeatedly.
 func (s *Store) RefreshIncidents(ctx context.Context) error {
-	_, err := s.pool.Exec(ctx, `
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	const agg = `
+		WITH agg AS (
+			SELECT al.asset_id, a.client_id, a.value,
+			       (ARRAY['info','low','medium','high','critical'])[max(
+			           CASE al.severity WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END)] AS severity,
+			       count(*) AS item_count,
+			       max(al.created_at) AS max_created
+			FROM alert al JOIN asset a ON a.id = al.asset_id
+			GROUP BY al.asset_id, a.client_id, a.value
+		)`
+
+	// (1) Update open incidents from current alerts.
+	if _, err := tx.Exec(ctx, agg+`
+		UPDATE incident i SET
+		    severity     = agg.severity,
+		    title        = 'Issues on ' || agg.value,
+		    item_count   = agg.item_count,
+		    client_id    = agg.client_id,
+		    read_at      = CASE WHEN agg.max_created > i.last_event_at THEN NULL ELSE i.read_at END,
+		    delivered_at = CASE WHEN agg.max_created > i.last_event_at THEN NULL ELSE i.delivered_at END,
+		    last_event_at = GREATEST(i.last_event_at, agg.max_created)
+		FROM agg
+		WHERE i.asset_id = agg.asset_id AND i.status <> 'resolved'`); err != nil {
+		return err
+	}
+
+	// (2) Open a new incident where none is open and no resolution covers the
+	// current alerts.
+	if _, err := tx.Exec(ctx, agg+`
 		INSERT INTO incident (asset_id, client_id, severity, title, item_count, last_event_at, status)
-		SELECT al.asset_id, a.client_id,
-		       (ARRAY['info','low','medium','high','critical'])[max(
-		           CASE al.severity WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'medium' THEN 3 WHEN 'low' THEN 2 ELSE 1 END)],
-		       'Issues on ' || a.value,
-		       count(*),
-		       max(al.created_at),
-		       'triggered'
-		FROM alert al JOIN asset a ON a.id = al.asset_id
-		GROUP BY al.asset_id, a.client_id, a.value
-		ON CONFLICT (asset_id) WHERE status <> 'resolved'
-		DO UPDATE SET
-		    severity     = EXCLUDED.severity,
-		    title        = EXCLUDED.title,
-		    item_count   = EXCLUDED.item_count,
-		    client_id    = EXCLUDED.client_id,
-		    read_at      = CASE WHEN EXCLUDED.last_event_at > incident.last_event_at THEN NULL ELSE incident.read_at END,
-		    delivered_at = CASE WHEN EXCLUDED.last_event_at > incident.last_event_at THEN NULL ELSE incident.delivered_at END,
-		    last_event_at = GREATEST(incident.last_event_at, EXCLUDED.last_event_at)`)
+		SELECT agg.asset_id, agg.client_id, agg.severity, 'Issues on ' || agg.value, agg.item_count, agg.max_created, 'triggered'
+		FROM agg
+		WHERE NOT EXISTS (SELECT 1 FROM incident o WHERE o.asset_id = agg.asset_id AND o.status <> 'resolved')
+		  AND NOT EXISTS (SELECT 1 FROM incident r WHERE r.asset_id = agg.asset_id AND r.status = 'resolved' AND r.resolved_at >= agg.max_created)`); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+// AcknowledgeIncident marks a triggered incident acknowledged (someone owns it).
+func (s *Store) AcknowledgeIncident(ctx context.Context, id int64) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE incident SET status = 'acknowledged', acknowledged_at = now()
+		WHERE id = $1 AND status = 'triggered'`, id)
+	return err
+}
+
+// ResolveIncident marks an incident resolved. Its alerts remain; a newer alert
+// re-opens it on the next refresh.
+func (s *Store) ResolveIncident(ctx context.Context, id int64) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE incident SET status = 'resolved', resolved_at = now()
+		WHERE id = $1 AND status <> 'resolved'`, id)
 	return err
 }
 

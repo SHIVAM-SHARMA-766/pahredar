@@ -30,6 +30,8 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/incidents/{id}/items", platform.Guard(platform.RoleViewer, s.items))
 	mux.HandleFunc("PUT /api/v1/incidents/read-all", platform.Guard(platform.RoleOperator, s.readAll))
 	mux.HandleFunc("PUT /api/v1/incidents/{id}/read", platform.Guard(platform.RoleOperator, s.read))
+	mux.HandleFunc("PUT /api/v1/incidents/{id}/acknowledge", platform.Guard(platform.RoleOperator, s.acknowledge))
+	mux.HandleFunc("PUT /api/v1/incidents/{id}/resolve", platform.Guard(platform.RoleOperator, s.resolve))
 }
 
 func (s *Service) list(w http.ResponseWriter, r *http.Request) {
@@ -113,6 +115,30 @@ func (s *Service) read(w http.ResponseWriter, r *http.Request) {
 func (s *Service) readAll(w http.ResponseWriter, r *http.Request) {
 	p := platform.PrincipalFrom(r.Context())
 	if err := s.Store.MarkAllIncidentsRead(r.Context(), p.AllClients, p.ClientIDs); err != nil {
+		platform.InternalError(w, r, err)
+		return
+	}
+	platform.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Service) acknowledge(w http.ResponseWriter, r *http.Request) {
+	inc, ok := s.accessible(w, r)
+	if !ok {
+		return
+	}
+	if err := s.Store.AcknowledgeIncident(r.Context(), inc.ID); err != nil {
+		platform.InternalError(w, r, err)
+		return
+	}
+	platform.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Service) resolve(w http.ResponseWriter, r *http.Request) {
+	inc, ok := s.accessible(w, r)
+	if !ok {
+		return
+	}
+	if err := s.Store.ResolveIncident(r.Context(), inc.ID); err != nil {
 		platform.InternalError(w, r, err)
 		return
 	}

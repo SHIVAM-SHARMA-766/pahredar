@@ -98,8 +98,11 @@ Tenancy is the foundation (everything scopes by client), so it goes first.
     replaces the alerts service; delivery and the check loop now work on
     incidents. Alert generation (KEV/EPSS/finding) is unchanged, so the scanner
     is untouched. Build + vet green; live check deferred to the stack rebuild.
-  - **M2** (lifecycle): acknowledge / resolve / re-open (resolved incidents
-    re-open on a newer alert); surface item-level ack.
+  - **M2** (lifecycle) — **done**: `PUT /incidents/{id}/acknowledge` and
+    `/resolve` (operator+). `RefreshIncidents` now updates open incidents and
+    opens new ones separately, so a **resolved incident re-opens only when an
+    alert newer than its resolved_at arrives** (no spurious re-open while its
+    alerts persist). Build + vet green; live check deferred to the stack rebuild.
   - **M3** (frontend): incident feed and detail, replacing the alerts page.
 - **4C — Notification & escalation**
   - **M1** channels + routing rules (replace the single webhook/email).

@@ -2,8 +2,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { lazy, StrictMode, Suspense, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router'
-import { AuthGate } from './components/AuthGate'
+import { LoginModal } from './components/LoginModal'
 import { Layout } from './components/Layout'
+import { AuthProvider } from './lib/auth'
 import { ErrorBox, Spinner } from './components/ui'
 import './index.css'
 import { CveListPage } from './pages/CveListPage'
@@ -21,6 +22,7 @@ const AssetsPage = lazy(() => import('./pages/AssetsPage').then((m) => ({ defaul
 const AssetDetailPage = lazy(() => import('./pages/AssetDetailPage').then((m) => ({ default: m.AssetDetailPage })))
 const AlertsPage = lazy(() => import('./pages/AlertsPage').then((m) => ({ default: m.AlertsPage })))
 const SyncPage = lazy(() => import('./pages/SyncPage').then((m) => ({ default: m.SyncPage })))
+const UsersPage = lazy(() => import('./pages/UsersPage').then((m) => ({ default: m.UsersPage })))
 
 const page = (el: ReactNode) => <Suspense fallback={<Spinner />}>{el}</Suspense>
 
@@ -50,6 +52,7 @@ const router = createBrowserRouter([
       { path: 'inventory/:id', element: page(<AssetDetailPage />) },
       { path: 'alerts', element: page(<AlertsPage />) },
       { path: 'sync', element: page(<SyncPage />) },
+      { path: 'users', element: page(<UsersPage />) },
       { path: '*', element: <ErrorBox error="Page not found." /> },
     ],
   },
@@ -58,9 +61,10 @@ const router = createBrowserRouter([
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <AuthGate>
+      <AuthProvider>
         <RouterProvider router={router} />
-      </AuthGate>
+        <LoginModal />
+      </AuthProvider>
     </QueryClientProvider>
   </StrictMode>,
 )

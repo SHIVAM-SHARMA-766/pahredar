@@ -86,8 +86,14 @@ active scan. The scanner handler enforces it from the principal on the context.
   `PATCH /users/{id}` (role / disable), `PUT /users/{id}/password`,
   `DELETE /users/{id}`. Refuses demoting, disabling, or deleting the last
   enabled admin; disabling or a password reset drops that user's sessions.
-- **M4 — frontend** (login page, auth context, role-gated nav and controls;
-  replace the API-key AuthGate; hide the active-scan toggle for non-operators).
+- **M4 — frontend** (done): a cookie-based `AuthProvider` (reads `/auth/me`),
+  a `LoginModal` (email/password, opens on 401 or "Sign in") replacing the
+  API-key AuthGate, a sign-in/out chip in the sidebar, role-gated nav
+  (Inventory/Monitoring need viewer; Administration — Data sync + Users — needs
+  admin), an admin Users page, the active-scan toggle gated to operator, and
+  viewer-read-only asset/alert pages (mutating controls hidden below operator).
+  The dashboard monitoring strip only loads for authenticated users. tsc and
+  the production build are green.
 
 ## Non-goals (for now)
 

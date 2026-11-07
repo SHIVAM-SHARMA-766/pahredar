@@ -5,6 +5,7 @@ import { Link } from 'react-router'
 import { api } from '../api/client'
 import type { Alert } from '../api/types'
 import { Tag } from './ui'
+import { useAuth } from '../lib/auth'
 import { relativeTime } from '../lib/format'
 
 // The operator's own posture, surfaced on the dashboard: what they track, what
@@ -19,9 +20,14 @@ const alertTag: Record<string, ReactNode> = {
 }
 
 export function MonitoringStrip() {
-  const assets = useQuery({ queryKey: ['assets'], queryFn: api.assets, refetchInterval: 5 * 60_000 })
-  const unread = useQuery({ queryKey: ['alerts-unread'], queryFn: api.alertsUnread, refetchInterval: 60_000 })
-  const recent = useQuery({ queryKey: ['alerts', false], queryFn: () => api.alerts(false), refetchInterval: 60_000 })
+  // Monitoring data is private (viewer+). Anonymous visitors on the public
+  // dashboard see no strip, and the queries stay disabled so they never 401.
+  const { isAuthenticated } = useAuth()
+  const assets = useQuery({ queryKey: ['assets'], queryFn: api.assets, refetchInterval: 5 * 60_000, enabled: isAuthenticated })
+  const unread = useQuery({ queryKey: ['alerts-unread'], queryFn: api.alertsUnread, refetchInterval: 60_000, enabled: isAuthenticated })
+  const recent = useQuery({ queryKey: ['alerts', false], queryFn: () => api.alerts(false), refetchInterval: 60_000, enabled: isAuthenticated })
+
+  if (!isAuthenticated) return null
 
   // Until the first asset exists, this is a one-line nudge, not a wall of zeros.
   if (assets.isSuccess && assets.data.items.length === 0) {

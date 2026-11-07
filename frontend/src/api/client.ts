@@ -11,6 +11,7 @@ import type {
   DetectionRule,
   FeedArticle,
   FeedInfo,
+  Me,
   NewsPage,
   NewsQuery,
   ScanConfig,
@@ -26,6 +27,7 @@ import type {
   Series,
   TrendingItem,
   SyncStatus,
+  User,
   VendorDetail,
   VendorSummary,
 } from './types'
@@ -39,13 +41,12 @@ export class ApiError extends Error {
   }
 }
 
-import { getApiKey, requireAuth } from '../lib/auth'
+import { requireAuth } from '../lib/auth'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const key = getApiKey()
   const headers: Record<string, string> = { Accept: 'application/json', ...(init?.headers as Record<string, string>) }
-  if (key) headers.Authorization = `Bearer ${key}`
-  const res = await fetch(path, { ...init, headers })
+  // Send the session cookie; the SPA authenticates by account, not API key.
+  const res = await fetch(path, { ...init, headers, credentials: 'include' })
   const body = await res.json().catch(() => null)
   if (res.status === 401) {
     requireAuth()
@@ -123,4 +124,22 @@ export const api = {
   syncStatus: () => request<SyncStatus>('/api/v1/sync/status'),
   triggerSync: (source: string) =>
     request<{ status: string; source: string }>(`/api/v1/sync/${enc(source)}`, { method: 'POST' }),
+
+  // Auth + accounts.
+  me: () => request<Me>('/api/v1/auth/me'),
+  login: (email: string, password: string) =>
+    request<{ user: User }>('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    }),
+  logout: () => request<{ ok: boolean }>('/api/v1/auth/logout', { method: 'POST' }),
+  users: () => request<{ items: User[] }>('/api/v1/users'),
+  createUser: (body: { email: string; password: string; role: string }) =>
+    request<User>('/api/v1/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  updateUser: (id: number, body: { role?: string; disabled?: boolean }) =>
+    request<User>(`/api/v1/users/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  resetUserPassword: (id: number, password: string) =>
+    request<{ ok: boolean }>(`/api/v1/users/${id}/password`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }) }),
+  deleteUser: (id: number) => request<{ deleted: number }>(`/api/v1/users/${id}`, { method: 'DELETE' }),
 }

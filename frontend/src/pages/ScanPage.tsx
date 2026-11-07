@@ -6,6 +6,7 @@ import { api, ApiError } from '../api/client'
 import type { ScanEvidence, ScanFinding, ScanJob, ScanReport, ScanRequestResult, ScanRequestSpec, ScanSeverity, ScanTech } from '../api/types'
 import { Card, ErrorBox, Tag } from '../components/ui'
 import { Gauge } from '../components/Gauge'
+import { useAuth } from '../lib/auth'
 import { relativeTime } from '../lib/format'
 import { useOrigin } from '../lib/origin'
 
@@ -30,6 +31,7 @@ const gradeColor: Record<string, string> = {
 
 export function ScanPage() {
   useOrigin('Endpoint scan')
+  const { can, openLogin, isAuthenticated } = useAuth()
   const [params, setParams] = useSearchParams()
   const [input, setInput] = useState(params.get('target') ?? '')
   const [active, setActive] = useState(false)
@@ -67,7 +69,10 @@ export function ScanPage() {
     },
   })
 
-  const canActive = config.data?.active_available ?? false
+  // Active scanning needs both the server capability and the operator role.
+  const serverActive = config.data?.active_available ?? false
+  const mayActive = can('operator')
+  const canActive = serverActive && mayActive
   const runActive = active && canActive
   const jobData = jobId != null ? job.data : undefined
   const status = jobData?.status
@@ -161,7 +166,21 @@ GET /.git/HEAD  404     GET /.env  404     /.well-known/security.txt 200
           <button type="button" onClick={() => setActive(false)} className={`rounded-full px-4 py-1.5 font-medium transition-colors ${!active ? 'bg-cyan-500/20 text-cyan-100 ring-1 ring-cyan-400/30' : 'text-zinc-400 hover:text-zinc-200'}`}>
             Passive check
           </button>
-          <button type="button" disabled={!canActive} onClick={() => setActive(true)} title={canActive ? 'Runs intrusive vulnerability checks' : 'Enable SCAN_ACTIVE_ENABLED on the server to use active scanning'} className={`inline-flex items-center gap-1 rounded-full px-4 py-1.5 font-medium transition-colors disabled:opacity-40 ${active ? 'bg-rose-500/20 text-rose-100 ring-1 ring-rose-400/30' : 'text-zinc-400 hover:text-zinc-200'}`}>
+          <button
+            type="button"
+            disabled={mayActive && !serverActive}
+            onClick={() => (mayActive ? setActive(true) : openLogin())}
+            title={
+              !mayActive
+                ? isAuthenticated
+                  ? 'Active scanning requires the operator role'
+                  : 'Sign in as an operator to run active scans'
+                : serverActive
+                  ? 'Runs intrusive vulnerability checks'
+                  : 'Enable SCAN_ACTIVE_ENABLED on the server to use active scanning'
+            }
+            className={`inline-flex items-center gap-1 rounded-full px-4 py-1.5 font-medium transition-colors disabled:opacity-40 ${active ? 'bg-rose-500/20 text-rose-100 ring-1 ring-rose-400/30' : 'text-zinc-400 hover:text-zinc-200'}`}
+          >
             Active scan <Lock className="h-3.5 w-3.5" />
           </button>
         </div>

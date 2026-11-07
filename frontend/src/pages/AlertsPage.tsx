@@ -5,6 +5,7 @@ import { Link } from 'react-router'
 import { api } from '../api/client'
 import type { Alert } from '../api/types'
 import { Card, ErrorBox, PageHeader, Spinner, Tag } from '../components/ui'
+import { useAuth } from '../lib/auth'
 import { relativeTime } from '../lib/format'
 import { useOrigin } from '../lib/origin'
 
@@ -17,6 +18,7 @@ const sevDot: Record<string, string> = { critical: 'bg-red-500', high: 'bg-orang
 export function AlertsPage() {
   useOrigin('Alerts')
   const qc = useQueryClient()
+  const canEdit = useAuth().can('operator')
   const [unreadOnly, setUnreadOnly] = useState(false)
   const alerts = useQuery({ queryKey: ['alerts', unreadOnly], queryFn: () => api.alerts(unreadOnly), refetchInterval: 60_000 })
 
@@ -38,9 +40,11 @@ export function AlertsPage() {
           <button className={seg(!unreadOnly)} onClick={() => setUnreadOnly(false)}>All</button>
           <button className={seg(unreadOnly)} onClick={() => setUnreadOnly(true)}>Unread</button>
         </div>
-        <button onClick={() => readAll.mutate()} disabled={readAll.isPending} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50">
-          <CheckCheck className="h-4 w-4" /> Mark all read
-        </button>
+        {canEdit && (
+          <button onClick={() => readAll.mutate()} disabled={readAll.isPending} className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 disabled:opacity-50">
+            <CheckCheck className="h-4 w-4" /> Mark all read
+          </button>
+        )}
       </div>
 
       <Card>
@@ -51,7 +55,7 @@ export function AlertsPage() {
           </div>
         ) : (
           <ul className="divide-y divide-zinc-800">
-            {alerts.data.items.map((a) => <AlertRow key={a.id} a={a} onRead={() => read.mutate(a.id)} />)}
+            {alerts.data.items.map((a) => <AlertRow key={a.id} a={a} canEdit={canEdit} onRead={() => read.mutate(a.id)} />)}
           </ul>
         )}
       </Card>
@@ -59,7 +63,7 @@ export function AlertsPage() {
   )
 }
 
-function AlertRow({ a, onRead }: { a: Alert; onRead: () => void }) {
+function AlertRow({ a, canEdit, onRead }: { a: Alert; canEdit: boolean; onRead: () => void }) {
   const unread = !a.read_at
   return (
     <li className={`flex gap-3 py-3 ${unread ? '' : 'opacity-60'}`}>
@@ -79,7 +83,7 @@ function AlertRow({ a, onRead }: { a: Alert; onRead: () => void }) {
           {a.asset_id && <Link to={`/inventory/${a.asset_id}`} className="text-cyan-300 hover:text-cyan-200">{a.asset_value || 'asset'}</Link>}
         </div>
       </div>
-      {unread && (
+      {unread && canEdit && (
         <button onClick={onRead} className="h-7 shrink-0 self-start rounded-md border border-zinc-800 px-2 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200">Mark read</button>
       )}
     </li>

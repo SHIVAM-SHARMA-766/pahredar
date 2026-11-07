@@ -5,6 +5,7 @@ import { api } from '../api/client'
 import type { ScanTech } from '../api/types'
 import { Gauge } from '../components/Gauge'
 import { Breadcrumbs, Card, ErrorBox, Spinner, Tag } from '../components/ui'
+import { useAuth } from '../lib/auth'
 import { relativeTime } from '../lib/format'
 import { useOrigin } from '../lib/origin'
 
@@ -20,6 +21,7 @@ export function AssetDetailPage() {
   const { id = '' } = useParams()
   const assetId = Number(id)
   const navigate = useNavigate()
+  const canEdit = useAuth().can('operator')
   const asset = useQuery({ queryKey: ['asset', assetId], queryFn: () => api.getAsset(assetId) })
   useOrigin(asset.data?.value)
   const history = useQuery({ queryKey: ['asset-scans', assetId], queryFn: () => api.assetScans(assetId) })
@@ -56,7 +58,7 @@ export function AssetDetailPage() {
               {a.last_scanned_at ? <>scanned {relativeTime(a.last_scanned_at)}</> : 'never scanned'}
             </p>
           </div>
-          {SCANNABLE.has(a.kind) && (
+          {SCANNABLE.has(a.kind) && canEdit && (
             <button onClick={() => scan.mutate()} disabled={scan.isPending} className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50">
               {scan.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radar className="h-4 w-4" />} Scan now
             </button>

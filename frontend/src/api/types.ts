@@ -802,6 +802,23 @@ export interface Alert {
   asset_value?: string
 }
 
+// Me is the current principal from /auth/me (anonymous when not logged in).
+export interface Me {
+  authenticated: boolean
+  user_id: number
+  name: string
+  role: 'anonymous' | 'viewer' | 'operator' | 'admin'
+}
+
+// User is an account (admin user-management views).
+export interface User {
+  id: number
+  email: string
+  role: string
+  created_at: string
+  disabled_at?: string
+}
+
 export interface Asset {
   id: number
   kind: string

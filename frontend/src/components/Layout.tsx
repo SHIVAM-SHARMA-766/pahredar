@@ -7,10 +7,13 @@ import {
   ChevronsLeft,
   ChevronsRight,
   LayoutDashboard,
+  LogIn,
+  LogOut,
   Menu,
   Newspaper,
   Radar,
   RefreshCw,
+  Users,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -18,6 +21,7 @@ import { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation, type Location } from 'react-router'
 import { api } from '../api/client'
 import { relativeTime } from '../lib/format'
+import { useAuth, type Role } from '../lib/auth'
 
 const COLLAPSE_KEY = 'pahredar.sidebar.collapsed'
 
@@ -30,8 +34,9 @@ interface NavItem {
 }
 
 // Sections mirror what Pahredar does; "Known exploited" and "Likely exploited"
-// are saved views of the CVE explorer, so they share its route.
-const SECTIONS: { title: string; dot: string; items: NavItem[] }[] = [
+// are saved views of the CVE explorer, so they share its route. A section's
+// minRole hides it below that role (public sections omit it). See docs/auth.md.
+const SECTIONS: { title: string; dot: string; minRole?: Role; items: NavItem[] }[] = [
   {
     title: 'Overview',
     dot: 'bg-sky-400',
@@ -43,11 +48,13 @@ const SECTIONS: { title: string; dot: string; items: NavItem[] }[] = [
   {
     title: 'Inventory',
     dot: 'bg-violet-400',
+    minRole: 'viewer',
     items: [{ to: '/inventory', label: 'Assets', icon: Boxes, active: (l) => l.pathname.startsWith('/inventory') }],
   },
   {
     title: 'Monitoring',
     dot: 'bg-rose-400',
+    minRole: 'viewer',
     items: [{ to: '/alerts', label: 'Alerts', icon: Bell, active: (l) => l.pathname.startsWith('/alerts'), badge: 'alerts' }],
   },
   {
@@ -66,9 +73,13 @@ const SECTIONS: { title: string; dot: string; items: NavItem[] }[] = [
     items: [{ to: '/scan', label: 'Endpoint scanner', icon: Radar, active: (l) => l.pathname === '/scan' }],
   },
   {
-    title: 'System',
+    title: 'Administration',
     dot: 'bg-emerald-400',
-    items: [{ to: '/sync', label: 'Data sync', icon: RefreshCw, active: (l) => l.pathname === '/sync' }],
+    minRole: 'admin',
+    items: [
+      { to: '/sync', label: 'Data sync', icon: RefreshCw, active: (l) => l.pathname === '/sync' },
+      { to: '/users', label: 'Users', icon: Users, active: (l) => l.pathname.startsWith('/users') },
+    ],
   },
 ]
 
@@ -152,6 +163,8 @@ function Sidebar({ collapsed, location, onToggle, onClose, drawer }: {
   onClose: () => void
   drawer: boolean
 }) {
+  const { can } = useAuth()
+  const sections = SECTIONS.filter((s) => !s.minRole || can(s.minRole))
   return (
     <>
       <div className={`flex items-center border-b border-zinc-800 px-4 py-4 ${collapsed ? 'justify-center' : 'justify-between'}`}>
@@ -164,7 +177,7 @@ function Sidebar({ collapsed, location, onToggle, onClose, drawer }: {
       </div>
 
       <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
-        {SECTIONS.map((section) => (
+        {sections.map((section) => (
           <div key={section.title}>
             {collapsed ? (
               <div className="mx-auto mb-2 h-px w-6 bg-zinc-800" />
@@ -186,6 +199,7 @@ function Sidebar({ collapsed, location, onToggle, onClose, drawer }: {
       </nav>
 
       <div className="space-y-2 border-t border-zinc-800 p-3">
+        <UserChip collapsed={collapsed} />
         <SyncCard collapsed={collapsed} />
         <button
           onClick={onToggle}
@@ -222,6 +236,45 @@ function NavRow({ item, active, collapsed }: { item: NavItem; active: boolean; c
           : <span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-rose-500/20 px-1.5 text-[11px] font-semibold text-rose-300 ring-1 ring-inset ring-rose-400/30">{count}</span>
       )}
     </Link>
+  )
+}
+
+// Current account and sign in / out. Anonymous visitors see a Sign in button;
+// public pages work without an account.
+function UserChip({ collapsed }: { collapsed: boolean }) {
+  const { isAuthenticated, email, role, openLogin, logout } = useAuth()
+
+  if (!isAuthenticated) {
+    return (
+      <button
+        onClick={openLogin}
+        title="Sign in"
+        className={`flex w-full items-center gap-3 rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white ${collapsed ? 'justify-center' : ''}`}
+      >
+        <LogIn className="h-4 w-4 shrink-0 text-cyan-300" />
+        {!collapsed && 'Sign in'}
+      </button>
+    )
+  }
+  if (collapsed) {
+    return (
+      <button onClick={() => logout()} title={`${email} (${role}) · sign out`} className="flex w-full justify-center py-2 text-zinc-400 hover:text-red-300">
+        <LogOut className="h-4 w-4" />
+      </button>
+    )
+  }
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-xs font-medium text-zinc-200">{email}</div>
+          <div className="text-[11px] text-zinc-500 capitalize">{role}</div>
+        </div>
+        <button onClick={() => logout()} title="Sign out" className="shrink-0 rounded-md p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-red-300">
+          <LogOut className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
   )
 }
 

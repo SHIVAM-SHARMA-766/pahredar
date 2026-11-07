@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router'
 import { api } from '../api/client'
 import type { Asset } from '../api/types'
 import { Card, ErrorBox, PageHeader, Spinner, Tag } from '../components/ui'
+import { useAuth } from '../lib/auth'
 import { relativeTime } from '../lib/format'
 import { useOrigin } from '../lib/origin'
 
@@ -26,6 +27,7 @@ export function AssetsPage() {
   useOrigin('Assets')
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const canEdit = useAuth().can('operator')
   const assets = useQuery({ queryKey: ['assets'], queryFn: api.assets })
 
   const [kind, setKind] = useState('domain')
@@ -57,6 +59,7 @@ export function AssetsPage() {
     <>
       <PageHeader title="Asset inventory" subtitle="The things you track — domains, URLs, IPs, products. Scan an asset to see its posture; its latest grade shows here." />
 
+      {canEdit && (
       <Card title="Add an asset" className="mb-6">
         <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
           <label className="text-sm">
@@ -81,6 +84,7 @@ export function AssetsPage() {
         </form>
         {create.isError && <p className="mt-2 text-sm text-red-300">Could not add the asset. Check the kind and value.</p>}
       </Card>
+      )}
 
       <Card title={assets.data ? `Assets (${assets.data.items.length})` : 'Assets'}>
         {assets.isPending ? <Spinner /> : assets.isError ? <ErrorBox error={assets.error} /> : assets.data.items.length === 0 ? (
@@ -110,14 +114,16 @@ export function AssetsPage() {
                     Grade {a.last_grade}{a.last_score != null && ` · ${a.last_score}`}
                   </span>
                 )}
-                {SCANNABLE.has(a.kind) && (
+                {SCANNABLE.has(a.kind) && canEdit && (
                   <button onClick={() => scan.mutate(a)} disabled={scan.isPending} className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50">
                     <Radar className="h-3.5 w-3.5" /> Scan
                   </button>
                 )}
-                <button onClick={() => { if (confirm(`Delete asset ${a.value}?`)) remove.mutate(a.id) }} title="Delete asset" className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-red-300">
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                {canEdit && (
+                  <button onClick={() => { if (confirm(`Delete asset ${a.value}?`)) remove.mutate(a.id) }} title="Delete asset" className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-800 hover:text-red-300">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
               </li>
             ))}
           </ul>

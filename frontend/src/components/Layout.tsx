@@ -11,6 +11,7 @@ import {
   LogOut,
   Menu,
   Newspaper,
+  Globe,
   Radar,
   RefreshCw,
   Send,
@@ -74,7 +75,10 @@ const SECTIONS: { title: string; dot: string; minRole?: Role; items: NavItem[] }
   {
     title: 'Offensive',
     dot: 'bg-rose-400',
-    items: [{ to: '/scan', label: 'Endpoint scanner', icon: Radar, active: (l) => l.pathname === '/scan' }],
+    items: [
+      { to: '/scan', label: 'Endpoint scanner', icon: Radar, active: (l) => l.pathname === '/scan' },
+      { to: '/ipscan', label: 'IP scanner', icon: Globe, active: (l) => l.pathname === '/ipscan' },
+    ],
   },
   {
     title: 'Administration',

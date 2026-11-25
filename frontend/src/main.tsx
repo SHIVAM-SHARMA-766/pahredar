@@ -18,6 +18,7 @@ const VendorsPage = lazy(() => import('./pages/VendorsPage').then((m) => ({ defa
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
 const NewsPage = lazy(() => import('./pages/NewsPage').then((m) => ({ default: m.NewsPage })))
 const ScanPage = lazy(() => import('./pages/ScanPage').then((m) => ({ default: m.ScanPage })))
+const IPScanPage = lazy(() => import('./pages/IPScanPage').then((m) => ({ default: m.IPScanPage })))
 const AssetsPage = lazy(() => import('./pages/AssetsPage').then((m) => ({ default: m.AssetsPage })))
 const AssetDetailPage = lazy(() => import('./pages/AssetDetailPage').then((m) => ({ default: m.AssetDetailPage })))
 const IncidentsPage = lazy(() => import('./pages/IncidentsPage').then((m) => ({ default: m.IncidentsPage })))
@@ -50,6 +51,7 @@ const router = createBrowserRouter([
       { path: 'vendors/:vendor/products/:product', element: page(<ProductPage />) },
       { path: 'news', element: page(<NewsPage />) },
       { path: 'scan', element: page(<ScanPage />) },
+      { path: 'ipscan', element: page(<IPScanPage />) },
       { path: 'inventory', element: page(<AssetsPage />) },
       { path: 'inventory/:id', element: page(<AssetDetailPage />) },
       { path: 'incidents', element: page(<IncidentsPage />) },

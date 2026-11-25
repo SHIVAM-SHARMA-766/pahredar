@@ -35,7 +35,8 @@ cleanest module and a good template for new services.
 
 **Frontend**
 
-- Page: `ScanPage` (scan landing + result; an **IP scanner** tab, `?view=ip`)
+- Pages: `ScanPage` (scan landing + result) and `IPScanPage` (the IP scanner,
+  route `/ipscan`), both under the *Endpoint scanner* nav section
 
 **Tables** (new migrations use the next sequential number — see [../contributing.md](../contributing.md))
 

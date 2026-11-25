@@ -40,4 +40,6 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/scans/{id}", s.getScan)
 	mux.HandleFunc("GET /api/v1/scan/jobs/{id}", s.scanJobStatus)
 	mux.HandleFunc("GET /api/v1/scan/config", s.scanConfig)
+	// IP scanner: aggregate one IP's reputation/info from public databases.
+	mux.HandleFunc("GET /api/v1/ipscan", s.ipScan)
 }

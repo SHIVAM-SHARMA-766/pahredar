@@ -926,6 +926,52 @@ export interface Asset {
   kev_count: number
 }
 
+export interface IPScanReport {
+  ip: string
+  version: number
+  type: string
+  ptr?: string
+  net: {
+    ip: string
+    ptr?: string
+    asn?: string
+    as_org?: string
+    net_name?: string
+    net_range?: string
+    country?: string
+    org?: string
+  } | null
+  geo: {
+    country?: string
+    country_code?: string
+    region?: string
+    city?: string
+    zip?: string
+    timezone?: string
+    lat?: number
+    lon?: number
+    isp?: string
+    org?: string
+    as?: string
+    as_name?: string
+    mobile: boolean
+    proxy: boolean
+    hosting: boolean
+  } | null
+  blocklist: {
+    checked: number
+    listed: number
+    hits: { zone: string; codes: string[]; reason?: string }[]
+    lists: string[]
+  } | null
+  flags: string[]
+  score: number
+  verdict: 'clean' | 'suspicious' | 'malicious'
+  scanned_at: string
+  duration: string
+  errors: string[]
+}
+
 export interface ScanConfig {
   active_available: boolean
   allow_private: boolean

@@ -228,6 +228,25 @@ func (s *Service) getScan(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(payload)
 }
 
+// ipScan aggregates one IP address's reputation and network info from several
+// public databases (DNS blocklists, Team Cymru, RDAP, ip-api). It queries
+// third parties only — never the IP itself.
+func (s *Service) ipScan(w http.ResponseWriter, r *http.Request) {
+	ip := r.URL.Query().Get("ip")
+	if ip == "" {
+		platform.WriteError(w, http.StatusBadRequest, "pass ?ip=<address>")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+	defer cancel()
+	rep, err := s.scanner.ScanIP(ctx, ip)
+	if err != nil {
+		platform.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	platform.WriteJSON(w, http.StatusOK, rep)
+}
+
 // scanConfig tells the UI which scanner capabilities the server enables and,
 // when active scanning is on, the Nuclei template categories it covers.
 func (s *Service) scanConfig(w http.ResponseWriter, r *http.Request) {

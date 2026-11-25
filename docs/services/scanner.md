@@ -2,7 +2,8 @@
 
 Assesses a public (or, when enabled, private) endpoint: a details-first recon
 profile of everything discoverable, plus optional active checks that probe with
-attack patterns. Self-contained — the
+attack patterns. Also hosts an **IP scanner**: give it one IP and it aggregates
+reputation and network info from several public databases. Self-contained — the
 cleanest module and a good template for new services.
 
 ## Owns
@@ -14,6 +15,9 @@ cleanest module and a good template for new services.
 - `GET /api/v1/scan/jobs/{id}` — poll a running job (streams findings)
 - `GET /api/v1/scans`, `GET /api/v1/scans/{id}` — stored results
 - `GET /api/v1/scan/config` — capabilities (active available, allow private)
+- `GET /api/v1/ipscan?ip=` — IP scanner: aggregate one IP's reputation/network/geo
+  from public databases (DNS blocklists, Team Cymru, RDAP, ip-api); key-free, no
+  storage yet
 
 **Backend**
 
@@ -25,11 +29,13 @@ cleanest module and a good template for new services.
     email security)
   - active: `verify.go` (native evidence checks), `active.go` (Nuclei runner),
     `waf.go` (WAF/CDN fingerprint)
+  - `ipscan.go` — the IP scanner (DNS blocklists, geo via ip-api, reuses
+    `cymruASN`/RDAP/PTR from recon); queries third parties only, never the IP
 - `internal/db/scan.go` — `SaveScan`, `GetScan`, `RecentScans`, `MatchTech`
 
 **Frontend**
 
-- Page: `ScanPage` (scan landing + result)
+- Page: `ScanPage` (scan landing + result; an **IP scanner** tab, `?view=ip`)
 
 **Tables** (new migrations use the next sequential number — see [../contributing.md](../contributing.md))
 

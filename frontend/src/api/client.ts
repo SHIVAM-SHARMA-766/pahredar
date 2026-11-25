@@ -21,6 +21,7 @@ import type {
   OnCallSchedule,
   OnCallShift,
   NewsQuery,
+  IPScanReport,
   ScanConfig,
   ScanJob,
   ScanReport,
@@ -96,6 +97,7 @@ export const api = {
     }),
   scanJob: (id: number) => request<ScanJob>(`/api/v1/scan/jobs/${id}`),
   scanConfig: () => request<ScanConfig>('/api/v1/scan/config'),
+  ipScan: (ip: string) => request<IPScanReport>(`/api/v1/ipscan?ip=${encodeURIComponent(ip)}`),
   assets: () => request<{ items: Asset[] }>('/api/v1/assets'),
   getAsset: (id: number) => request<Asset>(`/api/v1/assets/${id}`),
   createAsset: (body: { client_id: number; kind: string; value: string; label?: string; tags?: string[] }) =>

@@ -281,9 +281,15 @@ Mirrors the spec's phases, mapped to Pahredar.
     `POST /easm/scan` + `GET /easm/assets/{id}/records|runs` (operator triggers,
     viewer reads, client-scoped). Collectors live-verified (crt.sh 55 recs,
     RDAP 3 recs for example.com).
-  - **M2:** DNS (P03, light active) + IP/ASN (P05) + email-auth SPF/DMARC (P09)
-    collectors; wire discovered subdomains/IPs as candidate assets (`scope:
-    pending`); first reports.
+  - **M2 (done):** a light-active collector set (tagged `method: active`, kept
+    separate from passive): **DNS** (A/AAAA/NS/MX/TXT/CNAME + `ip` records, P03),
+    **email-auth** (SPF + DMARC via TXT, P09), and **IP/ASN enrichment** (RDAP
+    IP → network/org/country, P05). The scan now runs passive + light-active and
+    enriches discovered IPs. Collectors live-verified (example.com: 77 records
+    across cert/subdomain/dns/ip/email/whois/nameserver; SPF + Cloudflare IP org
+    resolved).
+  - **M3:** promote discovered subdomains/IPs to candidate assets (`scope:
+    pending`); first reports (R02–R06, R08); frontend surface.
 - **S2 — Active Recon.** A01 DNS, A02 subdomain resolution, A06/A07 HTTP+TLS,
   A04/A05 ports+services (budgeted), A13 security headers, A08/A09 web+endpoint
   discovery; scope enforcement + budget; Nuclei folded in (A18, safe).

@@ -105,7 +105,7 @@ func (s *Service) handlePassiveTask(ctx context.Context, payload json.RawMessage
 	if err := json.Unmarshal(payload, &p); err != nil {
 		return nil, err
 	}
-	if err := s.runPassive(ctx, p.AssetID, p.ClientID, p.Domain); err != nil {
+	if err := s.runScan(ctx, p.AssetID, p.ClientID, p.Domain); err != nil {
 		return nil, err
 	}
 	return map[string]any{"asset_id": p.AssetID}, nil

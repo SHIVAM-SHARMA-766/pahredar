@@ -30,21 +30,44 @@ func passiveCollectors(client *http.Client) []Collector {
 	}
 }
 
+// lightActiveCollectors contact the target's DNS directly (live resolution) —
+// low impact, but tagged method=active and kept separate. Heavy active probing
+// (ports, dir discovery, Nuclei) is S2.
+func lightActiveCollectors() []Collector {
+	return []Collector{
+		dnsCollector{},
+		emailAuth{},
+	}
+}
+
 // httpClient is a shared client with a sane timeout for the collectors.
 func httpClient() *http.Client { return &http.Client{Timeout: 20 * time.Second} }
 
 // rec builds a passive evidence record with the common fields set.
 func rec(category, key, source string, data any, evidence string) db.AssetRecord {
+	return recM("passive", category, key, source, data, evidence)
+}
+
+// recActive builds an active (live) evidence record.
+func recActive(category, key, source string, data any, evidence string) db.AssetRecord {
+	return recM("active", category, key, source, data, evidence)
+}
+
+func recM(method, category, key, source string, data any, evidence string) db.AssetRecord {
 	raw, _ := json.Marshal(data)
+	verification := "unverified"
+	if method == "active" {
+		verification = "verified" // a live observation is verified
+	}
 	return db.AssetRecord{
 		Category:     category,
 		Key:          key,
-		Method:       "passive",
+		Method:       method,
 		Source:       source,
 		Data:         raw,
 		Evidence:     evidence,
 		Confidence:   "high",
-		Verification: "unverified",
+		Verification: verification,
 		Scope:        "in_scope",
 	}
 }

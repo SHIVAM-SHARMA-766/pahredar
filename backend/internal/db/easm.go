@@ -120,6 +120,33 @@ func (s *Store) ListRecords(ctx context.Context, assetID int64, category string)
 	return out, rows.Err()
 }
 
+// AssetsDueForEASM returns domain/URL assets whose most recent EASM scan started
+// before `before` (or that were never scanned), oldest first, for scheduling.
+func (s *Store) AssetsDueForEASM(ctx context.Context, before time.Time, limit int) ([]Asset, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT a.id, a.client_id, a.kind, a.value
+		FROM asset a
+		LEFT JOIN LATERAL (
+			SELECT max(started_at) AS last FROM scan_run WHERE asset_id = a.id
+		) sr ON true
+		WHERE a.kind IN ('domain','url') AND (sr.last IS NULL OR sr.last < $1)
+		ORDER BY sr.last NULLS FIRST
+		LIMIT $2`, before, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Asset{}
+	for rows.Next() {
+		var a Asset
+		if err := rows.Scan(&a.ID, &a.ClientID, &a.Kind, &a.Value); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
 // ListScanRuns returns an asset's scan runs, newest first.
 func (s *Store) ListScanRuns(ctx context.Context, assetID int64, limit int) ([]ScanRun, error) {
 	rows, err := s.pool.Query(ctx, `

@@ -22,6 +22,7 @@ import (
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/auth"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/config"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/easm"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/incidents"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/jobs"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/platform"
@@ -234,6 +235,11 @@ func serve(ctx context.Context, cfg config.Config) error {
 		go assetRescanLoop(jobsCtx, store, queue, cfg.AssetRescanInterval)
 	}
 
+	// Continuous EASM (attack-surface) scans on a schedule (opt-in; 0 disables).
+	if cfg.EASMScanInterval > 0 {
+		go easmScanLoop(jobsCtx, store, queue, cfg.EASMScanInterval)
+	}
+
 	// Raise alerts for assets matched by known-exploited CVEs, roll them up into
 	// per-asset incidents, and deliver new/updated incidents to the configured
 	// channels (Phase 4B).
@@ -338,6 +344,37 @@ func assetRescanLoop(ctx context.Context, store *db.Store, queue *jobs.Queue, in
 			} else if n > 0 {
 				slog.Info("asset rescans enqueued", "count", n)
 			}
+		}
+	}
+}
+
+// easmScanLoop enqueues continuous EASM scans for domains not scanned within
+// the interval, shortly after startup and then every interval.
+func easmScanLoop(ctx context.Context, store *db.Store, queue *jobs.Queue, interval time.Duration) {
+	run := func() {
+		rctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		defer cancel()
+		n, err := easm.ScheduleDue(rctx, store, queue, interval)
+		if err != nil {
+			slog.Warn("easm schedule failed", "err", err)
+		} else if n > 0 {
+			slog.Info("easm scans enqueued", "count", n)
+		}
+	}
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(30 * time.Second):
+		run()
+	}
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			run()
 		}
 	}
 }

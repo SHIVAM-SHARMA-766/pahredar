@@ -26,10 +26,13 @@ type Config struct {
 	BlueskyHandle      string
 	BlueskyAppPassword string
 	// Endpoint scanner settings.
-	ScanAllowPrivate   bool   // allow scanning private/internal addresses
-	ScanActiveEnabled  bool   // allow active (Nuclei) scanning
+	ScanAllowPrivate  bool // allow scanning private/internal addresses
+	ScanActiveEnabled bool // allow active (Nuclei) scanning
 	// AssetRescanInterval auto re-scans tracked assets this often (0 disables).
 	AssetRescanInterval time.Duration
+	// EASMScanInterval runs continuous EASM (attack-surface) scans this often.
+	// Opt-in: 0 (unset) disables it, since it makes external lookups.
+	EASMScanInterval time.Duration
 	// AlertWebhookURL receives new alerts as JSON (Slack-style {text}); empty disables.
 	AlertWebhookURL string
 	// AlertEPSSThreshold is the minimum EPSS score (0–1) for a non-KEV CVE on a
@@ -53,8 +56,8 @@ type Config struct {
 	AdminPassword string
 	// AuthCookieSecure sets the Secure flag on the session cookie (enable behind
 	// HTTPS). AuthSessionTTL is the session + cookie lifetime.
-	AuthCookieSecure bool
-	AuthSessionTTL   time.Duration
+	AuthCookieSecure   bool
+	AuthSessionTTL     time.Duration
 	NucleiPath         string // nuclei binary, "" disables active scanning
 	NucleiTemplatesDir string
 	// DataDir holds temporary download artifacts (the extracted cvelist
@@ -153,6 +156,14 @@ func Load() (Config, error) {
 		if *d.dst, err = duration(d.key, d.fallback); err != nil {
 			return Config{}, err
 		}
+	}
+	// EASM scanning is opt-in: unset = disabled (it makes external lookups).
+	if v := os.Getenv("EASM_SCAN_INTERVAL"); v != "" {
+		d, derr := time.ParseDuration(v)
+		if derr != nil || d < time.Minute {
+			return Config{}, errors.New("EASM_SCAN_INTERVAL must be a duration of at least 1m, like 24h")
+		}
+		cfg.EASMScanInterval = d
 	}
 	return cfg, nil
 }

@@ -328,6 +328,15 @@ Mirrors the spec's phases, mapped to Pahredar.
 - **S4 — Platform.** Asset relationship graph, change-detection → incidents,
   scheduled EASM scans, scan-comparison + data-quality reports, multi-domain per
   client, HTML/PDF reporting, pluggable paid adapters.
+  - **M1 (done):** **scheduled EASM scans** — an `easmScanLoop` enqueues a
+    standard scan for every domain/URL asset not scanned within
+    `EASM_SCAN_INTERVAL` (opt-in; unset disables it, since it makes external
+    lookups). `AssetsDueForEASM` finds them by their latest `scan_run`.
+    Change-detection is already emergent: a re-scan re-observes records
+    (last_seen) and the assessment's finding dedup means a *new* exposure
+    (new open port, newly-missing header) produces a new finding → the asset's
+    incident re-surfaces. *Later: explicit change records + scan-comparison
+    report.*
 
 Each milestone builds + is verified before the next; records and reports are the
 stable contract between engines.

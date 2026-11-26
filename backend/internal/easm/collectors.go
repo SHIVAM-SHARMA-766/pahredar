@@ -45,6 +45,7 @@ func lightActiveCollectors() []Collector {
 func activeCollectors() []Collector {
 	return []Collector{
 		httpProbe{},
+		portScan{},
 	}
 }
 

@@ -304,8 +304,15 @@ Mirrors the spec's phases, mapped to Pahredar.
     `active`); the `active` profile runs the probe and requires an authorisation
     confirmation (operator + `authorized: true`). Live-verified (example.com:
     TLS 1.3, live cert, HTTP 200, 8 security headers assessed).
-  - **M2:** port scan + service fingerprint (A04/A05, budgeted TCP connect on
-    common ports), scope enforcement for multi-host; Nuclei (A18) as a probe.
+  - **M2 (done):** a `port_scan` active collector (A04/A05) — a budgeted
+    TCP-connect scan of the domain's resolved IPs (≤4 IPs) on ~25 curated common
+    ports, 20-way concurrent with a 2s dial timeout, recording open ports with
+    their service name. Part of the `active` profile. Live-verified (example.com:
+    80/443/8080/8443 open on the Cloudflare edges). **Nuclei (A18) deferred** to
+    the scanner-consolidation step (it lives in `internal/scan`, the scanner
+    chat's active area — folding it in now would couple to their work). CDN-vs-
+    origin scope refinement (don't treat a CDN edge as the origin) is a later
+    enhancement; records carry a `scope` field for it.
 - **S3 — Security Assessment.** `finding` engine over records → incidents:
   cert/TLS, email, headers, exposed services, dangling DNS, version→CVE; false-
   positive handling.

@@ -9,6 +9,9 @@ import type {
   CveDetail,
   EscalationPolicy,
   EscalationStep,
+  EasmSummary,
+  EasmRecord,
+  EasmRun,
   CveFacets,
   CveList,
   CveReports,
@@ -199,4 +202,14 @@ export const api = {
   createSuppression: (body: { client_id?: number | null; asset_id?: number | null; reason?: string; starts_at: string; ends_at: string }) =>
     request<Suppression>('/api/v1/suppressions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   deleteSuppression: (id: number) => request<{ deleted: number }>(`/api/v1/suppressions/${id}`, { method: 'DELETE' }),
+
+  // EASM (attack surface).
+  easmScan: (assetId: number, profile: string, authorized = false) =>
+    request<{ job_id: number }>('/api/v1/easm/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ asset_id: assetId, profile, authorized }) }),
+  easmSummary: (assetId: number) => request<EasmSummary>(`/api/v1/easm/assets/${assetId}/summary`),
+  easmRecords: (assetId: number, category?: string) =>
+    request<{ items: EasmRecord[] }>(`/api/v1/easm/assets/${assetId}/records${category ? `?category=${encodeURIComponent(category)}` : ''}`),
+  easmRuns: (assetId: number) => request<{ items: EasmRun[] }>(`/api/v1/easm/assets/${assetId}/runs`),
+  easmPromote: (parentAssetId: number, value: string) =>
+    request<{ id: number }>('/api/v1/easm/promote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parent_asset_id: parentAssetId, value }) }),
 }

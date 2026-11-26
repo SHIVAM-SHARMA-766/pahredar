@@ -337,6 +337,11 @@ Mirrors the spec's phases, mapped to Pahredar.
     (new open port, newly-missing header) produces a new finding → the asset's
     incident re-surfaces. *Later: explicit change records + scan-comparison
     report.*
+  - **Frontend (done):** an `AttackSurface` card on the asset-detail page
+    (domain/URL assets) — category counts, registration, email posture
+    (SPF/DMARC), certs, IP owners, and subdomains (each promotable to a tracked
+    asset); operators trigger a passive (`standard`) or `active` scan (the
+    latter behind an authorisation confirm), with live status while it runs.
 
 Each milestone builds + is verified before the next; records and reports are the
 stable contract between engines.

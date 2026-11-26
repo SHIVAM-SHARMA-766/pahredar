@@ -910,6 +910,43 @@ export interface User {
   disabled_at?: string
 }
 
+// EASM (attack-surface) types — see docs/scanner-easm.md.
+export interface EasmRun {
+  id: number
+  asset_id: number
+  profile: string
+  status: 'running' | 'done' | 'failed'
+  started_at: string
+  finished_at?: string
+  record_count: number
+  error?: string
+}
+
+export interface EasmRecord {
+  id: number
+  category: string
+  key: string
+  method: 'passive' | 'active'
+  source: string
+  data: Record<string, unknown>
+  confidence: string
+  verification: string
+  scope: string
+  first_seen: string
+  last_seen: string
+}
+
+export interface EasmSummary {
+  asset_id: number
+  registration?: Record<string, unknown>
+  counts: Record<string, number>
+  subdomains: string[]
+  ips: { ip: string; org?: string; network?: string; country?: string }[]
+  certs: { count: number; soonest_not_after?: string }
+  email: { spf?: boolean; dmarc?: boolean; dmarc_policy?: string }
+  last_run?: EasmRun
+}
+
 export interface Asset {
   id: number
   client_id?: number

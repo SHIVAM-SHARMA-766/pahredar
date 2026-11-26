@@ -3,6 +3,7 @@ import { Loader2, Radar } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api } from '../api/client'
 import type { ScanTech } from '../api/types'
+import { AttackSurface } from '../components/AttackSurface'
 import { Gauge } from '../components/Gauge'
 import { Breadcrumbs, Card, ErrorBox, Spinner, Tag } from '../components/ui'
 import { useAuth } from '../lib/auth'
@@ -65,6 +66,8 @@ export function AssetDetailPage() {
           )}
         </div>
       </div>
+
+      {(a.kind === 'domain' || a.kind === 'url') && <AttackSurface assetId={assetId} canEdit={canEdit} />}
 
       {!lastScan ? (
         <Card><p className="py-8 text-center text-sm text-zinc-500">{SCANNABLE.has(a.kind) ? 'Not scanned yet. Run a scan to see this asset’s posture and matched CVEs.' : 'This asset kind is not scannable.'}</p></Card>

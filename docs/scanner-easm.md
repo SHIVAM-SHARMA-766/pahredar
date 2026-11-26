@@ -288,8 +288,13 @@ Mirrors the spec's phases, mapped to Pahredar.
     enriches discovered IPs. Collectors live-verified (example.com: 77 records
     across cert/subdomain/dns/ip/email/whois/nameserver; SPF + Cloudflare IP org
     resolved).
-  - **M3:** promote discovered subdomains/IPs to candidate assets (`scope:
-    pending`); first reports (R02–R06, R08); frontend surface.
+  - **M3 (done, backend):** a derived **summary report** (R02–R08 condensed:
+    registration, counts, subdomains, IP owners, cert count + soonest expiry,
+    SPF/DMARC) at `GET /easm/assets/{id}/summary`; a **promote** action
+    (`POST /easm/promote`, operator) that turns a discovered hostname into a
+    tracked asset under the parent's client (explicit, not auto-created, honoring
+    scope enforcement). `buildSummary` unit-tested. *Frontend surface (asset
+    detail EASM tab) is a coordinated follow-up with the scanner chat's UI.*
 - **S2 — Active Recon.** A01 DNS, A02 subdomain resolution, A06/A07 HTTP+TLS,
   A04/A05 ports+services (budgeted), A13 security headers, A08/A09 web+endpoint
   discovery; scope enforcement + budget; Nuclei folded in (A18, safe).

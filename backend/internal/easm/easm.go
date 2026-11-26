@@ -39,6 +39,9 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	// Evidence is private monitoring data: viewer+ within the asset's client.
 	mux.HandleFunc("GET /api/v1/easm/assets/{id}/records", platform.Guard(platform.RoleViewer, s.records))
 	mux.HandleFunc("GET /api/v1/easm/assets/{id}/runs", platform.Guard(platform.RoleViewer, s.runs))
+	mux.HandleFunc("GET /api/v1/easm/assets/{id}/summary", platform.Guard(platform.RoleViewer, s.summary))
+	// Promote a discovered hostname to a tracked asset (operator decision).
+	mux.HandleFunc("POST /api/v1/easm/promote", platform.Guard(platform.RoleOperator, s.promote))
 }
 
 type passivePayload struct {

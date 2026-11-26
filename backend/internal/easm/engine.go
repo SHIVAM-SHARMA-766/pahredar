@@ -55,7 +55,16 @@ func (s *Service) runScan(ctx context.Context, assetID int64, clientID *int64, d
 		status, errMsg = "failed", firstErr.Error()
 	}
 	s.Log.Info("easm scan complete", "asset_id", assetID, "records", count, "status", status)
-	return s.Store.FinishScanRun(ctx, runID, status, count, errMsg)
+	if err := s.Store.FinishScanRun(ctx, runID, status, count, errMsg); err != nil {
+		return err
+	}
+
+	// Security assessment: turn the current records into findings (alert rows),
+	// which the incident loop rolls up into the asset's incident.
+	if aerr := s.assess(ctx, assetID, clientID); aerr != nil {
+		s.Log.Warn("easm assessment failed", "asset_id", assetID, "err", aerr)
+	}
+	return nil
 }
 
 // uniqueIPs returns the distinct IPs across the gathered ip records.

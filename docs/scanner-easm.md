@@ -316,6 +316,15 @@ Mirrors the spec's phases, mapped to Pahredar.
 - **S3 — Security Assessment.** `finding` engine over records → incidents:
   cert/TLS, email, headers, exposed services, dangling DNS, version→CVE; false-
   positive handling.
+  - **M1 (done):** an assessment engine (`buildFindings`) runs after every scan
+    — expired / expiring / self-signed cert, deprecated TLS (1.0/1.1), missing
+    HSTS/CSP, exposed sensitive ports (MySQL/Postgres/Redis/RDP/Mongo/… — a
+    high), and SPF/DMARC gaps. Each finding is written as an **alert row**
+    (`type: easm`, deduped per asset+key), so the existing Phase 4 incident loop
+    rolls them into the asset's incident and the notification/escalation layer
+    delivers them — **no new incident plumbing**. Checks unit-tested. *Later:
+    dangling-DNS and version→CVE checks; a `finding` table for false-positive
+    status + richer reporting.*
 - **S4 — Platform.** Asset relationship graph, change-detection → incidents,
   scheduled EASM scans, scan-comparison + data-quality reports, multi-domain per
   client, HTML/PDF reporting, pluggable paid adapters.

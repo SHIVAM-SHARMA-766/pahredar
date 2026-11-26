@@ -14,6 +14,7 @@ import (
 
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/assets"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/auth"
+	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/easm"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/incidents"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/intel"
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/news"
@@ -34,6 +35,7 @@ func New(p *platform.Platform, sched *syncer.Scheduler, rc *reports.Client, allo
 		scanner.New(p, allowPrivate, active),
 		assets.New(p),
 		incidents.New(p),
+		easm.New(p),
 		auth.New(p, authOpts),
 	}
 	mux := http.NewServeMux()

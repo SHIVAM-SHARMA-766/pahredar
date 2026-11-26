@@ -274,7 +274,16 @@ Mirrors the spec's phases, mapped to Pahredar.
 - **S1 — Domain Intelligence (passive).** Record store + `scan_run`; collectors
   for P01 (RDAP/WHOIS), P03 (DNS), P04/P06 (crt.sh subdomains + certs), P05
   (IP/ASN), P09 (email auth), P14 (historical first/last-seen); reports R02–R06,
-  R08. **Start here.**
+  R08.
+  - **M1 (done):** `scan_run` + `asset_record` store (migration 00034),
+    `internal/easm` module with a collector registry, the **crt.sh** (P04/P06)
+    and **RDAP** (P01) passive collectors, a queued passive-scan job, and
+    `POST /easm/scan` + `GET /easm/assets/{id}/records|runs` (operator triggers,
+    viewer reads, client-scoped). Collectors live-verified (crt.sh 55 recs,
+    RDAP 3 recs for example.com).
+  - **M2:** DNS (P03, light active) + IP/ASN (P05) + email-auth SPF/DMARC (P09)
+    collectors; wire discovered subdomains/IPs as candidate assets (`scope:
+    pending`); first reports.
 - **S2 — Active Recon.** A01 DNS, A02 subdomain resolution, A06/A07 HTTP+TLS,
   A04/A05 ports+services (budgeted), A13 security headers, A08/A09 web+endpoint
   discovery; scope enforcement + budget; Nuclei folded in (A18, safe).

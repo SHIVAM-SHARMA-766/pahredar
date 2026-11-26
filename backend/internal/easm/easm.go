@@ -44,19 +44,40 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/easm/promote", platform.Guard(platform.RoleOperator, s.promote))
 }
 
-type passivePayload struct {
+type scanPayload struct {
 	AssetID  int64  `json:"asset_id"`
 	ClientID *int64 `json:"client_id"`
 	Domain   string `json:"domain"`
+	Profile  string `json:"profile"`
 }
 
-// scan enqueues a passive EASM scan for an accessible, domain-like asset.
+// validProfile reports whether p is a known scan profile.
+func validProfile(p string) bool {
+	return p == "passive" || p == "standard" || p == "active"
+}
+
+// scan enqueues an EASM scan for an accessible, domain-like asset. The default
+// "standard" profile is passive + light-active DNS/email; "active" also probes
+// the target over HTTP/TLS and requires an authorisation confirmation.
 func (s *Service) scan(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		AssetID int64 `json:"asset_id"`
+		AssetID    int64  `json:"asset_id"`
+		Profile    string `json:"profile"`
+		Authorized bool   `json:"authorized"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&body); err != nil || body.AssetID == 0 {
 		platform.WriteError(w, http.StatusBadRequest, `body must be {"asset_id": <id>}`)
+		return
+	}
+	if body.Profile == "" {
+		body.Profile = "standard"
+	}
+	if !validProfile(body.Profile) {
+		platform.WriteError(w, http.StatusBadRequest, "profile must be passive, standard, or active")
+		return
+	}
+	if body.Profile == "active" && !body.Authorized {
+		platform.WriteError(w, http.StatusForbidden, "active probing contacts the target directly; confirm you are authorised to test it")
 		return
 	}
 	a, ok := s.accessibleAsset(w, r, body.AssetID)
@@ -65,10 +86,10 @@ func (s *Service) scan(w http.ResponseWriter, r *http.Request) {
 	}
 	domain := domainOf(a)
 	if domain == "" {
-		platform.WriteError(w, http.StatusBadRequest, "passive scan needs a domain or URL asset")
+		platform.WriteError(w, http.StatusBadRequest, "a scan needs a domain or URL asset")
 		return
 	}
-	jobID, err := s.Jobs.Enqueue(r.Context(), TaskType, passivePayload{AssetID: a.ID, ClientID: a.ClientID, Domain: domain}, 1)
+	jobID, err := s.Jobs.Enqueue(r.Context(), TaskType, scanPayload{AssetID: a.ID, ClientID: a.ClientID, Domain: domain, Profile: body.Profile}, 1)
 	if err != nil {
 		platform.InternalError(w, r, err)
 		return
@@ -102,13 +123,16 @@ func (s *Service) runs(w http.ResponseWriter, r *http.Request) {
 	platform.WriteJSON(w, http.StatusOK, map[string]any{"items": out})
 }
 
-// handlePassiveTask runs a queued passive scan.
+// handlePassiveTask runs a queued EASM scan.
 func (s *Service) handlePassiveTask(ctx context.Context, payload json.RawMessage, _ jobs.Progress) (any, error) {
-	var p passivePayload
+	var p scanPayload
 	if err := json.Unmarshal(payload, &p); err != nil {
 		return nil, err
 	}
-	if err := s.runScan(ctx, p.AssetID, p.ClientID, p.Domain); err != nil {
+	if p.Profile == "" {
+		p.Profile = "standard"
+	}
+	if err := s.runScan(ctx, p.AssetID, p.ClientID, p.Domain, p.Profile); err != nil {
 		return nil, err
 	}
 	return map[string]any{"asset_id": p.AssetID}, nil

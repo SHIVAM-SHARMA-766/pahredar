@@ -6,12 +6,12 @@ import (
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
 )
 
-// runScan opens a scan run, runs the passive + light-active collectors against
-// the domain, enriches discovered IPs via RDAP, and upserts every evidence
-// record. A collector failure is logged and skipped; the run fails only when
-// nothing at all was collected.
-func (s *Service) runScan(ctx context.Context, assetID int64, clientID *int64, domain string) error {
-	runID, err := s.Store.CreateScanRun(ctx, assetID, clientID, "standard")
+// runScan opens a scan run, runs the profile's collectors against the domain,
+// enriches discovered IPs via RDAP, and upserts every evidence record. A
+// collector failure is logged and skipped; the run fails only when nothing at
+// all was collected.
+func (s *Service) runScan(ctx context.Context, assetID int64, clientID *int64, domain, profile string) error {
+	runID, err := s.Store.CreateScanRun(ctx, assetID, clientID, profile)
 	if err != nil {
 		return err
 	}
@@ -19,22 +19,16 @@ func (s *Service) runScan(ctx context.Context, assetID int64, clientID *int64, d
 
 	var records []db.AssetRecord
 	var firstErr error
-	collect := func(c Collector) {
+	for _, c := range collectorsFor(profile, client) {
 		recs, cerr := c.Collect(ctx, domain)
 		if cerr != nil {
 			s.Log.Warn("easm collector failed", "collector", c.Name(), "domain", domain, "err", cerr)
 			if firstErr == nil {
 				firstErr = cerr
 			}
-			return
+			continue
 		}
 		records = append(records, recs...)
-	}
-	for _, c := range passiveCollectors(client) {
-		collect(c)
-	}
-	for _, c := range lightActiveCollectors() {
-		collect(c)
 	}
 
 	// Enrich unique IPs (from DNS) with network/owner via RDAP.

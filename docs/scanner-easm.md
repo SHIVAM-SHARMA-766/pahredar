@@ -298,6 +298,14 @@ Mirrors the spec's phases, mapped to Pahredar.
 - **S2 — Active Recon.** A01 DNS, A02 subdomain resolution, A06/A07 HTTP+TLS,
   A04/A05 ports+services (budgeted), A13 security headers, A08/A09 web+endpoint
   discovery; scope enforcement + budget; Nuclei folded in (A18, safe).
+  - **M1 (done):** an `http_probe` active collector — TLS handshake (A07: cert,
+    protocol, cipher), HTTPS request (A06: status/server/title/redirects), and
+    security-header read (A13). Scan profiles added (`passive` / `standard` /
+    `active`); the `active` profile runs the probe and requires an authorisation
+    confirmation (operator + `authorized: true`). Live-verified (example.com:
+    TLS 1.3, live cert, HTTP 200, 8 security headers assessed).
+  - **M2:** port scan + service fingerprint (A04/A05, budgeted TCP connect on
+    common ports), scope enforcement for multi-host; Nuclei (A18) as a probe.
 - **S3 — Security Assessment.** `finding` engine over records → incidents:
   cert/TLS, email, headers, exposed services, dangling DNS, version→CVE; false-
   positive handling.

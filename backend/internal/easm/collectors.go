@@ -31,13 +31,37 @@ func passiveCollectors(client *http.Client) []Collector {
 }
 
 // lightActiveCollectors contact the target's DNS directly (live resolution) —
-// low impact, but tagged method=active and kept separate. Heavy active probing
-// (ports, dir discovery, Nuclei) is S2.
+// low impact, but tagged method=active and kept separate.
 func lightActiveCollectors() []Collector {
 	return []Collector{
 		dnsCollector{},
 		emailAuth{},
 	}
+}
+
+// activeCollectors contact the target's services directly (HTTP/TLS). Gated by
+// the "active" profile + operator authorisation. Heavier probing (ports, dir
+// discovery, Nuclei) comes later.
+func activeCollectors() []Collector {
+	return []Collector{
+		httpProbe{},
+	}
+}
+
+// collectorsFor returns the collectors a scan profile runs:
+//   - passive:  third-party data only (no target contact)
+//   - standard: passive + light-active DNS/email (default, monitor-first)
+//   - active:   standard + direct HTTP/TLS probing (needs authorisation)
+func collectorsFor(profile string, client *http.Client) []Collector {
+	cs := passiveCollectors(client)
+	if profile == "passive" {
+		return cs
+	}
+	cs = append(cs, lightActiveCollectors()...)
+	if profile == "active" {
+		cs = append(cs, activeCollectors()...)
+	}
+	return cs
 }
 
 // httpClient is a shared client with a sane timeout for the collectors.

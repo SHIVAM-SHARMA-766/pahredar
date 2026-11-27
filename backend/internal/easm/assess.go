@@ -175,6 +175,18 @@ func buildFindings(assetID int64, records []db.AssetRecord) []db.Alert {
 				add(fmt.Sprintf("port-exposed-%d", d.Port), n.severity, "Exposed "+n.name+" service",
 					fmt.Sprintf("%s (port %d) is reachable from the internet on %s. Confirm this exposure is intended and restricted (key-only auth, an IP allow-list, or a VPN).", n.name, d.Port, r.Key))
 			}
+		case "exposed_path":
+			var d struct {
+				Path     string `json:"path"`
+				Status   int    `json:"status"`
+				Label    string `json:"label"`
+				Severity string `json:"severity"`
+			}
+			_ = json.Unmarshal(r.Data, &d)
+			if d.Status == 200 && d.Severity != "" {
+				add("exposed-path-"+d.Path, d.Severity, "Exposed "+d.Label,
+					fmt.Sprintf("%s is publicly served at %s. Restrict or remove it.", d.Label, d.Path))
+			}
 		case "script":
 			var d struct {
 				SourceMapExposed bool `json:"source_map_exposed"`

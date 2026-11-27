@@ -321,6 +321,12 @@ Mirrors the spec's phases, mapped to Pahredar.
     `active`); the `active` profile runs the probe and requires an authorisation
     confirmation (operator + `authorized: true`). Live-verified (example.com:
     TLS 1.3, live cert, HTTP 200, 8 security headers assessed).
+  - **M8 (done):** a `dir_scan` active collector (A10) — GET-probes a bounded,
+    curated list of commonly-exposed sensitive paths (`.git/config`, `.env`,
+    backups, DB dumps, `/actuator/env`, `phpinfo`, `server-status`, …) with
+    bounded concurrency, recording those served (200) or protected (401/403). A
+    served one becomes an assessment finding at the path's severity (`.git`/
+    `.env`/backups → high). Path list + finding logic unit-tested.
   - **M7 (done):** a `js_analysis` active collector (A11) — inventories the root
     page's same-site **scripts**, checks each (bounded) for an **exposed source
     map** (`.map` served → pre-minification source leak, raised as a low

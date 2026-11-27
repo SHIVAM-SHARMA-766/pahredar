@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Radar, ShieldCheck } from 'lucide-react'
+import { Download, FileText, GitCompareArrows, Loader2, Radar, ShieldCheck } from 'lucide-react'
 import { api } from '../api/client'
 import type { EasmSummary } from '../api/types'
 import { Card, ErrorBox, Spinner, Tag } from './ui'
@@ -36,16 +36,31 @@ export function AttackSurface({ assetId, canEdit }: { assetId: number; canEdit: 
   const s = summary.data
   const running = s?.last_run?.status === 'running' || scan.isPending
 
-  const actions = canEdit ? (
-    <div className="flex gap-1.5">
-      <button onClick={runStandard} disabled={running} className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1 text-xs text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50">
-        {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radar className="h-3.5 w-3.5" />} Scan
-      </button>
-      <button onClick={runActive} disabled={running} className="inline-flex items-center gap-1 rounded-lg border border-rose-400/30 bg-rose-500/10 px-2.5 py-1 text-xs text-rose-200 hover:bg-rose-500/20 disabled:opacity-50">
-        Active
-      </button>
+  const scanned = !!s?.last_run
+  const actions = (
+    <div className="flex flex-wrap gap-1.5">
+      {scanned && (
+        <>
+          <a href={api.easmReportUrl(assetId, 'html')} target="_blank" rel="noreferrer" title="Open a printable report (use the browser’s Save as PDF)" className="inline-flex items-center gap-1 rounded-lg border border-zinc-600/40 bg-zinc-700/30 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-700/50">
+            <FileText className="h-3.5 w-3.5" /> Report
+          </a>
+          <a href={api.easmReportUrl(assetId, 'csv')} title="Download the record inventory as CSV" className="inline-flex items-center gap-1 rounded-lg border border-zinc-600/40 bg-zinc-700/30 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-700/50">
+            <Download className="h-3.5 w-3.5" /> CSV
+          </a>
+        </>
+      )}
+      {canEdit && (
+        <>
+          <button onClick={runStandard} disabled={running} className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1 text-xs text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50">
+            {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radar className="h-3.5 w-3.5" />} Scan
+          </button>
+          <button onClick={runActive} disabled={running} className="inline-flex items-center gap-1 rounded-lg border border-rose-400/30 bg-rose-500/10 px-2.5 py-1 text-xs text-rose-200 hover:bg-rose-500/20 disabled:opacity-50">
+            Active
+          </button>
+        </>
+      )}
     </div>
-  ) : undefined
+  )
 
   return (
     <Card title="Attack surface" actions={actions}>
@@ -133,7 +148,46 @@ function Body({ s, assetId, canEdit, running }: { s: EasmSummary; assetId: numbe
           </div>
         </Field>
       )}
+
+      <Changes assetId={assetId} />
     </div>
+  )
+}
+
+// Changes shows what appeared or dropped off since the previous scan — a derived
+// diff over the record timestamps. Hidden until there are at least two scans.
+function Changes({ assetId }: { assetId: number }) {
+  const changes = useQuery({ queryKey: ['easm-changes', assetId], queryFn: () => api.easmChanges(assetId) })
+  const c = changes.data
+  if (!c || !c.since_run || (c.added.length === 0 && c.removed.length === 0)) return null
+  return (
+    <Field label="Changes since last scan">
+      <div className="flex flex-wrap gap-1.5">
+        <Tag tone={c.added.length ? 'cyan' : 'zinc'}><GitCompareArrows className="mr-1 inline h-3 w-3" />{c.added.length} new</Tag>
+        <Tag tone={c.removed.length ? 'amber' : 'zinc'}>{c.removed.length} gone</Tag>
+      </div>
+      {c.added.length > 0 && (
+        <div className="mt-2">
+          <div className="text-[11px] tracking-wide text-emerald-400/80 uppercase">Appeared</div>
+          <ul className="mt-1 space-y-0.5">
+            {c.added.slice(0, 12).map((r) => (
+              <li key={`a-${r.category}-${r.key}`} className="text-xs text-zinc-400"><span className="text-zinc-500">{r.category}</span> <span className="font-mono text-zinc-300">{r.key}</span></li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {c.removed.length > 0 && (
+        <div className="mt-2">
+          <div className="text-[11px] tracking-wide text-amber-400/80 uppercase">Not re-observed</div>
+          <ul className="mt-1 space-y-0.5">
+            {c.removed.slice(0, 12).map((r) => (
+              <li key={`r-${r.category}-${r.key}`} className="text-xs text-zinc-400"><span className="text-zinc-500">{r.category}</span> <span className="font-mono text-zinc-300">{r.key}</span></li>
+            ))}
+          </ul>
+          {c.note && <p className="mt-1 text-[11px] text-zinc-600">{c.note}</p>}
+        </div>
+      )}
+    </Field>
   )
 }
 

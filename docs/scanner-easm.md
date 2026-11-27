@@ -335,8 +335,20 @@ Mirrors the spec's phases, mapped to Pahredar.
     Change-detection is already emergent: a re-scan re-observes records
     (last_seen) and the assessment's finding dedup means a *new* exposure
     (new open port, newly-missing header) produces a new finding → the asset's
-    incident re-surfaces. *Later: explicit change records + scan-comparison
-    report.*
+    incident re-surfaces.
+  - **M2 (done):** **scan-comparison + report export** — both *derived views*
+    over the record store (§10, no new storage). `GET
+    /easm/assets/{id}/changes?since={runID}` diffs the records against a
+    reference run: **added** = first-seen after that run finished; **removed** =
+    not re-observed by the latest scan (last-seen before it started), defaulting
+    to the previous-vs-latest run. `GET /easm/assets/{id}/report?format=json|
+    csv|html` exports the full report (summary + findings + record inventory +
+    an R16 data-quality section: sources/methods/confidence/unverified/stale):
+    CSV is the flat record inventory, HTML is a print-ready page (the browser's
+    **Save as PDF** covers PDF with no server dependency). `buildChanges` and
+    `buildReport` unit-tested. Frontend: the asset's AttackSurface card gains
+    **Report/CSV** download links and a **"Changes since last scan"** block
+    (new / not-re-observed records).
   - **Frontend (done):** an `AttackSurface` card on the asset-detail page
     (domain/URL assets) — category counts, registration, email posture
     (SPF/DMARC), certs, IP owners, and subdomains (each promotable to a tracked

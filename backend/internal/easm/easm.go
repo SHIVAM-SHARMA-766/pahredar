@@ -48,6 +48,9 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/easm/assets/{id}/records", platform.Guard(platform.RoleViewer, s.records))
 	mux.HandleFunc("GET /api/v1/easm/assets/{id}/runs", platform.Guard(platform.RoleViewer, s.runs))
 	mux.HandleFunc("GET /api/v1/easm/assets/{id}/summary", platform.Guard(platform.RoleViewer, s.summary))
+	// Change detection (derived diff vs a prior run) and report export (json|csv|html).
+	mux.HandleFunc("GET /api/v1/easm/assets/{id}/changes", platform.Guard(platform.RoleViewer, s.changes))
+	mux.HandleFunc("GET /api/v1/easm/assets/{id}/report", platform.Guard(platform.RoleViewer, s.report))
 	// Promote a discovered hostname to a tracked asset (operator decision).
 	mux.HandleFunc("POST /api/v1/easm/promote", platform.Guard(platform.RoleOperator, s.promote))
 	// Software dependency inventory + OSV analysis.

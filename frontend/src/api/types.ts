@@ -947,6 +947,26 @@ export interface EasmSummary {
   last_run?: EasmRun
 }
 
+export interface EasmRecordChange {
+  category: string
+  key: string
+  source: string
+  method: string
+  first_seen: string
+  last_seen: string
+}
+
+export interface EasmChangeSet {
+  asset_id: number
+  since_run?: EasmRun
+  latest_run?: EasmRun
+  added: EasmRecordChange[]
+  removed: EasmRecordChange[]
+  added_by_category: Record<string, number>
+  removed_by_category: Record<string, number>
+  note?: string
+}
+
 export interface Asset {
   id: number
   client_id?: number

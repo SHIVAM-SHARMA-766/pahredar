@@ -51,6 +51,7 @@ func activeCollectors() []Collector {
 		subBrute{},
 		apiProbe{},
 		cdnWAF{},
+		jsAnalysis{},
 	}
 }
 

@@ -321,6 +321,12 @@ Mirrors the spec's phases, mapped to Pahredar.
     `active`); the `active` profile runs the probe and requires an authorisation
     confirmation (operator + `authorized: true`). Live-verified (example.com:
     TLS 1.3, live cert, HTTP 200, 8 security headers assessed).
+  - **M7 (done):** a `js_analysis` active collector (A11) — inventories the root
+    page's same-site **scripts**, checks each (bounded) for an **exposed source
+    map** (`.map` served → pre-minification source leak, raised as a low
+    finding), and extracts **API endpoint references** (`/api`, `/v1`, `/graphql`
+    …) from the HTML and script bodies into `url` records.
+    `sameSiteScripts`/`extractAPIPaths`/`looksLikeSourceMap` unit-tested.
   - **M6 (done):** a `cdn_waf` active collector (A16) — one GET, then
     fingerprints the CDN/WAF/edge (Cloudflare, CloudFront, Akamai, Fastly,
     Vercel, Netlify, Sucuri, Incapsula, F5 BIG-IP, Barracuda) from response

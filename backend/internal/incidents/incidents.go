@@ -233,6 +233,14 @@ func (s *Service) unacceptFinding(w http.ResponseWriter, r *http.Request) {
 		platform.InternalError(w, r, err)
 		return
 	}
+	// Un-accepting restores an active finding; if its incident had resolved
+	// because everything was accepted, re-open it (RefreshIncidents' time-based
+	// re-open would not, since no newer alert arrived).
+	if assetID, err := s.Store.AlertAssetID(r.Context(), alertID); err == nil && assetID != 0 {
+		if rerr := s.Store.ReopenResolvedIfActive(r.Context(), assetID); rerr != nil {
+			s.Log.Warn("reopen incident after unaccept failed", "err", rerr)
+		}
+	}
 	if err := s.Store.RefreshIncidents(r.Context()); err != nil {
 		s.Log.Warn("refresh incidents after unaccept failed", "err", err)
 	}

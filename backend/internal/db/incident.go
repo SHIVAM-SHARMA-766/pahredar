@@ -95,6 +95,18 @@ func (s *Store) RefreshIncidents(ctx context.Context) error {
 	return tx.Commit(ctx)
 }
 
+// ReopenResolvedIfActive re-opens an asset's resolved incident when it still has
+// at least one non-accepted finding. Used after un-accepting a finding: the
+// resolution (from accepting everything) no longer holds, and the time-based
+// re-open in RefreshIncidents would not fire because no newer alert arrived.
+func (s *Store) ReopenResolvedIfActive(ctx context.Context, assetID int64) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE incident SET status = 'triggered', resolved_at = NULL
+		WHERE asset_id = $1 AND status = 'resolved'
+		  AND EXISTS (SELECT 1 FROM alert WHERE asset_id = $1 AND accepted_at IS NULL)`, assetID)
+	return err
+}
+
 // AcknowledgeIncident marks a triggered incident acknowledged (someone owns it).
 func (s *Store) AcknowledgeIncident(ctx context.Context, id int64) error {
 	_, err := s.pool.Exec(ctx, `

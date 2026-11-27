@@ -42,6 +42,9 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/easm/assets/{id}/summary", platform.Guard(platform.RoleViewer, s.summary))
 	// Promote a discovered hostname to a tracked asset (operator decision).
 	mux.HandleFunc("POST /api/v1/easm/promote", platform.Guard(platform.RoleOperator, s.promote))
+	// Software dependency inventory + OSV analysis.
+	mux.HandleFunc("POST /api/v1/easm/assets/{id}/dependencies", platform.Guard(platform.RoleOperator, s.ingestDependencies))
+	mux.HandleFunc("POST /api/v1/easm/assets/{id}/analyze-deps", platform.Guard(platform.RoleOperator, s.analyzeDependencies))
 }
 
 type scanPayload struct {

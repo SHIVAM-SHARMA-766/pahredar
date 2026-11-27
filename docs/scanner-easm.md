@@ -346,6 +346,24 @@ Mirrors the spec's phases, mapped to Pahredar.
 Each milestone builds + is verified before the next; records and reports are the
 stable contract between engines.
 
+### S5 — Software inventory + dependency analysis
+
+Beyond infrastructure recon: an asset (a project) carries a **dependency
+inventory** (its manifests' packages + versions), stored as `dependency`
+evidence records, and **OSV** (api.osv.dev — free, no key) turns vulnerable
+versions into findings → the asset's incident. This covers the app-dependency
+side that CPE/CVE matching misses (spec P08/P10, the roadmap's stack matching).
+
+- **M1 (done):** `POST /easm/assets/{id}/dependencies` ingests a component list
+  (`{ecosystem, name, version}` — OSV ecosystems Go/npm/PyPI/…) as records;
+  `POST /easm/assets/{id}/analyze-deps` queries OSV for each (bounded
+  concurrency), writes vulnerable ones as findings (`type: dependency`, deduped
+  per `(asset, dep:name:vulnID)`, severity from the advisory) → the asset's
+  incident. OSV live-verified (nodemailer@6.6.0 → 23 vulns, x/crypto old → 39
+  incl. critical; react@19 clean).
+- *Later:* transitive deps (lockfile SBOM), a manifest-upload endpoint,
+  frontend surface for the inventory.
+
 ## 15. Guardrails (finalise before building)
 
 1. Passive vs active results + timestamps stored separately. ✅ (method field)

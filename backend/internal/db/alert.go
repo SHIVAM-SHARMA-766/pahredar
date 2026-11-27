@@ -120,6 +120,14 @@ func (s *Store) MarkAlertRead(ctx context.Context, id int64) error {
 	return err
 }
 
+// DeleteAlertsByType removes an asset's alerts of a given type. Used to refresh
+// recomputed findings (e.g. dependency analysis) so fixed issues disappear
+// rather than lingering.
+func (s *Store) DeleteAlertsByType(ctx context.Context, assetID int64, alertType string) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM alert WHERE asset_id = $1 AND type = $2`, assetID, alertType)
+	return err
+}
+
 // InsertAlerts inserts each alert (deduped on type+asset+cve) and returns the
 // ones newly created. Used for scan-triggered alerts (e.g. critical findings).
 func (s *Store) InsertAlerts(ctx context.Context, alerts []Alert) ([]Alert, error) {

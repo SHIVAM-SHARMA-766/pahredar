@@ -371,7 +371,7 @@ side that CPE/CVE matching misses (spec P08/P10, the roadmap's stack matching).
   **queued** (`easm.analyze` job) rather than inline, so a large SBOM never hits
   the request timeout. The loader reads `package-lock.json` (`packages` tree) for
   the resolved npm graph and `go.mod` (direct + indirect) for Go.
-- *Later:* a manifest-upload endpoint (UI-driven ingest).
+- Re-analysis is idempotent: an asset's prior dependency findings are cleared first, so a fixed vuln disappears. *Later:* a manifest-upload endpoint (UI-driven ingest).
 
 ## 15. Guardrails (finalise before building)
 

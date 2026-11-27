@@ -81,6 +81,10 @@ func (s *Service) runDependencyAnalysis(ctx context.Context, assetID int64) erro
 		return err
 	}
 	findings := s.analyzeDeps(ctx, assetID, records)
+	// Refresh: clear prior dependency findings so fixed vulns disappear.
+	if derr := s.Store.DeleteAlertsByType(ctx, assetID, "dependency"); derr != nil {
+		s.Log.Warn("clear old dependency findings failed", "err", derr)
+	}
 	newOnes := []db.Alert{}
 	if len(findings) > 0 {
 		if newOnes, err = s.Store.InsertAlerts(ctx, findings); err != nil {

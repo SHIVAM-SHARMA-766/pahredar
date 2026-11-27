@@ -78,6 +78,17 @@ func (s *Store) RefreshIncidents(ctx context.Context) error {
 		return err
 	}
 
+	// (3) Auto-resolve an open incident whose asset has no alerts left — every
+	// finding has been fixed (the asset drops out of `agg`, so (1) cannot reach
+	// it). This closes the loop with idempotent re-analysis: cleared findings
+	// resolve the incident instead of leaving a ghost with a stale count.
+	if _, err := tx.Exec(ctx, `
+		UPDATE incident i SET status = 'resolved', resolved_at = now(), item_count = 0
+		WHERE i.status <> 'resolved'
+		  AND NOT EXISTS (SELECT 1 FROM alert al WHERE al.asset_id = i.asset_id)`); err != nil {
+		return err
+	}
+
 	return tx.Commit(ctx)
 }
 

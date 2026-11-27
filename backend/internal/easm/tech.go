@@ -92,5 +92,10 @@ func (s *Service) runDependencyAnalysis(ctx context.Context, assetID int64) erro
 		}
 	}
 	s.Log.Info("easm dependency analysis", "asset_id", assetID, "deps", len(records), "findings", len(findings), "new", len(newOnes))
+	// Roll the refreshed findings into the asset's incident now (instead of
+	// waiting for the scheduled sweep), so cleared vulns resolve it immediately.
+	if rerr := s.Store.RefreshIncidents(ctx); rerr != nil {
+		s.Log.Warn("refresh incidents after dependency analysis failed", "err", rerr)
+	}
 	return nil
 }

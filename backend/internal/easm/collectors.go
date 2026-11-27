@@ -28,6 +28,7 @@ func passiveCollectors(client *http.Client) []Collector {
 		crtSh{client: client},
 		rdap{client: client},
 		wayback{client: client},
+		githubSearch{client: client},
 	}
 }
 

@@ -288,6 +288,12 @@ Mirrors the spec's phases, mapped to Pahredar.
     enriches discovered IPs. Collectors live-verified (example.com: 77 records
     across cert/subdomain/dns/ip/email/whois/nameserver; SPF + Cloudflare IP org
     resolved).
+  - **M7 (done):** **public-repository references** (P08) — a `github` passive
+    collector runs a GitHub **code search** for the domain and records one
+    `repo_ref` per repository that references it, with the matching file paths
+    as indicators. Metadata only — file contents are never fetched or stored
+    (data minimisation). Uses `GITHUB_TOKEN` (no-op without it).
+    `githubRecords` unit-tested.
   - **M6 (done):** **related-domain discovery** (P02) — the `crtsh` collector now
     also extracts sibling **registrable domains** (eTLD+1 via
     `publicsuffix`) from the SANs of certificates that also cover this domain —

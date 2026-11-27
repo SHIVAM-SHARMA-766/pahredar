@@ -212,4 +212,6 @@ export const api = {
   easmRuns: (assetId: number) => request<{ items: EasmRun[] }>(`/api/v1/easm/assets/${assetId}/runs`),
   easmPromote: (parentAssetId: number, value: string) =>
     request<{ id: number }>('/api/v1/easm/promote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parent_asset_id: parentAssetId, value }) }),
+  easmAnalyzeDeps: (assetId: number) =>
+    request<{ dependencies: number; findings: number; new: number }>(`/api/v1/easm/assets/${assetId}/analyze-deps`, { method: 'POST' }),
 }

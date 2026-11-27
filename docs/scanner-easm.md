@@ -361,8 +361,11 @@ side that CPE/CVE matching misses (spec P08/P10, the roadmap's stack matching).
   per `(asset, dep:name:vulnID)`, severity from the advisory) → the asset's
   incident. OSV live-verified (nodemailer@6.6.0 → 23 vulns, x/crypto old → 39
   incl. critical; react@19 clean).
-- *Later:* transitive deps (lockfile SBOM), a manifest-upload endpoint,
-  frontend surface for the inventory.
+- **Frontend (done):** a `Dependencies` card on the asset-detail page shows the
+  inventory grouped by ecosystem (count per ecosystem, name@version), with an
+  **Analyze (OSV)** button (operator) that runs the analysis and reports how many
+  are vulnerable (findings land on the asset's incident).
+- *Later:* transitive deps (lockfile SBOM), a manifest-upload endpoint.
 
 ## 15. Guardrails (finalise before building)
 

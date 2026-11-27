@@ -27,6 +27,7 @@ func passiveCollectors(client *http.Client) []Collector {
 	return []Collector{
 		crtSh{client: client},
 		rdap{client: client},
+		wayback{client: client},
 	}
 }
 

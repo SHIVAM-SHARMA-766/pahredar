@@ -288,6 +288,12 @@ Mirrors the spec's phases, mapped to Pahredar.
     enriches discovered IPs. Collectors live-verified (example.com: 77 records
     across cert/subdomain/dns/ip/email/whois/nameserver; SPF + Cloudflare IP org
     resolved).
+  - **M4 (done):** **web-archive discovery** (P07 + P14) — a `wayback` passive
+    collector queries the Internet Archive's Wayback Machine CDX API (free, no
+    key) for a domain's historical captures, extracting forgotten **subdomains**
+    (source `wayback`) and historical **URLs** (a new `url` category, capped),
+    which often reveal endpoints no longer in live DNS or CT. `waybackRecords`
+    unit-tested.
   - **M3 (done, backend):** a derived **summary report** (R02–R08 condensed:
     registration, counts, subdomains, IP owners, cert count + soonest expiry,
     SPF/DMARC) at `GET /easm/assets/{id}/summary`; a **promote** action

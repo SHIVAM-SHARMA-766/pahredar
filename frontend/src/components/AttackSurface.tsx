@@ -12,6 +12,7 @@ import { relativeTime } from '../lib/format'
 const catLabel: Record<string, string> = {
   subdomain: 'subdomains', ip: 'IPs', dns: 'DNS', cert: 'certs', port: 'ports',
   http_security: 'headers', nameserver: 'nameservers', email: 'email', whois: 'whois', http: 'http', tls: 'tls',
+  url: 'archived URLs', dependency: 'dependencies',
 }
 
 export function AttackSurface({ assetId, canEdit }: { assetId: number; canEdit: boolean }) {

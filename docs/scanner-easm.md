@@ -288,6 +288,12 @@ Mirrors the spec's phases, mapped to Pahredar.
     enriches discovered IPs. Collectors live-verified (example.com: 77 records
     across cert/subdomain/dns/ip/email/whois/nameserver; SPF + Cloudflare IP org
     resolved).
+  - **M5 (done):** **email posture deep-dive** (P09) — the `email_auth` collector
+    now also records **MTA-STS** (`_mta-sts`), **TLS-RPT** (`_smtp._tls`), **BIMI**
+    (`default._bimi`) presence (with their id/rua/logo tags), and probes a set of
+    **common DKIM selectors** (`<sel>._domainkey`), recording those that publish a
+    key — all via live DNS TXT, on top of the existing SPF/DMARC. `txtTag`
+    unit-tested.
   - **M4 (done):** **web-archive discovery** (P07 + P14) — a `wayback` passive
     collector queries the Internet Archive's Wayback Machine CDX API (free, no
     key) for a domain's historical captures, extracting forgotten **subdomains**

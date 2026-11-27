@@ -37,6 +37,12 @@ func (s *Service) assess(ctx context.Context, assetID int64, clientID *int64) er
 		return err
 	}
 	s.Log.Info("easm assessment", "asset_id", assetID, "findings", len(findings), "new", len(newOnes))
+	// Roll the findings into the asset's incident now (same as dependency
+	// analysis), so a scan's results surface immediately instead of waiting for
+	// the 15-minute incident sweep.
+	if rerr := s.Store.RefreshIncidents(ctx); rerr != nil {
+		s.Log.Warn("refresh incidents after easm assessment failed", "err", rerr)
+	}
 	return nil
 }
 

@@ -365,7 +365,13 @@ side that CPE/CVE matching misses (spec P08/P10, the roadmap's stack matching).
   inventory grouped by ecosystem (count per ecosystem, name@version), with an
   **Analyze (OSV)** button (operator) that runs the analysis and reports how many
   are vulnerable (findings land on the asset's incident).
-- *Later:* transitive deps (lockfile SBOM), a manifest-upload endpoint.
+- **M2 (done):** analysis handles a **full SBOM** (transitive deps). OSV queries
+  use the **batch** endpoint (`/v1/querybatch`, chunked) and fetch each distinct
+  vuln's details once, so hundreds of packages are feasible. The analysis is now
+  **queued** (`easm.analyze` job) rather than inline, so a large SBOM never hits
+  the request timeout. The loader reads `package-lock.json` (`packages` tree) for
+  the resolved npm graph and `go.mod` (direct + indirect) for Go.
+- *Later:* a manifest-upload endpoint (UI-driven ingest).
 
 ## 15. Guardrails (finalise before building)
 

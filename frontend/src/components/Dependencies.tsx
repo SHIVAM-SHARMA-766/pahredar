@@ -58,8 +58,7 @@ export function Dependencies({ assetId, canEdit }: { assetId: number; canEdit: b
         <div className="space-y-3">
           {analyze.data && (
             <p className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm text-zinc-300">
-              Analyzed {analyze.data.dependencies} dependencies against OSV — <span className={analyze.data.findings > 0 ? 'text-amber-300' : 'text-emerald-300'}>{analyze.data.findings} vulnerable</span>.
-              {analyze.data.findings > 0 && <> See <span className="text-cyan-300">Incidents</span>.</>}
+              Analyzing {analyze.data.dependencies} dependencies against OSV… vulnerable ones appear as findings in <span className="text-cyan-300">Incidents</span>.
             </p>
           )}
           {byEco.map(([eco, deps]) => (

@@ -1,6 +1,7 @@
 package easm
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -51,8 +52,9 @@ func (s *Service) ingestDependencies(w http.ResponseWriter, r *http.Request) {
 	platform.WriteJSON(w, http.StatusOK, map[string]any{"ingested": n})
 }
 
-// analyzeDependencies queries OSV for the asset's dependency records and writes
-// the vulnerable ones as findings (which roll into the asset's incident).
+// analyzeDependencies queues an OSV analysis of the asset's dependency records;
+// vulnerable ones become findings that roll into the asset's incident. Queued
+// (not inline) so a large SBOM does not hit the request timeout.
 func (s *Service) analyzeDependencies(w http.ResponseWriter, r *http.Request) {
 	a, ok := s.accessibleAssetByPath(w, r)
 	if !ok {
@@ -63,14 +65,28 @@ func (s *Service) analyzeDependencies(w http.ResponseWriter, r *http.Request) {
 		platform.InternalError(w, r, err)
 		return
 	}
-	findings := s.analyzeDeps(r.Context(), a.ID, records)
+	jobID, err := s.Jobs.Enqueue(r.Context(), AnalyzeTaskType, analyzePayload{AssetID: a.ID}, 1)
+	if err != nil {
+		platform.InternalError(w, r, err)
+		return
+	}
+	platform.WriteJSON(w, http.StatusAccepted, map[string]any{"job_id": jobID, "dependencies": len(records)})
+}
+
+// runDependencyAnalysis queries OSV for the asset's dependencies and writes the
+// vulnerable ones as findings.
+func (s *Service) runDependencyAnalysis(ctx context.Context, assetID int64) error {
+	records, err := s.Store.ListRecords(ctx, assetID, "dependency")
+	if err != nil {
+		return err
+	}
+	findings := s.analyzeDeps(ctx, assetID, records)
 	newOnes := []db.Alert{}
 	if len(findings) > 0 {
-		if newOnes, err = s.Store.InsertAlerts(r.Context(), findings); err != nil {
-			platform.InternalError(w, r, err)
-			return
+		if newOnes, err = s.Store.InsertAlerts(ctx, findings); err != nil {
+			return err
 		}
 	}
-	s.Log.Info("easm dependency analysis", "asset_id", a.ID, "deps", len(records), "findings", len(findings), "new", len(newOnes))
-	platform.WriteJSON(w, http.StatusOK, map[string]any{"dependencies": len(records), "findings": len(findings), "new": len(newOnes)})
+	s.Log.Info("easm dependency analysis", "asset_id", assetID, "deps", len(records), "findings", len(findings), "new", len(newOnes))
+	return nil
 }

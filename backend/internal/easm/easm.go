@@ -13,8 +13,15 @@ import (
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/platform"
 )
 
-// TaskType is the durable job type for a passive EASM scan.
+// TaskType is the durable job type for an EASM scan.
 const TaskType = "easm.passive"
+
+// AnalyzeTaskType is the durable job type for a dependency (OSV) analysis.
+const AnalyzeTaskType = "easm.analyze"
+
+type analyzePayload struct {
+	AssetID int64 `json:"asset_id"`
+}
 
 // Service is the EASM module: it runs attack-surface scans against assets and
 // stores evidence records. S1 is the passive Domain Intelligence engine.
@@ -27,6 +34,7 @@ func New(p *platform.Platform) *Service {
 	s := &Service{Platform: p}
 	if s.Jobs != nil {
 		s.Jobs.Register(TaskType, s.handlePassiveTask)
+		s.Jobs.Register(AnalyzeTaskType, s.handleAnalyzeTask)
 	}
 	return s
 }
@@ -136,6 +144,18 @@ func (s *Service) handlePassiveTask(ctx context.Context, payload json.RawMessage
 		p.Profile = "standard"
 	}
 	if err := s.runScan(ctx, p.AssetID, p.ClientID, p.Domain, p.Profile); err != nil {
+		return nil, err
+	}
+	return map[string]any{"asset_id": p.AssetID}, nil
+}
+
+// handleAnalyzeTask runs a queued dependency (OSV) analysis.
+func (s *Service) handleAnalyzeTask(ctx context.Context, payload json.RawMessage, _ jobs.Progress) (any, error) {
+	var p analyzePayload
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return nil, err
+	}
+	if err := s.runDependencyAnalysis(ctx, p.AssetID); err != nil {
 		return nil, err
 	}
 	return map[string]any{"asset_id": p.AssetID}, nil

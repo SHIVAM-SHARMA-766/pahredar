@@ -799,6 +799,8 @@ export interface Alert {
   detail?: string
   created_at: string
   read_at?: string
+  accepted_at?: string
+  accepted_reason?: string
   asset_value?: string
 }
 

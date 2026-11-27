@@ -19,8 +19,35 @@ type Alert struct {
 	Detail    string     `json:"detail,omitempty"`
 	CreatedAt time.Time  `json:"created_at"`
 	ReadAt    *time.Time `json:"read_at,omitempty"`
+	// AcceptedAt marks a finding the operator has accepted (false-positive /
+	// intended); accepted findings do not count toward the asset's incident.
+	AcceptedAt     *time.Time `json:"accepted_at,omitempty"`
+	AcceptedReason string     `json:"accepted_reason,omitempty"`
 	// AssetValue is joined for display.
 	AssetValue string `json:"asset_value,omitempty"`
+}
+
+// AcceptAlert marks a finding accepted (false-positive / intended) with a reason,
+// so it no longer counts toward the incident. UnacceptAlert reverses it.
+func (s *Store) AcceptAlert(ctx context.Context, id int64, reason string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE alert SET accepted_at = now(), accepted_reason = $2 WHERE id = $1`, id, reason)
+	return err
+}
+
+func (s *Store) UnacceptAlert(ctx context.Context, id int64) error {
+	_, err := s.pool.Exec(ctx, `UPDATE alert SET accepted_at = NULL, accepted_reason = '' WHERE id = $1`, id)
+	return err
+}
+
+// AlertAssetID returns the asset an alert belongs to (for scope checks and the
+// post-accept incident refresh). Returns 0 when the alert has no asset.
+func (s *Store) AlertAssetID(ctx context.Context, id int64) (int64, error) {
+	var aid *int64
+	err := s.pool.QueryRow(ctx, `SELECT asset_id FROM alert WHERE id = $1`, id).Scan(&aid)
+	if err != nil || aid == nil {
+		return 0, err
+	}
+	return *aid, nil
 }
 
 // GenerateKEVAlerts raises an alert for every (asset, CVE) pair where the CVE
@@ -122,9 +149,10 @@ func (s *Store) MarkAlertRead(ctx context.Context, id int64) error {
 
 // DeleteAlertsByType removes an asset's alerts of a given type. Used to refresh
 // recomputed findings (e.g. dependency analysis) so fixed issues disappear
-// rather than lingering.
+// rather than lingering. Accepted findings are preserved so an operator's
+// acceptance survives a re-analysis (the re-insert then no-ops on the dedup key).
 func (s *Store) DeleteAlertsByType(ctx context.Context, assetID int64, alertType string) error {
-	_, err := s.pool.Exec(ctx, `DELETE FROM alert WHERE asset_id = $1 AND type = $2`, assetID, alertType)
+	_, err := s.pool.Exec(ctx, `DELETE FROM alert WHERE asset_id = $1 AND type = $2 AND accepted_at IS NULL`, assetID, alertType)
 	return err
 }
 

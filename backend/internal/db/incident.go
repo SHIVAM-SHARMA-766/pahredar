@@ -41,6 +41,8 @@ func (s *Store) RefreshIncidents(ctx context.Context) error {
 	}
 	defer tx.Rollback(ctx)
 
+	// Accepted findings (accepted_at set) are excluded — they are false-positive /
+	// intended and must not keep an incident open or inflate its count.
 	const agg = `
 		WITH agg AS (
 			SELECT al.asset_id, a.client_id, a.value,
@@ -49,6 +51,7 @@ func (s *Store) RefreshIncidents(ctx context.Context) error {
 			       count(*) AS item_count,
 			       max(al.created_at) AS max_created
 			FROM alert al JOIN asset a ON a.id = al.asset_id
+			WHERE al.accepted_at IS NULL
 			GROUP BY al.asset_id, a.client_id, a.value
 		)`
 
@@ -85,7 +88,7 @@ func (s *Store) RefreshIncidents(ctx context.Context) error {
 	if _, err := tx.Exec(ctx, `
 		UPDATE incident i SET status = 'resolved', resolved_at = now(), item_count = 0
 		WHERE i.status <> 'resolved'
-		  AND NOT EXISTS (SELECT 1 FROM alert al WHERE al.asset_id = i.asset_id)`); err != nil {
+		  AND NOT EXISTS (SELECT 1 FROM alert al WHERE al.asset_id = i.asset_id AND al.accepted_at IS NULL)`); err != nil {
 		return err
 	}
 
@@ -179,8 +182,9 @@ func (s *Store) queryIncidents(ctx context.Context, q string, args ...any) ([]In
 // IncidentItems returns the alert rows rolled up by an incident (its asset's).
 func (s *Store) IncidentItems(ctx context.Context, assetID int64) ([]Alert, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT al.id, al.type, al.asset_id, al.cve_id, al.severity, al.title, al.detail, al.created_at, al.read_at, ''
-		FROM alert al WHERE al.asset_id = $1 ORDER BY al.created_at DESC`, assetID)
+		SELECT al.id, al.type, al.asset_id, al.cve_id, al.severity, al.title, al.detail, al.created_at, al.read_at, al.accepted_at, al.accepted_reason, ''
+		FROM alert al WHERE al.asset_id = $1
+		ORDER BY (al.accepted_at IS NOT NULL), al.created_at DESC`, assetID)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +192,7 @@ func (s *Store) IncidentItems(ctx context.Context, assetID int64) ([]Alert, erro
 	out := []Alert{}
 	for rows.Next() {
 		var a Alert
-		if err := rows.Scan(&a.ID, &a.Type, &a.AssetID, &a.CVEID, &a.Severity, &a.Title, &a.Detail, &a.CreatedAt, &a.ReadAt, &a.AssetValue); err != nil {
+		if err := rows.Scan(&a.ID, &a.Type, &a.AssetID, &a.CVEID, &a.Severity, &a.Title, &a.Detail, &a.CreatedAt, &a.ReadAt, &a.AcceptedAt, &a.AcceptedReason, &a.AssetValue); err != nil {
 			return nil, err
 		}
 		out = append(out, a)

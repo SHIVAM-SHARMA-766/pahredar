@@ -6,6 +6,7 @@ package incidents
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -32,6 +33,10 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/v1/incidents/{id}/read", platform.Guard(platform.RoleOperator, s.read))
 	mux.HandleFunc("PUT /api/v1/incidents/{id}/acknowledge", platform.Guard(platform.RoleOperator, s.acknowledge))
 	mux.HandleFunc("PUT /api/v1/incidents/{id}/resolve", platform.Guard(platform.RoleOperator, s.resolve))
+	// Per-finding acceptance (false-positive / intended) — an accepted finding
+	// stops counting toward its asset's incident.
+	mux.HandleFunc("PUT /api/v1/incidents/items/{alertId}/accept", platform.Guard(platform.RoleOperator, s.acceptFinding))
+	mux.HandleFunc("PUT /api/v1/incidents/items/{alertId}/unaccept", platform.Guard(platform.RoleOperator, s.unacceptFinding))
 
 	// Notification channels (Phase 4C-M1).
 	mux.HandleFunc("GET /api/v1/channels", platform.Guard(platform.RoleViewer, s.listChannels))
@@ -168,6 +173,68 @@ func (s *Service) resolve(w http.ResponseWriter, r *http.Request) {
 	if err := s.Store.ResolveIncident(r.Context(), inc.ID); err != nil {
 		platform.InternalError(w, r, err)
 		return
+	}
+	platform.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// accessibleAlert resolves the {alertId} path value to its alert and asset,
+// checking the caller's client access (mismatch → 404). Returns the alert id.
+func (s *Service) accessibleAlert(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	alertID, err := strconv.ParseInt(r.PathValue("alertId"), 10, 64)
+	if err != nil {
+		platform.WriteError(w, http.StatusBadRequest, "alertId must be a number")
+		return 0, false
+	}
+	assetID, err := s.Store.AlertAssetID(r.Context(), alertID)
+	if err != nil || assetID == 0 {
+		platform.WriteError(w, http.StatusNotFound, "finding not found")
+		return 0, false
+	}
+	asset, err := s.Store.GetAsset(r.Context(), assetID)
+	if err != nil {
+		platform.WriteError(w, http.StatusNotFound, "finding not found")
+		return 0, false
+	}
+	p := platform.PrincipalFrom(r.Context())
+	if !p.AllClients && !(asset.ClientID != nil && p.CanAccessClient(*asset.ClientID)) {
+		platform.WriteError(w, http.StatusNotFound, "finding not found")
+		return 0, false
+	}
+	return alertID, true
+}
+
+func (s *Service) acceptFinding(w http.ResponseWriter, r *http.Request) {
+	alertID, ok := s.accessibleAlert(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&body) // reason is optional
+	if err := s.Store.AcceptAlert(r.Context(), alertID, body.Reason); err != nil {
+		platform.InternalError(w, r, err)
+		return
+	}
+	// Refresh now so the incident's count/severity (or its resolution) updates
+	// immediately instead of on the next sweep.
+	if err := s.Store.RefreshIncidents(r.Context()); err != nil {
+		s.Log.Warn("refresh incidents after accept failed", "err", err)
+	}
+	platform.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Service) unacceptFinding(w http.ResponseWriter, r *http.Request) {
+	alertID, ok := s.accessibleAlert(w, r)
+	if !ok {
+		return
+	}
+	if err := s.Store.UnacceptAlert(r.Context(), alertID); err != nil {
+		platform.InternalError(w, r, err)
+		return
+	}
+	if err := s.Store.RefreshIncidents(r.Context()); err != nil {
+		s.Log.Warn("refresh incidents after unaccept failed", "err", err)
 	}
 	platform.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
 }

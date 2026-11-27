@@ -69,6 +69,7 @@ export function IncidentsPage() {
 }
 
 function IncidentRow({ inc, canEdit, onChange }: { inc: Incident; canEdit: boolean; onChange: () => void }) {
+  const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const unread = !inc.read_at
   const resolved = inc.status === 'resolved'
@@ -77,6 +78,15 @@ function IncidentRow({ inc, canEdit, onChange }: { inc: Incident; canEdit: boole
   const act = (p: Promise<unknown>) => p.then(onChange)
   const ack = () => act(api.acknowledgeIncident(inc.id))
   const resolve = () => act(api.resolveIncident(inc.id))
+  const acceptItem = (alertId: number, accepted: boolean) => {
+    const p = accepted
+      ? api.unacceptFinding(alertId)
+      : api.acceptFinding(alertId, window.prompt('Why is this finding accepted? (e.g. intended exposure, false positive)') ?? '')
+    p.then(() => {
+      qc.invalidateQueries({ queryKey: ['incident-items', inc.id] })
+      onChange()
+    })
+  }
   const toggle = () => {
     if (!open && unread) act(api.markIncidentRead(inc.id))
     setOpen((o) => !o)
@@ -109,12 +119,19 @@ function IncidentRow({ inc, canEdit, onChange }: { inc: Incident; canEdit: boole
                 <ul className="space-y-1.5 text-sm">
                   {items.data!.items.map((it) => {
                     const t = itemTag[it.type]
+                    const accepted = !!it.accepted_at
                     return (
-                      <li key={it.id} className="flex flex-wrap items-center gap-2">
+                      <li key={it.id} className={`flex flex-wrap items-center gap-2 ${accepted ? 'opacity-50' : ''}`}>
                         {t && <Tag tone={t.tone}>{t.label}</Tag>}
-                        <span className="min-w-0 flex-1 truncate text-zinc-300" title={it.title}>{it.title}</span>
+                        <span className={`min-w-0 flex-1 truncate text-zinc-300 ${accepted ? 'line-through' : ''}`} title={it.accepted_reason ? `Accepted: ${it.accepted_reason}` : it.title}>{it.title}</span>
+                        {accepted && <Tag tone="zinc">accepted</Tag>}
                         {it.cve_id && !it.cve_id.startsWith('finding:') && (
                           <Link to={`/cves/${it.cve_id}`} className="font-mono text-xs text-cyan-300 hover:text-cyan-200">{it.cve_id}</Link>
+                        )}
+                        {canEdit && (
+                          <button onClick={() => acceptItem(it.id, accepted)} className="shrink-0 rounded border border-zinc-700 px-1.5 py-0.5 text-[11px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200" title={accepted ? 'Un-accept this finding' : 'Accept as intended / false positive (stops counting toward the incident)'}>
+                            {accepted ? 'Un-accept' : 'Accept'}
+                          </button>
                         )}
                       </li>
                     )

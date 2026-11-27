@@ -340,8 +340,18 @@ Mirrors the spec's phases, mapped to Pahredar.
     pointing at a takeover-prone third-party service (S3, CloudFront, GitHub
     Pages, Heroku, Azure, Netlify, Firebase, Zendesk, …) raises a medium
     "verify the target still belongs to you" finding (pattern-based, unverified).
-    `takeoverService` + the new findings unit-tested. *Later: a `finding` table
-    for false-positive status + richer reporting.*
+    `takeoverService` + the new findings unit-tested.
+  - **M4 (done):** per-finding **false-positive / accepted-risk management**.
+    Rather than a separate `finding` table, an `alert` row (the finding) gains
+    `accepted_at` + `accepted_reason` (migration 00035); `PUT
+    /incidents/items/{alertId}/accept|unaccept` (operator) marks one finding
+    accepted. `RefreshIncidents` excludes accepted findings from the rollup, so
+    an accepted finding stops inflating the count — and accepting every finding
+    resolves the incident; `DeleteAlertsByType` preserves accepted rows so an
+    acceptance survives a dependency re-analysis. This is distinct from a
+    suppression window (which mutes a whole scope for a time range). The
+    incident detail lists each finding with an **Accept / Un-accept** control
+    (accepted ones shown struck-through). *Later: richer per-finding reporting.*
 - **S4 — Platform.** Asset relationship graph, change-detection → incidents,
   scheduled EASM scans, scan-comparison + data-quality reports, multi-domain per
   client, HTML/PDF reporting, pluggable paid adapters.

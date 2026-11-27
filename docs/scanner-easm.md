@@ -321,6 +321,12 @@ Mirrors the spec's phases, mapped to Pahredar.
     `active`); the `active` profile runs the probe and requires an authorisation
     confirmation (operator + `authorized: true`). Live-verified (example.com:
     TLS 1.3, live cert, HTTP 200, 8 security headers assessed).
+  - **M3 (done):** a `well_known` active collector (A08/A09) — fetches the
+    target's **robots.txt** (presence + Disallow paths + declared sitemaps),
+    **sitemap.xml** (presence + listed URLs), and **security.txt**
+    (`.well-known/` then root; presence + contact). Discovered in-scope paths
+    become capped `url` records; the files' presence is a `well_known` record.
+    `parseRobots`/`parseSitemap`/`normalizeURLKey` unit-tested.
   - **M2 (done):** a `port_scan` active collector (A04/A05) — a budgeted
     TCP-connect scan of the domain's resolved IPs (≤4 IPs) on ~25 curated common
     ports, 20-way concurrent with a 2s dial timeout, recording open ports with

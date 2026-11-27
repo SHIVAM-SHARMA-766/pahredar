@@ -47,6 +47,7 @@ func activeCollectors() []Collector {
 	return []Collector{
 		httpProbe{},
 		portScan{},
+		wellKnown{},
 	}
 }
 

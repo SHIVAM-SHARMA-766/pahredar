@@ -33,8 +33,16 @@ func (s *Service) ingestDependencies(w http.ResponseWriter, r *http.Request) {
 		platform.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	n := s.upsertDependencies(r.Context(), a, body.Components)
+	platform.WriteJSON(w, http.StatusOK, map[string]any{"ingested": n})
+}
+
+// upsertDependencies writes a component list as `dependency` evidence records,
+// skipping incomplete entries. Returns how many were stored. Shared by the JSON
+// and manifest-upload ingest paths.
+func (s *Service) upsertDependencies(ctx context.Context, a *db.Asset, comps []depInput) int {
 	n := 0
-	for _, c := range body.Components {
+	for _, c := range comps {
 		if c.Name == "" || c.Version == "" || c.Ecosystem == "" {
 			continue
 		}
@@ -45,11 +53,11 @@ func (s *Service) ingestDependencies(w http.ResponseWriter, r *http.Request) {
 			Method: "passive", Source: "manifest", Data: data,
 			Confidence: "high", Verification: "verified", Scope: "in_scope",
 		}
-		if _, err := s.Store.UpsertRecord(r.Context(), rec); err == nil {
+		if _, err := s.Store.UpsertRecord(ctx, rec); err == nil {
 			n++
 		}
 	}
-	platform.WriteJSON(w, http.StatusOK, map[string]any{"ingested": n})
+	return n
 }
 
 // analyzeDependencies queues an OSV analysis of the asset's dependency records;

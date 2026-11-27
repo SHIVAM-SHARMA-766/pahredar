@@ -215,6 +215,8 @@ export const api = {
     request<{ id: number }>('/api/v1/easm/promote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parent_asset_id: parentAssetId, value }) }),
   easmAnalyzeDeps: (assetId: number) =>
     request<{ job_id: number; dependencies: number }>(`/api/v1/easm/assets/${assetId}/analyze-deps`, { method: 'POST' }),
+  easmIngestManifest: (assetId: number, kind: string, content: string) =>
+    request<{ ingested: number; parsed: number }>(`/api/v1/easm/assets/${assetId}/dependencies/manifest`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, content }) }),
   easmChanges: (assetId: number, since?: number) =>
     request<EasmChangeSet>(`/api/v1/easm/assets/${assetId}/changes${since ? `?since=${since}` : ''}`),
   // Report export is a browser file download (cookie-authenticated, same origin).

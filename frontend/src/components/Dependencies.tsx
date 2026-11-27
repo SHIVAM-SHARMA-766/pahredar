@@ -1,9 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Boxes, Loader2, ScanSearch } from 'lucide-react'
-import { useMemo } from 'react'
+import { Boxes, Loader2, ScanSearch, Upload } from 'lucide-react'
+import { useMemo, useRef } from 'react'
 import { api } from '../api/client'
 import type { EasmRecord } from '../api/types'
 import { Card, ErrorBox, Spinner, Tag } from '../components/ui'
+
+// manifestKind maps an uploaded filename to the backend parser kind, or null if
+// it is not a supported manifest.
+function manifestKind(filename: string): string | null {
+  const f = filename.toLowerCase()
+  if (f.endsWith('package-lock.json')) return 'package-lock'
+  if (f.endsWith('go.mod')) return 'go-mod'
+  if (f.endsWith('package.json')) return 'package-json'
+  return null
+}
 
 // Dependencies shows an asset's software inventory (ingested from its manifests)
 // and lets an operator run an OSV analysis — vulnerable versions become findings
@@ -18,6 +28,7 @@ function toDep(r: EasmRecord): Dep {
 
 export function Dependencies({ assetId, canEdit }: { assetId: number; canEdit: boolean }) {
   const qc = useQueryClient()
+  const fileRef = useRef<HTMLInputElement>(null)
   const records = useQuery({ queryKey: ['easm-deps', assetId], queryFn: () => api.easmRecords(assetId, 'dependency') })
   const analyze = useMutation({
     mutationFn: () => api.easmAnalyzeDeps(assetId),
@@ -26,6 +37,20 @@ export function Dependencies({ assetId, canEdit }: { assetId: number; canEdit: b
       qc.invalidateQueries({ queryKey: ['incidents-unread'] })
     },
   })
+  const upload = useMutation({
+    mutationFn: async (file: File) => {
+      const kind = manifestKind(file.name)
+      if (!kind) throw new Error('Upload a package-lock.json, package.json, or go.mod file.')
+      return api.easmIngestManifest(assetId, kind, await file.text())
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['easm-deps', assetId] }),
+  })
+
+  const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) upload.mutate(file)
+    e.target.value = '' // allow re-selecting the same file
+  }
 
   const byEco = useMemo(() => {
     const m = new Map<string, Dep[]>()
@@ -40,19 +65,31 @@ export function Dependencies({ assetId, canEdit }: { assetId: number; canEdit: b
 
   const total = records.data?.items.length ?? 0
 
-  const actions = canEdit && total > 0 ? (
-    <button onClick={() => analyze.mutate()} disabled={analyze.isPending} className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1 text-xs text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50">
-      {analyze.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ScanSearch className="h-3.5 w-3.5" />} Analyze (OSV)
-    </button>
+  const actions = canEdit ? (
+    <div className="flex gap-1.5">
+      <input ref={fileRef} type="file" accept=".json,.mod,application/json" onChange={onPick} className="hidden" />
+      <button onClick={() => fileRef.current?.click()} disabled={upload.isPending} title="Upload a package-lock.json, package.json, or go.mod" className="inline-flex items-center gap-1 rounded-lg border border-zinc-600/40 bg-zinc-700/30 px-2.5 py-1 text-xs text-zinc-300 hover:bg-zinc-700/50 disabled:opacity-50">
+        {upload.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />} Upload manifest
+      </button>
+      {total > 0 && (
+        <button onClick={() => analyze.mutate()} disabled={analyze.isPending} className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1 text-xs text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50">
+          {analyze.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ScanSearch className="h-3.5 w-3.5" />} Analyze (OSV)
+        </button>
+      )}
+    </div>
   ) : undefined
 
   return (
     <Card title={`Dependencies${total ? ` (${total})` : ''}`} actions={actions}>
+      {upload.isError && <ErrorBox error={upload.error} />}
+      {upload.data && (
+        <p className="mb-3 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm text-zinc-300">
+          Ingested {upload.data.ingested} of {upload.data.parsed} parsed dependencies.{total > 0 && ' Run Analyze (OSV) to check them.'}
+        </p>
+      )}
       {records.isPending ? <Spinner /> : records.isError ? <ErrorBox error={records.error} /> : total === 0 ? (
         <p className="py-3 text-sm text-zinc-500">
-          No dependency inventory yet. Load one from the project’s manifests via
-          <code className="mx-1 rounded bg-zinc-800 px-1 text-xs">POST /api/v1/easm/assets/{assetId}/dependencies</code>,
-          then analyze against OSV.
+          No dependency inventory yet. {canEdit ? 'Upload a package-lock.json, package.json, or go.mod to build the inventory, then analyze it against OSV.' : 'Ask an operator to upload a manifest.'}
         </p>
       ) : (
         <div className="space-y-3">

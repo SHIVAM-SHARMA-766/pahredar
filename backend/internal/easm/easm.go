@@ -55,6 +55,7 @@ func (s *Service) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/easm/promote", platform.Guard(platform.RoleOperator, s.promote))
 	// Software dependency inventory + OSV analysis.
 	mux.HandleFunc("POST /api/v1/easm/assets/{id}/dependencies", platform.Guard(platform.RoleOperator, s.ingestDependencies))
+	mux.HandleFunc("POST /api/v1/easm/assets/{id}/dependencies/manifest", platform.Guard(platform.RoleOperator, s.ingestManifest))
 	mux.HandleFunc("POST /api/v1/easm/assets/{id}/analyze-deps", platform.Guard(platform.RoleOperator, s.analyzeDependencies))
 }
 

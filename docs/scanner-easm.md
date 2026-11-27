@@ -400,7 +400,16 @@ side that CPE/CVE matching misses (spec P08/P10, the roadmap's stack matching).
   **queued** (`easm.analyze` job) rather than inline, so a large SBOM never hits
   the request timeout. The loader reads `package-lock.json` (`packages` tree) for
   the resolved npm graph and `go.mod` (direct + indirect) for Go.
-- Re-analysis is idempotent: an asset's prior dependency findings are cleared first, so a fixed vuln disappears. *Later:* a manifest-upload endpoint (UI-driven ingest).
+- Re-analysis is idempotent: an asset's prior dependency findings are cleared first, so a fixed vuln disappears.
+- **M3 (done):** **manifest upload** — `POST /easm/assets/{id}/dependencies/manifest`
+  takes `{kind, content}` (kind = package-lock | package-json | go-mod) and
+  parses the raw file server-side into the component list (`package-lock.json`
+  v2/v3 `packages` tree + v1 `dependencies` fallback; `package.json` direct deps
+  with range→base-version; `go.mod` require blocks, direct + indirect), reusing
+  the same upsert. The `Dependencies` card gains an **Upload manifest** button
+  (operator) that reads the file, infers the kind from its name, and ingests it
+  — so an operator no longer needs the loader script. Parsers unit-tested
+  (`parsePackageLock` v2/v3+v1, `parsePackageJSON`, `parseGoMod`).
 
 ## 15. Guardrails (finalise before building)
 

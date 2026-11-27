@@ -29,12 +29,15 @@ func (s *Service) assess(ctx context.Context, assetID int64, clientID *int64) er
 		return err
 	}
 	findings := buildFindings(assetID, records)
-	if len(findings) == 0 {
-		return nil
-	}
-	newOnes, err := s.Store.InsertAlerts(ctx, findings)
-	if err != nil {
-		return err
+	// Version→CVE: map detected server software to Pahredar's CVE data (DB-backed,
+	// so it is separate from the pure buildFindings).
+	findings = append(findings, s.techCVEFindings(ctx, assetID, records)...)
+	var newOnes []db.Alert
+	if len(findings) > 0 {
+		var err error
+		if newOnes, err = s.Store.InsertAlerts(ctx, findings); err != nil {
+			return err
+		}
 	}
 	s.Log.Info("easm assessment", "asset_id", assetID, "findings", len(findings), "new", len(newOnes))
 	// Roll the findings into the asset's incident now (same as dependency

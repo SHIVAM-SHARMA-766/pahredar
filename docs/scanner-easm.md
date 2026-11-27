@@ -322,9 +322,17 @@ Mirrors the spec's phases, mapped to Pahredar.
     high), and SPF/DMARC gaps. Each finding is written as an **alert row**
     (`type: easm`, deduped per asset+key), so the existing Phase 4 incident loop
     rolls them into the asset's incident and the notification/escalation layer
-    delivers them — **no new incident plumbing**. Checks unit-tested. *Later:
-    dangling-DNS and version→CVE checks; a `finding` table for false-positive
-    status + richer reporting.*
+    delivers them — **no new incident plumbing**. Checks unit-tested.
+  - **M2 (done):** a **version→CVE** check (A18 / §9) — an active scan records
+    the target's `Server` / `X-Powered-By` headers; `techCVEFindings` maps the
+    detected product (nginx/Apache/PHP/OpenSSL/IIS/Tomcat/LiteSpeed) to
+    Pahredar's CVE data via the existing `MatchTech`, and raises a finding when
+    that product has known CVEs (severity: KEV→high, else critical→medium, else
+    low). Matching is product-level, so findings are **unverified** — the detail
+    names the detected version to confirm against (false-positive management).
+    This wires the EASM surface into Pahredar's core CVE/KEV/EPSS engine.
+    `parseTechToken` + `techSeverity` unit-tested. *Later: dangling-DNS; a
+    `finding` table for false-positive status + richer reporting.*
 - **S4 — Platform.** Asset relationship graph, change-detection → incidents,
   scheduled EASM scans, scan-comparison + data-quality reports, multi-domain per
   client, HTML/PDF reporting, pluggable paid adapters.

@@ -5,6 +5,7 @@ import (
 	"net"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +27,7 @@ const (
 	portScanConcurrency = 20
 	portDialTimeout     = 2 * time.Second
 	maxScanIPs          = 4 // budget: scan at most this many of the domain's IPs
+	bannerReadTimeout   = 1500 * time.Millisecond
 )
 
 // portScan does a budgeted TCP-connect scan of the domain's resolved IPs on the
@@ -78,13 +80,18 @@ func (portScan) Collect(ctx context.Context, domain string) ([]db.AssetRecord, e
 				if derr != nil {
 					continue
 				}
+				banner := grabBanner(conn) // A05: services that greet on connect
 				conn.Close()
-				r := recActive("port", t.ip+":"+strconv.Itoa(t.port), "port_scan", map[string]any{
+				data := map[string]any{
 					"ip":      t.ip,
 					"port":    t.port,
 					"service": commonPorts[t.port],
 					"state":   "open",
-				}, "TCP connect")
+				}
+				if banner != "" {
+					data["banner"] = banner
+				}
+				r := recActive("port", t.ip+":"+strconv.Itoa(t.port), "port_scan", data, "TCP connect")
 				mu.Lock()
 				out = append(out, r)
 				mu.Unlock()
@@ -105,4 +112,44 @@ func (portScan) Collect(ctx context.Context, domain string) ([]db.AssetRecord, e
 	close(jobs)
 	wg.Wait()
 	return out, nil
+}
+
+// grabBanner reads the greeting a service sends on connect (SSH/FTP/SMTP/Redis/…)
+// and returns its first printable line, or "" when nothing printable arrives in
+// time (e.g. HTTP/TLS ports, which wait for a request).
+func grabBanner(conn net.Conn) string {
+	_ = conn.SetReadDeadline(time.Now().Add(bannerReadTimeout))
+	buf := make([]byte, 256)
+	n, _ := conn.Read(buf)
+	if n == 0 {
+		return ""
+	}
+	return cleanBanner(buf[:n])
+}
+
+// cleanBanner extracts the first line of printable ASCII from raw bytes, trimmed
+// and length-capped; returns "" if there is no usable text (e.g. binary/TLS).
+func cleanBanner(raw []byte) string {
+	// Cut at the first CR/LF.
+	end := len(raw)
+	for i, b := range raw {
+		if b == '\r' || b == '\n' {
+			end = i
+			break
+		}
+	}
+	line := make([]byte, 0, end)
+	for _, b := range raw[:end] {
+		if b >= 32 && b <= 126 {
+			line = append(line, b)
+		}
+	}
+	s := strings.TrimSpace(string(line))
+	if len(s) < 3 { // too short to be a meaningful banner
+		return ""
+	}
+	if len(s) > 160 {
+		s = s[:160]
+	}
+	return s
 }

@@ -357,7 +357,11 @@ Mirrors the spec's phases, mapped to Pahredar.
     TCP-connect scan of the domain's resolved IPs (≤4 IPs) on ~25 curated common
     ports, 20-way concurrent with a 2s dial timeout, recording open ports with
     their service name. Part of the `active` profile. Live-verified (example.com:
-    80/443/8080/8443 open on the Cloudflare edges). **Nuclei (A18) deferred** to
+    80/443/8080/8443 open on the Cloudflare edges). **Banner grab (A05, done):**
+    after connecting, the scan reads the greeting a service sends on connect
+    (SSH/FTP/SMTP/POP3/IMAP/Redis/…) and stores its first printable line on the
+    port record; HTTP/TLS ports (which wait for a request) yield none.
+    `cleanBanner` unit-tested. **Nuclei (A18) deferred** to
     the scanner-consolidation step (it lives in `internal/scan`, the scanner
     chat's active area — folding it in now would couple to their work). CDN-vs-
     origin scope refinement (don't treat a CDN edge as the origin) is a later

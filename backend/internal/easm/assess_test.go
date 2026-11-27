@@ -55,3 +55,48 @@ func TestBuildFindings(t *testing.T) {
 		t.Errorf("finding count: want %d, got %d (%v)", len(want), len(got), got)
 	}
 }
+
+func TestBuildFindingsNotablePortsAndDanglingCNAME(t *testing.T) {
+	recs := []db.AssetRecord{
+		srec("port", "1.2.3.4:22", "port_scan", map[string]any{"port": 22, "service": "ssh"}),        // notable → low
+		srec("port", "1.2.3.4:53", "port_scan", map[string]any{"port": 53, "service": "dns"}),        // notable → low
+		srec("port", "1.2.3.4:2375", "port_scan", map[string]any{"port": 2375, "service": "docker"}), // sensitive → high
+		srec("port", "1.2.3.4:443", "port_scan", map[string]any{"port": 443, "service": "https"}),    // neither → none
+		srec("dns", "CNAME abandoned.s3.amazonaws.com", "dns_resolve", map[string]any{"type": "CNAME", "value": "abandoned.s3.amazonaws.com"}),
+		srec("dns", "CNAME safe.example.net", "dns_resolve", map[string]any{"type": "CNAME", "value": "safe.example.net"}), // not takeover-prone
+		srec("dns", "A 1.2.3.4", "dns_resolve", map[string]any{"type": "A", "value": "1.2.3.4"}),                           // not a CNAME
+	}
+	got := map[string]string{}
+	for _, f := range buildFindings(3, recs) {
+		got[f.CVEID] = f.Severity
+	}
+	want := map[string]string{
+		"port-exposed-22":                           "low",
+		"port-exposed-53":                           "low",
+		"port-exposed-2375":                         "high",
+		"dangling-cname-abandoned.s3.amazonaws.com": "medium",
+	}
+	for k, sev := range want {
+		if got[k] != sev {
+			t.Errorf("finding %s: want %q, got %q", k, sev, got[k])
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("finding count: want %d, got %d (%v)", len(want), len(got), got)
+	}
+}
+
+func TestTakeoverService(t *testing.T) {
+	cases := map[string]string{
+		"x.s3.amazonaws.com.": "AWS S3",
+		"foo.github.io":       "GitHub Pages",
+		"Bar.HerokuApp.com":   "Heroku", // case-insensitive
+		"app.example.com":     "",       // not takeover-prone
+		"":                    "",
+	}
+	for in, want := range cases {
+		if got := takeoverService(in); got != want {
+			t.Errorf("takeoverService(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

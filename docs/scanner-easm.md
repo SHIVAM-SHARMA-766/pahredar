@@ -331,8 +331,17 @@ Mirrors the spec's phases, mapped to Pahredar.
     low). Matching is product-level, so findings are **unverified** — the detail
     names the detected version to confirm against (false-positive management).
     This wires the EASM surface into Pahredar's core CVE/KEV/EPSS engine.
-    `parseTechToken` + `techSeverity` unit-tested. *Later: dangling-DNS; a
-    `finding` table for false-positive status + richer reporting.*
+    `parseTechToken` + `techSeverity` unit-tested.
+  - **M3 (done):** broadened assessment checks — (1) a **notable-ports** tier
+    below the high-severity sensitive ports: SSH/VNC/SNMP/LDAP/DNS are surfaced
+    (low/medium) as "confirm this exposure is intended", and the sensitive-ports
+    set gained Docker API / etcd / Memcached / Cassandra / Kibana / InfluxDB /
+    Kafka (high); (2) a **dangling-CNAME / subdomain-takeover** check — a CNAME
+    pointing at a takeover-prone third-party service (S3, CloudFront, GitHub
+    Pages, Heroku, Azure, Netlify, Firebase, Zendesk, …) raises a medium
+    "verify the target still belongs to you" finding (pattern-based, unverified).
+    `takeoverService` + the new findings unit-tested. *Later: a `finding` table
+    for false-positive status + richer reporting.*
 - **S4 — Platform.** Asset relationship graph, change-detection → incidents,
   scheduled EASM scans, scan-comparison + data-quality reports, multi-domain per
   client, HTML/PDF reporting, pluggable paid adapters.

@@ -321,6 +321,10 @@ Mirrors the spec's phases, mapped to Pahredar.
     `active`); the `active` profile runs the probe and requires an authorisation
     confirmation (operator + `authorized: true`). Live-verified (example.com:
     TLS 1.3, live cert, HTTP 200, 8 security headers assessed).
+  - **M6 (done):** a `cdn_waf` active collector (A16) — one GET, then
+    fingerprints the CDN/WAF/edge (Cloudflare, CloudFront, Akamai, Fastly,
+    Vercel, Netlify, Sucuri, Incapsula, F5 BIG-IP, Barracuda) from response
+    headers. Matters for scope (a CDN IP ≠ origin). `cdnWAFRecords` unit-tested.
   - **M5 (done):** an `api_probe` active collector (A12/A13) — GET-only probes a
     fixed list of API-discovery locations (OpenAPI/Swagger schemas,
     `/api-docs`, `swagger-ui`, `/graphql`) and records those served, plus a

@@ -50,6 +50,7 @@ func activeCollectors() []Collector {
 		wellKnown{},
 		subBrute{},
 		apiProbe{},
+		cdnWAF{},
 	}
 }
 

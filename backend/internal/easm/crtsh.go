@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/net/publicsuffix"
+
 	"github.com/SHIVAM-SHARMA-766/pahredar/backend/internal/db"
 )
 
@@ -77,7 +79,9 @@ func (c crtSh) Collect(ctx context.Context, domain string) ([]db.AssetRecord, er
 		return nil, fmt.Errorf("crt.sh: %w", err)
 	}
 
-	subs := map[string]bool{} // dedup subdomains
+	subs := map[string]bool{}    // dedup subdomains
+	related := map[string]bool{} // related registrable domains sharing a cert (P02)
+	ourReg, _ := publicsuffix.EffectiveTLDPlusOne(domain)
 	out := []db.AssetRecord{}
 	certSeen := map[string]bool{}
 
@@ -85,10 +89,14 @@ func (c crtSh) Collect(ctx context.Context, domain string) ([]db.AssetRecord, er
 		// Subdomains from the SAN list (name_value is newline-separated).
 		for _, name := range strings.Split(e.NameValue, "\n") {
 			name = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(name, "*.")))
-			if name == "" || name == domain || !strings.HasSuffix(name, "."+domain) {
+			if name == "" || name == domain {
 				continue
 			}
-			subs[name] = true
+			if strings.HasSuffix(name, "."+domain) {
+				subs[name] = true
+			} else if reg := relatedRegistrable(ourReg, name); reg != "" && len(related) < 50 {
+				related[reg] = true // a sibling domain on the same certificate
+			}
 		}
 		// One record per certificate (dedup by serial).
 		if e.SerialNum != "" && !certSeen[e.SerialNum] && len(certSeen) < 100 {
@@ -110,5 +118,29 @@ func (c crtSh) Collect(ctx context.Context, domain string) ([]db.AssetRecord, er
 	for _, name := range names {
 		out = append(out, rec("subdomain", name, "crtsh", map[string]any{"host": name}, "crt.sh CT log"))
 	}
+
+	rels := make([]string, 0, len(related))
+	for d := range related {
+		rels = append(rels, d)
+	}
+	sort.Strings(rels)
+	for _, d := range rels {
+		out = append(out, rec("related_domain", d, "crtsh", map[string]any{"domain": d, "via": "shared certificate"}, "crt.sh CT log"))
+	}
 	return out, nil
+}
+
+// relatedRegistrable returns the registrable domain (eTLD+1) of a SAN host when
+// it is a *different* organisation domain than ours (a sibling sharing a cert),
+// else "". Hosts that are not valid registrable names are dropped.
+func relatedRegistrable(ourReg, san string) string {
+	san = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(san, "*.")))
+	if san == "" {
+		return ""
+	}
+	reg, err := publicsuffix.EffectiveTLDPlusOne(san)
+	if err != nil || reg == "" || reg == ourReg {
+		return ""
+	}
+	return reg
 }

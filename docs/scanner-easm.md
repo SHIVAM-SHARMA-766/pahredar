@@ -288,6 +288,11 @@ Mirrors the spec's phases, mapped to Pahredar.
     enriches discovered IPs. Collectors live-verified (example.com: 77 records
     across cert/subdomain/dns/ip/email/whois/nameserver; SPF + Cloudflare IP org
     resolved).
+  - **M6 (done):** **related-domain discovery** (P02) — the `crtsh` collector now
+    also extracts sibling **registrable domains** (eTLD+1 via
+    `publicsuffix`) from the SANs of certificates that also cover this domain —
+    a `related_domain` record per distinct org domain sharing a certificate.
+    `relatedRegistrable` unit-tested.
   - **M5 (done):** **email posture deep-dive** (P09) — the `email_auth` collector
     now also records **MTA-STS** (`_mta-sts`), **TLS-RPT** (`_smtp._tls`), **BIMI**
     (`default._bimi`) presence (with their id/rua/logo tags), and probes a set of

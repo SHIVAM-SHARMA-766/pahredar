@@ -321,6 +321,12 @@ Mirrors the spec's phases, mapped to Pahredar.
     `active`); the `active` profile runs the probe and requires an authorisation
     confirmation (operator + `authorized: true`). Live-verified (example.com:
     TLS 1.3, live cert, HTTP 200, 8 security headers assessed).
+  - **M9 (done):** an `smtp_probe` active collector (A14) — connects to the
+    domain's mail exchangers, reads the SMTP banner, sends EHLO, and records the
+    advertised capabilities + **STARTTLS** support (a mail server without
+    STARTTLS becomes a medium finding — inbound mail in cleartext). Greets and
+    quits only; never sends mail or attempts AUTH/relay. Outbound TCP/25 is
+    often blocked, in which case nothing is recorded. `parseEHLO` unit-tested.
   - **M8 (done):** a `dir_scan` active collector (A10) — GET-probes a bounded,
     curated list of commonly-exposed sensitive paths (`.git/config`, `.env`,
     backups, DB dumps, `/actuator/env`, `phpinfo`, `server-status`, …) with

@@ -175,6 +175,16 @@ func buildFindings(assetID int64, records []db.AssetRecord) []db.Alert {
 				add(fmt.Sprintf("port-exposed-%d", d.Port), n.severity, "Exposed "+n.name+" service",
 					fmt.Sprintf("%s (port %d) is reachable from the internet on %s. Confirm this exposure is intended and restricted (key-only auth, an IP allow-list, or a VPN).", n.name, d.Port, r.Key))
 			}
+		case "smtp":
+			var d struct {
+				MX       string `json:"mx"`
+				STARTTLS bool   `json:"starttls"`
+			}
+			_ = json.Unmarshal(r.Data, &d)
+			if !d.STARTTLS {
+				add("smtp-no-starttls-"+r.Key, "medium", "Mail server without STARTTLS",
+					fmt.Sprintf("The mail exchanger %s does not advertise STARTTLS, so inbound mail can be delivered in cleartext.", d.MX))
+			}
 		case "exposed_path":
 			var d struct {
 				Path     string `json:"path"`

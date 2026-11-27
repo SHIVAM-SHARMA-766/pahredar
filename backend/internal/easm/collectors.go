@@ -53,6 +53,7 @@ func activeCollectors() []Collector {
 		cdnWAF{},
 		jsAnalysis{},
 		dirScan{},
+		smtpProbe{},
 	}
 }
 

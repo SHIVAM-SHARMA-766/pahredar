@@ -2,6 +2,7 @@ package easm
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"sync"
 
@@ -49,8 +50,15 @@ var sensitivePaths = []struct {
 	{"/.npmrc", "npm config (may hold tokens)", "medium"},
 }
 
+const softNotFoundTolerance = 64 // bytes: body-length delta treated as "same page"
+
 func (dirScan) Collect(ctx context.Context, domain string) ([]db.AssetRecord, error) {
 	client := wellKnownClient()
+	// Baseline: a path that should not exist. If it returns 200, the server is a
+	// catch-all (soft-404) and a plain 200 on a sensitive path is meaningless; we
+	// then only trust a 200 whose body differs from this baseline.
+	baseStatus, baseLen := statusLen(ctx, client, "https://"+domain+"/pahredar-404-probe-9z7q")
+
 	out := make([]db.AssetRecord, 0)
 	var mu sync.Mutex
 	sem := make(chan struct{}, dirScanConcurrency)
@@ -63,9 +71,8 @@ func (dirScan) Collect(ctx context.Context, domain string) ([]db.AssetRecord, er
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			status := headOrGet(ctx, client, "https://"+domain+p.path)
-			// Only record interesting states: served, or present-but-protected.
-			if status != http.StatusOK && status != http.StatusUnauthorized && status != http.StatusForbidden {
+			status, bodyLen := statusLen(ctx, client, "https://"+domain+p.path)
+			if !isRealHit(status, bodyLen, baseStatus, baseLen) {
 				return
 			}
 			mu.Lock()
@@ -78,19 +85,44 @@ func (dirScan) Collect(ctx context.Context, domain string) ([]db.AssetRecord, er
 	return out, nil
 }
 
-// headOrGet requests a path and returns its status code (0 on failure). A GET is
-// used (some servers mishandle HEAD) with the body discarded by the caller's
-// bounded reader.
-func headOrGet(ctx context.Context, client *http.Client, u string) int {
+// isRealHit decides whether a path response is a genuine exposure rather than a
+// soft-404. A 200 on a catch-all server (baseline also 200) counts only when its
+// body differs from the baseline; 401/403 always signal a present-but-protected
+// resource.
+func isRealHit(status, bodyLen, baseStatus, baseLen int) bool {
+	switch status {
+	case http.StatusOK:
+		if baseStatus == http.StatusOK && abs(bodyLen-baseLen) <= softNotFoundTolerance {
+			return false // catch-all serving the same page for everything
+		}
+		return true
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return true
+	default:
+		return false
+	}
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+// statusLen GETs a path and returns its status code and (bounded) body length;
+// status 0 means the request failed.
+func statusLen(ctx context.Context, client *http.Client, u string) (int, int) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return 0
+		return 0, 0
 	}
 	req.Header.Set("User-Agent", "pahredar-easm")
 	resp, err := client.Do(req)
 	if err != nil {
-		return 0
+		return 0, 0
 	}
-	resp.Body.Close()
-	return resp.StatusCode
+	defer resp.Body.Close()
+	n, _ := io.Copy(io.Discard, io.LimitReader(resp.Body, 256<<10))
+	return resp.StatusCode, int(n)
 }

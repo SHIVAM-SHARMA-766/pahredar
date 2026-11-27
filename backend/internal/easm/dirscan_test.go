@@ -28,6 +28,26 @@ func TestSensitivePathsSane(t *testing.T) {
 	}
 }
 
+func TestIsRealHit(t *testing.T) {
+	cases := []struct {
+		status, bodyLen, baseStatus, baseLen int
+		want                                 bool
+	}{
+		{200, 726, 404, 3678, true},   // normal server, distinct 200 → real
+		{200, 3700, 200, 3678, false}, // catch-all, same-ish body → soft-404
+		{200, 500, 200, 3678, true},   // catch-all but body differs → real
+		{403, 10, 404, 3678, true},    // protected → real
+		{401, 10, 200, 3678, true},    // protected even on catch-all
+		{404, 3678, 404, 3678, false}, // not found
+		{500, 0, 404, 3678, false},    // error → ignore
+	}
+	for _, c := range cases {
+		if got := isRealHit(c.status, c.bodyLen, c.baseStatus, c.baseLen); got != c.want {
+			t.Errorf("isRealHit(%d,%d,%d,%d) = %v, want %v", c.status, c.bodyLen, c.baseStatus, c.baseLen, got, c.want)
+		}
+	}
+}
+
 func TestDirScanFindings(t *testing.T) {
 	recs := []db.AssetRecord{
 		srec("exposed_path", "/.git/config", "http_probe", map[string]any{"path": "/.git/config", "status": 200, "label": "Git repository config", "severity": "high"}),

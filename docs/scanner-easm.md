@@ -321,6 +321,11 @@ Mirrors the spec's phases, mapped to Pahredar.
     `active`); the `active` profile runs the probe and requires an authorisation
     confirmation (operator + `authorized: true`). Live-verified (example.com:
     TLS 1.3, live cert, HTTP 200, 8 security headers assessed).
+  - **M4 (done):** a `sub_brute` active collector (A02) — resolves a curated
+    wordlist of ~80 common subdomain labels (www/mail/api/dev/staging/admin/vpn/
+    grafana/…) against the domain with bounded concurrency (budgeted, not an
+    open brute force), recording those that resolve plus their IPs. Wordlist
+    sanity unit-tested.
   - **M3 (done):** a `well_known` active collector (A08/A09) — fetches the
     target's **robots.txt** (presence + Disallow paths + declared sitemaps),
     **sitemap.xml** (presence + listed URLs), and **security.txt**
